@@ -4,6 +4,7 @@ import 'package:dsh_client/dsh_client.dart';
 
 import '../../l10n/l10n.dart';
 import '../link_status.dart';
+import 'instabox_wake.dart';
 import 'local_forward.dart';
 import 'remote_bootstrap.dart';
 import 'ssh_host_config.dart';
@@ -209,6 +210,16 @@ class SshHostLink implements HostLink {
     at(HostLinkStep.connect, detail: _config.address);
     final secrets = await _loadSecrets();
     _checkOpen();
+
+    // InstaBox machines pause when idle; wake ours before the socket is opened.
+    if (instaboxWakePossibleFor(_config.host)) {
+      at(HostLinkStep.connect, detail: 'instabox: waking');
+      await InstaboxWake.ensureRunning(
+        host: _config.host,
+        onProgress: (detail) => at(HostLinkStep.connect, detail: detail),
+      );
+      _checkOpen();
+    }
     final transport = await _transportFactory(SshConnectParams.of(_config, secrets), (key) async {
       if (_closed) return false;
       at(HostLinkStep.verifyHostKey, detail: '${key.shortType} ${key.fingerprint}');
