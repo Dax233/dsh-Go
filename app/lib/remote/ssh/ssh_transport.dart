@@ -9,6 +9,7 @@ import 'package:dartssh2/dartssh2.dart';
 import '../../l10n/l10n.dart';
 import '../link_status.dart';
 import 'remote_shell.dart';
+import 'instabox_wake.dart';
 import 'ssh_host_config.dart';
 
 /// A byte pipe to `host:port` on the remote side of the SSH connection.
@@ -100,11 +101,18 @@ class DartSshTransport implements SshTransport {
   final SSHClient _client;
 
   static Future<SshTransport> connect(SshConnectParams params, HostKeyCheck verifyHostKey) async {
+    // InstaBox's SSH gateway accepts only the "none" method, and only when it
+    // is the first one offered: after a rejected password attempt it refuses
+    // every later method. dartssh2 offers password/keyboard-interactive before
+    // none, so for that host we must offer nothing else.
+    final noneOnly = instaboxNoneAuthFor(params.host);
     List<SSHKeyPair>? identities;
-    if (params.auth == SshAuthMethod.privateKey) {
-      identities = await decodePrivateKey(params.secrets.privateKey ?? '', params.secrets.passphrase);
-    } else if ((params.secrets.password ?? '').isEmpty) {
-      throw HostLinkError(HostLinkErrorKind.authFailed, appL10n.remoteErrPasswordMissing);
+    if (!noneOnly) {
+      if (params.auth == SshAuthMethod.privateKey) {
+        identities = await decodePrivateKey(params.secrets.privateKey ?? '', params.secrets.passphrase);
+      } else if ((params.secrets.password ?? '').isEmpty) {
+        throw HostLinkError(HostLinkErrorKind.authFailed, appL10n.remoteErrPasswordMissing);
+      }
     }
 
     final SSHSocket socket;
@@ -125,9 +133,11 @@ class DartSshTransport implements SshTransport {
       socket,
       username: params.username,
       identities: identities,
-      onPasswordRequest: params.auth == SshAuthMethod.password ? () => params.secrets.password : null,
+      onPasswordRequest: !noneOnly && params.auth == SshAuthMethod.password
+          ? () => params.secrets.password
+          : null,
       // Keyboard-interactive servers ask for the same password.
-      onUserInfoRequest: params.auth == SshAuthMethod.password
+      onUserInfoRequest: !noneOnly && params.auth == SshAuthMethod.password
           ? (request) => [for (final _ in request.prompts) params.secrets.password ?? '']
           : null,
       onVerifyHostKey: (type, fingerprint) async {
