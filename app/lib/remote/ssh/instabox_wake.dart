@@ -35,6 +35,16 @@ class InstaboxWakeError implements Exception {
   String toString() => message;
 }
 
+/// Whether SSH to [host] must offer only the "none" method.
+///
+/// InstaBox's gateway accepts "none" and only when it is the first method
+/// offered: a rejected password attempt makes it refuse every later method.
+bool instaboxNoneAuthFor(String host) {
+  final wanted = instaboxWakeSshHost.trim().toLowerCase();
+  if (wanted.isEmpty) return false;
+  return host.trim().toLowerCase() == wanted;
+}
+
 /// Wakes the configured InstaBox machine before an SSH connection is opened.
 ///
 /// InstaBox pauses a free machine after 30 idle minutes (and after a maximum
