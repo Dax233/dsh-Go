@@ -1,0 +1,85 @@
+name: Build InstaBox APK
+
+# Personal fork: builds a release APK with the InstaBox wake hook compiled in.
+# Everything happens on the runner; the developer machine needs no Flutter SDK.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-instabox-apk.yml'
+      - 'app/lib/remote/ssh/instabox_wake.dart'
+      - 'app/lib/remote/ssh/ssh_link.dart'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instabox-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+  GRADLE_VERSION: 9.3.1
+  INSTABOX_SSH_HOST: ssh.instabox.sh
+  INSTABOX_MACHINE_ID: m_agqylm4u2qljvnpneljimslusa
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Prepare project
+        working-directory: app
+        run: |
+          flutter pub get --enforce-lockfile
+          printf 'sdk.dir=%s\nflutter.sdk=%s\n' "$ANDROID_HOME" "$FLUTTER_ROOT" > android/local.properties
+          # A fixed debug keystore keeps the signature stable across runs, so a
+          # rebuilt APK installs over the previous one instead of requiring an
+          # uninstall (which would wipe conversations and settings).
+          mkdir -p "$HOME/.android"
+          cp android/debug.keystore "$HOME/.android/debug.keystore"
+          (cd android && gradle wrapper --gradle-version "$GRADLE_VERSION" --no-daemon)
+
+      - name: Build arm64 release APK
+        working-directory: app
+        env:
+          INSTABOX_API_KEY: ${{ secrets.INSTABOX_API_KEY }}
+        run: |
+          if [ -z "$INSTABOX_API_KEY" ]; then
+            echo "::warning::INSTABOX_API_KEY secret is empty - the wake hook will be disabled"
+          fi
+          flutter build apk --release \
+            --flavor arm64 \
+            --target-platform android-arm64 \
+            --dart-define=INSTABOX_SSH_HOST="$INSTABOX_SSH_HOST" \
+            --dart-define=INSTABOX_MACHINE_ID="$INSTABOX_MACHINE_ID" \
+            --dart-define=INSTABOX_API_KEY="$INSTABOX_API_KEY"
+
+      - name: Show artifact
+        working-directory: app
+        run: ls -lh build/app/outputs/flutter-apk/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-go-instabox-arm64
+          path: app/build/app/outputs/flutter-apk/app-arm64-release.apk
+          if-no-files-found: error
