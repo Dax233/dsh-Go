@@ -81,6 +81,10 @@ abstract class SshTransport implements RemoteShell {
   /// Opens a direct-tcpip channel to [host]:[port] as seen from the server.
   Future<TunnelChannel> openTunnel(String host, int port);
 
+  /// Opens a long-lived remote command (exec channel, no pty) whose stdio is
+  /// a byte channel; used to carry the phone bridge to the host.
+  Future<RemoteExecChannel> execChannel(String command);
+
   /// Round-trips a keepalive; throws or times out when the link is dead.
   Future<void> ping({Duration timeout = const Duration(seconds: 10)});
 
@@ -92,6 +96,18 @@ abstract class SshTransport implements RemoteShell {
   void close();
 }
 
+/// One remote command kept open as a byte channel (no pty, no line editing).
+abstract class RemoteExecChannel {
+  /// Bytes written here reach the command's stdin.
+  StreamSink<List<int>> get stdin;
+
+  /// The command's stdout.
+  Stream<Uint8List> get stdout;
+
+  /// Ends the command; the remote shell kills whatever is left.
+  Future<void> close();
+}
+
 typedef SshTransportFactory = Future<SshTransport> Function(SshConnectParams params, HostKeyCheck verifyHostKey);
 
 /// dartssh2-backed transport.
@@ -99,6 +115,12 @@ class DartSshTransport implements SshTransport {
   DartSshTransport._(this._client);
 
   final SSHClient _client;
+
+  @override
+  Future<RemoteExecChannel> execChannel(String command) async {
+    final session = await _client.execute(command);
+    return _SshExecChannel(session);
+  }
 
   static Future<SshTransport> connect(SshConnectParams params, HostKeyCheck verifyHostKey) async {
     // InstaBox's SSH gateway accepts only the "none" method, and only when it
@@ -325,4 +347,20 @@ class _ForwardChannel implements TunnelChannel {
 
   @override
   void destroy() => _channel.destroy();
+}
+
+/// [RemoteExecChannel] over one dartssh2 session.
+class _SshExecChannel implements RemoteExecChannel {
+  _SshExecChannel(this._session);
+
+  final SSHSession _session;
+
+  @override
+  StreamSink<List<int>> get stdin => _session.stdin;
+
+  @override
+  Stream<Uint8List> get stdout => _session.stdout;
+
+  @override
+  Future<void> close() => _session.close();
 }
