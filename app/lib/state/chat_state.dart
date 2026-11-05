@@ -460,6 +460,8 @@ class ChatController extends Notifier<ChatState> {
   Completer<bool> _syncReady = Completer<bool>();
   Future<bool>? _resyncFuture;
   Object? _resyncOwner;
+  Timer? _followRetry;
+  int _followRetries = 0;
   bool _autoApprove = false;
   Set<String> _autoAnswered = const {};
   HostRef? _approvalHost;
@@ -569,6 +571,7 @@ class ChatController extends Notifier<ChatState> {
       release?.cancel();
       _flush?.cancel();
       _flush = null;
+      _followRetry?.cancel();
       _stopTimeout?.cancel();
       _awayTimer?.cancel();
       unawaited(_sub?.cancel());
@@ -735,6 +738,19 @@ class ChatController extends Notifier<ChatState> {
     })();
   }
 
+  /// A follow stream can end (tunnel blip, host restart) without anyone asking
+  /// for a resync; reopen it with backoff so the UI leaves "syncing" by itself.
+  void _scheduleFollowRetry() {
+    if (_followRetries >= 5) return;
+    _followRetry?.cancel();
+    final delay = Duration(seconds: 1 << _followRetries);
+    _followRetry = Timer(delay, () {
+      if (!ref.mounted) return;
+      _followRetries++;
+      unawaited(resync());
+    });
+  }
+
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
     final owner = ref;
     final listener = _listenOwner = Object();
@@ -831,6 +847,8 @@ class ChatController extends Notifier<ChatState> {
               _lookupKey = null;
               _snapshotGeneration = client.mux.generation;
               _synchronized = true;
+              _followRetry?.cancel();
+              _followRetries = 0;
               // One publication: no ready state containing the old inbox.
               _publish(freshSnapshot: true);
               if (!_syncReady.isCompleted) _syncReady.complete(true);
@@ -851,6 +869,7 @@ class ChatController extends Notifier<ChatState> {
               }
               return;
             }
+            _scheduleFollowRetry();
             state = state.copyWith(
               error: chatErrorText(e, action: appL10n.stateChatSyncInterrupted),
               streamLost: true,
@@ -862,6 +881,7 @@ class ChatController extends Notifier<ChatState> {
             _watchEnded = true;
             _markSyncing();
             if (!_syncReady.isCompleted) _syncReady.complete(false);
+            _scheduleFollowRetry();
             state = state.copyWith(streamLost: true, loading: false);
           },
         );
