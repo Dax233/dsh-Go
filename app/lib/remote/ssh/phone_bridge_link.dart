@@ -15,13 +15,14 @@ import 'ssh_transport.dart';
 /// stdout/stdin; this side maps each frame stream to the phone bridge's TCP
 /// listener (the `dsh/phone` MCP server).
 class PhoneBridgeLink {
-  PhoneBridgeLink._(this._exec, this._bridgePort);
+  PhoneBridgeLink._(this._exec, this._bridgePort, this._phone);
 
   /// Loopback port the host-side script listens on for the DSH relay.
   static const int hostPort = 18766;
 
   final RemoteExecChannel _exec;
   final int _bridgePort;
+  final PhoneChannel _phone;
   final Map<int, Socket> _sockets = <int, Socket>{};
   final List<int> _pending = <int>[];
   StreamSubscription<Uint8List>? _sub;
@@ -39,7 +40,7 @@ class PhoneBridgeLink {
     final exec = await transport.execChannel(
       'export PATH=/usr/local/bin:/usr/bin:/bin; exec node ~/.dsh/phone-bridge-host.cjs $hostPort',
     );
-    final link = PhoneBridgeLink._(exec, port);
+    final link = PhoneBridgeLink._(exec, port, phone);
     link._listen();
     final config = jsonEncode(<String, Object>{'host': '127.0.0.1', 'port': hostPort, 'token': token});
     try {
@@ -141,6 +142,11 @@ class PhoneBridgeLink {
       await _exec.close();
     } catch (_) {
       // Already gone.
+    }
+    try {
+      await _phone.bridgeStopRemote();
+    } catch (_) {
+      // The native side may be gone; nothing to stop then.
     }
   }
 }
