@@ -59,6 +59,29 @@ HostLinkError hostKeyMismatchError(SshHostConfig config, PresentedHostKey key) =
 /// the remote server binds 127.0.0.1 only, the token comes from its log, and
 /// the client presents `Host: 127.0.0.1:<remote port>` so DSH's Host fence
 /// accepts requests that arrive through the tunnel.
+/// Generated profile for remote phone control: a copy of `web` plus the
+/// `mcp-phone` MCP client. __RELAY_PATH__ becomes the absolute relay path.
+const String _phoneProfileScript = r'''
+set -e
+D="$HOME/.dsh/profiles"
+mkdir -p "$D/web-phone"
+for f in package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml; do
+  if [ -f "$D/web/$f" ]; then cp -a "$D/web/$f" "$D/web-phone/$f"; fi
+done
+if ! grep -q 'id: mcp-phone' "$D/web-phone/cordis.patch.yml"; then
+  cat >> "$D/web-phone/cordis.patch.yml" <<'PHONEYAML'
+- insert:
+    - id: mcp-phone
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: phone
+        transport: stdio
+        command: node
+        args: ['__RELAY_PATH__']
+        toolCallTimeoutMs: 120000
+PHONEYAML
+fi
+''';
 class SshHostLink implements HostLink {
   SshHostLink({
     required this._config,
@@ -415,38 +438,15 @@ class SshHostLink implements HostLink {
       final homeRes = await transport.run(r'printf %s "$HOME"', timeout: const Duration(seconds: 15));
       final home = homeRes.stdout.trim();
       if (home.isEmpty) return;
-      // A dedicated profile, so the engine loads mcp-phone without touching the
-      // user's own profile or relying on command-line flag order.
-      await transport.run(r'''
-set -e
-D="$HOME/.dsh/profiles"
-mkdir -p "$D/web-phone"
-for f in package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml; do
-  if [ -f "$D/web/$f" ]; then cp -a "$D/web/$f" "$D/web-phone/$f"; fi
-done
-if ! grep -q 'id: mcp-phone' "$D/web-phone/cordis.patch.yml"; then
-  cat >> "$D/web-phone/cordis.patch.yml" <<'PHONEYAML'
-- insert:
-    - id: mcp-phone
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: phone
-        transport: stdio
-        command: node
-        args: ['${HOME}/.dsh/phone-relay.cjs']
-        toolCallTimeoutMs: 120000
-PHONEYAML
-fi
-''', timeout: const Duration(seconds: 25));
+      final stateDir = '$home/.dsh';
+      final script = _phoneProfileScript.replaceAll('__RELAY_PATH__', '$stateDir/phone-relay.cjs');
+      await transport.run(script, timeout: const Duration(seconds: 25));
       _phoneProfileLaunch = 'dsh --profile web-phone';
-      // No forced restart: the bootstrap reuses the running engine when its
-      // launch command already matches, and restarts only when it differs.
     } catch (_) {
       _phoneBridge = null;
       _phoneProfileLaunch = null;
     }
   }
-
   void _teardownTransport() {
     unawaited(_phoneBridge?.close());
     _phoneBridge = null;
