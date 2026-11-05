@@ -432,6 +432,19 @@ class SshHostLink implements HostLink {
   PhoneBridgeLink? _phoneBridge;
   String? _phoneProfileLaunch;
 
+  Future<void> _bridgeBreadcrumb(SshTransport transport, String line) async {
+    try {
+      await transport.run(
+        'mkdir -p ~/.dsh-app-remote && printf \'%s\\n\' ' +
+            shQuote('phone-bridge ' + line) +
+            ' >> ~/.dsh-app-remote/bridge.log',
+        timeout: const Duration(seconds: 10),
+      );
+    } catch (_) {
+      // Diagnostics only.
+    }
+  }
+
   Future<void> _publishPhoneBridge(SshTransport transport) async {
     try {
       _phoneBridge = await PhoneBridgeLink.start(transport, _phone).timeout(const Duration(seconds: 12));
@@ -446,12 +459,14 @@ class SshHostLink implements HostLink {
       final changed = port != null && PhoneBridgeLink.lastPublishedPort != null && port != PhoneBridgeLink.lastPublishedPort;
       PhoneBridgeLink.lastPublishedPort = port;
       _phoneProfileLaunch = 'dsh --profile web-phone';
+      await _bridgeBreadcrumb(transport, 'ok port=${port ?? -1} profile=web-phone');
       // A reused engine keeps its old relay, which still points at the previous
       // mux port; restart only when that port actually changed.
       if (changed) _forceRestart = true;
-    } catch (_) {
+    } catch (e) {
       _phoneBridge = null;
       _phoneProfileLaunch = null;
+      await _bridgeBreadcrumb(transport, 'failed $e');
     }
   }
   void _teardownTransport() {
