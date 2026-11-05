@@ -362,5 +362,7 @@ class _SshExecChannel implements RemoteExecChannel {
   Stream<Uint8List> get stdout => _session.stdout;
 
   @override
-  Future<void> close() => _session.close();
+  Future<void> close() async {
+    _session.close();
+  }
 }
