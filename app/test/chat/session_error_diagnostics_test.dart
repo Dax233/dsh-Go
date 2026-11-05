@@ -106,6 +106,10 @@ void main() {
     expect(state.streamLost, isTrue);
     expect(state.loading, isFalse);
     expect(state.error, isNot(contains('synthetic follow failure')));
+    // The fork's _scheduleFollowRetry arms a timer on a lost follow; disposing
+    // the controller (ref.onDispose cancels it) keeps the binding's
+    // pending-timer invariant satisfied now that the failure is not terminal.
+    container.dispose();
   });
 
   testWidgets('a deleted session is ordinary navigation, not a captured failure', (tester) async {
