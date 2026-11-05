@@ -290,6 +290,35 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     val bridgeListening: Boolean get() = bridge.listening
 
+    // ── Remote bridge (phone control driven by a remote engine) ─────────────────
+
+    /**
+     * Starts the MCP bridge with a loopback TCP listener for a remote client and
+     * returns how to reach it: `port` and the launch `token`. Null when phone
+     * control is off. The remote path runs no guest, so it starts the bridge here.
+     */
+    @Synchronized
+    fun bridgeEndpoint(): Map<String, Any?>? {
+        if (!isEnabled()) return null
+        val ep = if (bridge.listening) {
+            val current = bridge.endpoint ?: return null
+            if (current.tcpPort != null) current else (bridge.addTcp() ?: return null)
+        } else {
+            bridge.start(withTcp = true)
+        }
+        val port = ep.tcpPort ?: return null
+        emitStatus()
+        return mapOf("port" to port, "token" to ep.token)
+    }
+
+    /** Stops a bridge opened for a remote client; a local guest keeps its own. */
+    @Synchronized
+    fun bridgeStopRemote() {
+        if (rootfs != null) return
+        stopBridge()
+        emitStatus()
+    }
+
     // ── Task ────────────────────────────────────────────────────────────────────────
 
     fun stopTask(reason: String): Boolean {
