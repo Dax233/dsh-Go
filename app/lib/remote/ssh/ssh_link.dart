@@ -532,11 +532,20 @@ class SshHostLink implements HostLink {
       _missedPings = 0;
       return true;
     } catch (_) {
-      _missedPings++;
-      if (_missedPings >= 3 && identical(transport, _transport)) {
-        _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
+      // Some SSH gateways never answer the global keepalive request, so a
+      // ping timeout alone does not mean the link is gone. A real channel
+      // round-trip is authoritative: if 'true' still runs, we are alive.
+      try {
+        await transport.run('true', timeout: timeout);
+        _missedPings = 0;
+        return true;
+      } catch (_) {
+        _missedPings++;
+        if (_missedPings >= 3 && identical(transport, _transport)) {
+          _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
+        }
+        return false;
       }
-      return false;
     }
   }
 
