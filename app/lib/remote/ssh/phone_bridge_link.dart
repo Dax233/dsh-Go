@@ -28,16 +28,16 @@ class PhoneBridgeLink {
 
   /// Starts the link for [transport] when phone control is on; null otherwise.
   static Future<PhoneBridgeLink?> start(SshTransport transport, PhoneChannel phone) async {
-    final status = await phone.status();
+    final status = await phone.status().timeout(const Duration(seconds: 2));
     if (!status.ready || !status.enabled) return null;
-    final endpoint = await phone.bridgeEndpoint();
+    final endpoint = await phone.bridgeEndpoint().timeout(const Duration(seconds: 4));
     final port = endpoint?['port'];
     final token = endpoint?['token'];
     if (port is! int || token is! String || token.isEmpty) return null;
 
     final exec = await transport.execChannel(
       'export PATH=/usr/local/bin:/usr/bin:/bin; exec node ~/.dsh/phone-bridge-host.cjs 0',
-    );
+    ).timeout(const Duration(seconds: 6));
     final link = PhoneBridgeLink._(exec, port, phone);
     link._listen();
     final int hostPort;
