@@ -237,6 +237,13 @@ class _WebSocketMuxLink implements DshMuxLink {
   void _lose(DshCarrierLostException failure, Object? cause) {
     if (_lost) return;
     _lost = true;
+    _tracer?.call(
+      DshTraceEntry('state', 'carrier-lost', {
+        'reason': failure.toString(),
+        'closeCode': _socket.closeCode,
+        'closeReason': _socket.closeReason,
+      }),
+    );
     _onLost?.call(failure, cause);
   }
 
