@@ -262,7 +262,7 @@ class SshHostLink implements HostLink {
     try {
       final bootstrap = RemoteDshBootstrap(
         transport,
-        launchCommand: '${_config.launchCommand}${_phonePatchArg ?? ''}',
+        launchCommand: _phoneProfileLaunch ?? _config.launchCommand,
         workingDirectory: _config.workingDirectory,
         environment: remoteEnvironment,
       );
@@ -406,18 +406,23 @@ class SshHostLink implements HostLink {
 
   final PhoneChannel _phone = PhoneChannel();
   PhoneBridgeLink? _phoneBridge;
-  String? _phonePatchArg;
+  String? _phoneProfileLaunch;
 
   Future<void> _publishPhoneBridge(SshTransport transport) async {
     try {
       _phoneBridge = await PhoneBridgeLink.start(transport, _phone);
       if (_phoneBridge == null) return;
-      final home = (await transport.run(r'printf %s "$HOME"')).stdout.trim();
-      if (home.isEmpty) return;
-      final stateDir = '$home/.dsh';
-      final patchPath = '$stateDir/phone.patch.yml';
-      final relayPath = '$stateDir/phone-relay.cjs';
-      final yaml = '''
+      // A dedicated profile, so the engine loads mcp-phone without touching the
+      // user's own profile or relying on command-line flag order.
+      await transport.run(r'''
+set -e
+D="$HOME/.dsh/profiles"
+mkdir -p "$D/web-phone"
+for f in package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml; do
+  if [ -f "$D/web/$f" ]; then cp -a "$D/web/$f" "$D/web-phone/$f"; fi
+done
+if ! grep -q 'id: mcp-phone' "$D/web-phone/cordis.patch.yml"; then
+  cat >> "$D/web-phone/cordis.patch.yml" <<'PHONEYAML'
 - insert:
     - id: mcp-phone
       name: '@deepseek-ai/dsh-mcp-client'
@@ -425,27 +430,24 @@ class SshHostLink implements HostLink {
         serverName: phone
         transport: stdio
         command: node
-        args: ['$relayPath']
+        args: ['${HOME}/.dsh/phone-relay.cjs']
         toolCallTimeoutMs: 120000
-''';
-      await transport.run(
-        'mkdir -p ${shQuote(stateDir)} && printf %s ${shQuote(yaml)} > ${shQuote(patchPath)} && chmod 600 ${shQuote(patchPath)}',
-        timeout: const Duration(seconds: 20),
-      );
-      _phonePatchArg = ' --patch ${shQuote(patchPath)}';
-      // A reused `dsh web` was started without the phone tools; restart it so
-      // its MCP client picks up the patched profile.
-      _forceRestart = true;
+PHONEYAML
+fi
+''', timeout: const Duration(seconds: 25));
+      _phoneProfileLaunch = 'dsh --profile web-phone';
+      // No forced restart: the bootstrap reuses the running engine when its
+      // launch command already matches, and restarts only when it differs.
     } catch (_) {
       _phoneBridge = null;
-      _phonePatchArg = null;
+      _phoneProfileLaunch = null;
     }
   }
 
   void _teardownTransport() {
     unawaited(_phoneBridge?.close());
     _phoneBridge = null;
-    _phonePatchArg = null;
+    _phoneProfileLaunch = null;
     _keepAlive?.cancel();
     _keepAlive = null;
     final transport = _transport;
