@@ -602,12 +602,26 @@ class SshHostLink implements HostLink {
     });
   }
 
+  bool _nudgeInFlight = false;
+
   /// Fire-and-forget SSH global keepalive, sent only to reset the gateway's
-  /// idle timer. Never awaited: dartssh2 4.1.0's reply may never arrive.
+  /// idle timer. Never awaited: dartssh2 4.1.0 keeps a shared reply queue, so
+  /// at most one request may be outstanding at a time and its reply is never
+  /// required for the link to be considered alive.
   void _nudgeTraffic() {
     final transport = _transport;
-    if (transport == null || _closed) return;
-    unawaited(transport.ping(timeout: _pingRequestTimeout).catchError((Object _) {}));
+    if (transport == null || _closed || _nudgeInFlight) return;
+    _nudgeInFlight = true;
+    unawaited(() async {
+      try {
+        await transport.ping(timeout: _pingRequestTimeout);
+      } catch (_) {
+        // A gateway may answer late or not at all; the channel round-trip in
+        // _ping is the authoritative check.
+      } finally {
+        _nudgeInFlight = false;
+      }
+    }());
   }
 
   Future<void> _keepAliveTick() async {
