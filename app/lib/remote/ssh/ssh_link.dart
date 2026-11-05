@@ -441,7 +441,7 @@ class SshHostLink implements HostLink {
   Future<void> _bridgeBreadcrumb(SshTransport transport, String line) async {
     try {
       await transport.run(
-        'mkdir -p ~/.dsh-app-remote && printf \'[%s] %s\\n\' "$(date -u +%FT%TZ)" ' +
+        'mkdir -p ~/.dsh-app-remote && printf \'[%s] %s\\n\' "\$(date -u +%FT%TZ)" ' +
             shQuote('phone-bridge ' + line) +
             ' >> ~/.dsh-app-remote/bridge.log',
         timeout: const Duration(seconds: 10),
