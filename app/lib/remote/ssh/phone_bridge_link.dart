@@ -38,19 +38,6 @@ class PhoneBridgeLink {
   static int? lastPublishedPort;
 
   /// Starts the link for [transport] when phone control is on; null otherwise.
-  /// Reconnects can leave a previous mux process behind; it would keep an old
-  /// dynamic port and confuse diagnostics, so clear them before starting.
-  static Future<void> _clearStaleMux(SshTransport transport) async {
-    try {
-      await transport
-          .run("pkill -f 'phone-bridge-host.cjs' || true",
-              timeout: const Duration(seconds: 10))
-          .timeout(const Duration(seconds: 10));
-    } catch (_) {
-      // Diagnostics only.
-    }
-  }
-
   static Future<PhoneBridgeLink?> start(SshTransport transport, PhoneChannel phone) async {
     final status = await phone.status().timeout(const Duration(seconds: 2));
     if (!status.ready || !status.enabled) return null;
@@ -59,7 +46,6 @@ class PhoneBridgeLink {
     final token = endpoint?['token'];
     if (port is! int || token is! String || token.isEmpty) return null;
 
-    await _clearStaleMux(transport);
     final exec = await transport.execChannel(
       'export PATH=/usr/local/bin:/usr/bin:/bin; exec node ~/.dsh/phone-bridge-host.cjs 0',
     ).timeout(const Duration(seconds: 6));
