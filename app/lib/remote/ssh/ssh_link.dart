@@ -95,8 +95,8 @@ class SshHostLink implements HostLink {
     Stream<void>? kicks,
     Backoff? backoff,
     this.remoteEnvironment = const {},
-    this.keepAliveInterval = const Duration(seconds: 15),
-    this.keepAliveTimeout = const Duration(seconds: 10),
+    this.keepAliveInterval = const Duration(seconds: 20),
+    this.keepAliveTimeout = const Duration(seconds: 30),
     this.tunnelProbeTimeout = const Duration(seconds: 10),
     this.retryFirstOpen = true,
   }) : _transportFactory = transportFactory ?? DartSshTransport.connect,
@@ -533,7 +533,7 @@ class SshHostLink implements HostLink {
       return true;
     } catch (_) {
       _missedPings++;
-      if (_missedPings >= 2 && identical(transport, _transport)) {
+      if (_missedPings >= 3 && identical(transport, _transport)) {
         _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
       }
       return false;
