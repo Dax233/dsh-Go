@@ -410,7 +410,7 @@ class SshHostLink implements HostLink {
 
   Future<void> _publishPhoneBridge(SshTransport transport) async {
     try {
-      _phoneBridge = await PhoneBridgeLink.start(transport, _phone);
+      _phoneBridge = await PhoneBridgeLink.start(transport, _phone).timeout(const Duration(seconds: 12));
       if (_phoneBridge == null) return;
       // A dedicated profile, so the engine loads mcp-phone without touching the
       // user's own profile or relying on command-line flag order.
