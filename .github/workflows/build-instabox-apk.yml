@@ -52,11 +52,12 @@ jobs:
         run: |
           flutter pub get --enforce-lockfile
           printf 'sdk.dir=%s\nflutter.sdk=%s\n' "$ANDROID_HOME" "$FLUTTER_ROOT" > android/local.properties
-          # A fixed debug keystore keeps the signature stable across runs, so a
-          # rebuilt APK installs over the previous one instead of requiring an
-          # uninstall (which would wipe conversations and settings).
-          mkdir -p "$HOME/.android"
-          cp android/debug.keystore "$HOME/.android/debug.keystore"
+          # Explicit release signing from the committed throwaway keystore. AGP's
+          # own debug keystore path is not reliable on runners (ANDROID_SDK_HOME
+          # moves it) and a regenerated key changes the signature every run, so
+          # a rebuilt APK could not install over the previous one.
+          printf 'storeFile=%s\nstorePassword=android\nkeyAlias=androiddebugkey\nkeyPassword=android\n' \
+            "$GITHUB_WORKSPACE/app/android/debug.keystore" > android/key.properties
           (cd android && gradle wrapper --gradle-version "$GRADLE_VERSION" --no-daemon)
 
       - name: Build arm64 release APK
@@ -77,6 +78,16 @@ jobs:
       - name: Show artifact
         working-directory: app
         run: ls -lh build/app/outputs/flutter-apk/
+
+      - name: Print signing certificate
+        working-directory: app
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | tail -1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-arm64-release.apk | head -6
+          else
+            keytool -list -v -keystore android/debug.keystore -storepass android | grep -E 'SHA256|Alias' | head -4
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
