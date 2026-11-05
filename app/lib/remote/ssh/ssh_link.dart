@@ -68,6 +68,7 @@ mkdir -p "$D/web-phone"
 for f in package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml; do
   if [ -f "$D/web/$f" ]; then cp -a "$D/web/$f" "$D/web-phone/$f"; fi
 done
+ln -sfn ../web/node_modules "$D/web-phone/node_modules"
 if ! grep -q 'id: mcp-phone' "$D/web-phone/cordis.patch.yml"; then
   cat >> "$D/web-phone/cordis.patch.yml" <<'PHONEYAML'
 - insert:
