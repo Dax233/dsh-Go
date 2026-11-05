@@ -9,6 +9,7 @@ import '../../phone/phone_channel.dart';
 import 'local_forward.dart';
 import 'phone_bridge_link.dart';
 import 'remote_bootstrap.dart';
+import 'remote_shell.dart';
 import 'ssh_host_config.dart';
 import 'ssh_transport.dart';
 
