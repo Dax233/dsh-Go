@@ -5,7 +5,9 @@ import 'package:dsh_client/dsh_client.dart';
 import '../../l10n/l10n.dart';
 import '../link_status.dart';
 import 'instabox_wake.dart';
+import '../../phone/phone_channel.dart';
 import 'local_forward.dart';
+import 'phone_bridge_link.dart';
 import 'remote_bootstrap.dart';
 import 'ssh_host_config.dart';
 import 'ssh_transport.dart';
@@ -254,6 +256,8 @@ class SshHostLink implements HostLink {
     }
     // Own the authenticated connection while bootstrap/probe are pending.
     _connectingTransport = transport;
+    // Publish where a remote engine finds the phone bridge before `dsh web` starts.
+    await _publishPhoneBridge(transport);
     at(HostLinkStep.startDsh, detail: appL10n.remoteCheckingDsh);
     try {
       final bootstrap = RemoteDshBootstrap(
@@ -400,7 +404,20 @@ class SshHostLink implements HostLink {
     );
   }
 
+  final PhoneChannel _phone = PhoneChannel();
+  PhoneBridgeLink? _phoneBridge;
+
+  Future<void> _publishPhoneBridge(SshTransport transport) async {
+    try {
+      _phoneBridge = await PhoneBridgeLink.start(transport, _phone);
+    } catch (_) {
+      _phoneBridge = null;
+    }
+  }
+
   void _teardownTransport() {
+    unawaited(_phoneBridge?.close());
+    _phoneBridge = null;
     _keepAlive?.cancel();
     _keepAlive = null;
     final transport = _transport;
