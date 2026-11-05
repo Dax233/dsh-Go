@@ -935,6 +935,30 @@ class PhoneChannel {
     }
   }
 
+  /// Starts the MCP bridge with a loopback TCP listener for a remote client;
+  /// null when phone control is off or the native side is missing.
+  Future<Map<String, Object?>?> bridgeEndpoint() async {
+    try {
+      final map = await _methods.invokeMapMethod<Object?, Object?>('bridgeEndpoint');
+      return map?.cast<String, Object?>();
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// Stops a bridge opened for a remote client (a local guest keeps its own).
+  Future<void> bridgeStopRemote() async {
+    try {
+      await _methods.invokeMethod<void>('bridgeStopRemote');
+    } on MissingPluginException {
+      // No native side.
+    } on PlatformException {
+      // Nothing to stop.
+    }
+  }
+
   Future<bool> setEnabled(bool enabled) => _bool('setEnabled', {'enabled': enabled});
 
   Future<bool> openAccessibilitySettings() => _bool('openAccessibilitySettings');
