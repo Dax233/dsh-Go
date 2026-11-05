@@ -79,6 +79,20 @@ jobs:
         working-directory: app
         run: ls -lh build/app/outputs/flutter-apk/
 
+      - name: Sign APK with the project keystore
+        working-directory: app
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          APK=build/app/outputs/flutter-apk/app-arm64-release.apk
+          "$APKSIGNER" sign \
+            --ks android/debug.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --out build/app/outputs/flutter-apk/app-signed.apk "$APK"
+          mv build/app/outputs/flutter-apk/app-signed.apk "$APK"
+          "$APKSIGNER" verify --print-certs "$APK" | head -3
+
       - name: Print signing certificate
         working-directory: app
         run: |
