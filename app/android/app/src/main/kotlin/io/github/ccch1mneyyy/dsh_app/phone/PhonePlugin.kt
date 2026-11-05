@@ -107,6 +107,8 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "status" -> async(result, shortControl = true) { control.status() }
+            "bridgeEndpoint" -> async(result) { control.bridgeEndpoint() }
+            "bridgeStopRemote" -> async(result) { control.bridgeStopRemote(); true }
             "setBackgroundKeep" -> {
                 val selected = call.argument<String>("mode").orEmpty()
                 val enabled = call.argument<Boolean>("enabled") == true
