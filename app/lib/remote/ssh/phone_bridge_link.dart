@@ -17,13 +17,11 @@ import 'ssh_transport.dart';
 class PhoneBridgeLink {
   PhoneBridgeLink._(this._exec, this._bridgePort, this._phone);
 
-  /// Loopback port the host-side script listens on for the DSH relay.
-  static const int hostPort = 18766;
-
   final RemoteExecChannel _exec;
   final int _bridgePort;
   final PhoneChannel _phone;
   final Map<int, Socket> _sockets = <int, Socket>{};
+  final Completer<int> _port = Completer<int>();
   final List<int> _pending = <int>[];
   StreamSubscription<Uint8List>? _sub;
   bool _closed = false;
@@ -38,10 +36,17 @@ class PhoneBridgeLink {
     if (port is! int || token is! String || token.isEmpty) return null;
 
     final exec = await transport.execChannel(
-      'export PATH=/usr/local/bin:/usr/bin:/bin; exec node ~/.dsh/phone-bridge-host.cjs $hostPort',
+      'export PATH=/usr/local/bin:/usr/bin:/bin; exec node ~/.dsh/phone-bridge-host.cjs 0',
     );
     final link = PhoneBridgeLink._(exec, port, phone);
     link._listen();
+    final int hostPort;
+    try {
+      hostPort = await link._port.future.timeout(const Duration(seconds: 8));
+    } catch (_) {
+      await link.close();
+      return null;
+    }
     final config = jsonEncode(<String, Object>{'host': '127.0.0.1', 'port': hostPort, 'token': token});
     try {
       await transport.run(
@@ -78,9 +83,14 @@ class PhoneBridgeLink {
     } catch (_) {
       return;
     }
+    final kind = frame['t'];
+    if (kind == 'listen') {
+      final port = frame['port'];
+      if (port is int && !_port.isCompleted) _port.complete(port);
+      return;
+    }
     final id = frame['id'];
     if (id is! int) return;
-    final kind = frame['t'];
     if (kind == 'open') {
       _open(id);
     } else if (kind == 'data') {
