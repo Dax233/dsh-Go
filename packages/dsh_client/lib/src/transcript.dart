@@ -296,15 +296,28 @@ class ChatTranscript {
   }
 
   /// Applies one event; returns `true` when [items] may have changed.
-  bool apply(DshEvent event) {
+  ///
+  /// [preserveOlderHistory] keeps events older than the snapshot window when
+  /// the caller already holds this session's log (a cached transcript reused
+  /// across screens). It is honoured only when the snapshot continues that
+  /// log: its cursor must not be behind the held log and there must be no seq
+  /// hole between them. Otherwise the snapshot replaces the log, as usual.
+  bool apply(DshEvent event, {bool preserveOlderHistory = false}) {
     switch (event) {
       case SessionSnapshotEvent():
-        if (!event.isResync) _log.clear();
+        final held = _log.lastKey();
+        final keepsOlder =
+            preserveOlderHistory &&
+            !event.isResync &&
+            held != null &&
+            event.cursor >= held &&
+            (event.events.isEmpty || event.events.first.seq <= held + 1);
+        if (!event.isResync && !keepsOlder) _log.clear();
         header = event.header;
         projections = event.projections;
         _inbox = projections.inbox;
         cursor = event.cursor;
-        if (!event.isResync) hasMoreHistory = event.hasMore;
+        if (!event.isResync && !keepsOlder) hasMoreHistory = event.hasMore;
         _drafts.clear();
         _runningOverride = null;
         for (final e in event.events) {

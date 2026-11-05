@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../usage/usage_stats.dart';
 import 'attachments.dart';
 import 'chat_error_text.dart';
+import 'chat_transcript_cache.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
 import 'models_state.dart';
@@ -425,7 +426,20 @@ class ChatController extends Notifier<ChatState> {
   ChatController(this.sessionId);
 
   final String sessionId;
-  final ChatTranscript _transcript = ChatTranscript();
+
+  /// Cold open: recent messages enough for the first phone screen; older
+  /// history pages in through [loadOlder] instead of shipping the desktop
+  /// 500-message window (~1 MB) over a remote link.
+  static const int _coldWindow = 60;
+  static const TurnWindow _coldTurnWindow = TurnWindow(40, 2);
+
+  /// Cache hit: the transcript already holds the history, so the snapshot only
+  /// reconciles the tail and the follow fills the seq gap.
+  static const int _warmWindow = 16;
+  static const TurnWindow _warmTurnWindow = TurnWindow(8, 1);
+
+  late ChatTranscript _transcript;
+  String? _transcriptHostKey;
   StreamSubscription<DshEvent>? _sub;
   StreamSubscription<DshConnectionState>? _states;
   Timer? _flush;
@@ -523,6 +537,14 @@ class ChatController extends Notifier<ChatState> {
     // rebuild may reuse this Notifier for an identically named session there.
     // Reconnecting to the same Host keeps the existing conversation consent.
     final host = ref.watch(activeHostProvider);
+    // A switch back to a session seen in this app run reuses its transcript:
+    // the screen paints at once and the follow below repairs only the seq gap,
+    // instead of downloading the whole initial window again.
+    final hostKey = '${host.kind.name}:${host.id}';
+    if (_transcriptHostKey != hostKey) {
+      _transcript = ref.read(chatTranscriptCacheProvider).acquire(hostKey, sessionId);
+      _transcriptHostKey = hostKey;
+    }
     if (_approvalHost != host) {
       // These requests belong to the previous Host, even if the new Host has
       // the same session id. A new watch replays its own mux's pending requests.
@@ -808,6 +830,11 @@ class ChatController extends Notifier<ChatState> {
     // cards forwarded only by the previous watch and settled while it was away.
     // Retire local cards before replay; consent and in-flight answers stay intact.
     _retireHostRequests();
+    // Cache hit: reconcile the tail only and let the follow fill the gap from
+    // the seq the transcript ends at. Cold screens keep a phone-sized window
+    // (older history pages in through loadOlder) instead of the desktop 500.
+    final heldSeq = _transcript.newestSeq;
+    final warm = heldSeq != null && _transcript.events.isNotEmpty;
     _sub = client
         .watch(
           sessionId,
@@ -815,6 +842,9 @@ class ChatController extends Notifier<ChatState> {
             assistantStream: !_quiet,
             includeSyncEvents: true,
             activate: true,
+            initialSeq: warm ? heldSeq : null,
+            maxMessages: warm ? _warmWindow : _coldWindow,
+            turnWindow: warm ? _warmTurnWindow : _coldTurnWindow,
             activationAllowed: () {
               if (!current()) return false;
               return _activationAllowed;
@@ -853,7 +883,11 @@ class ChatController extends Notifier<ChatState> {
                 (event is SessionSnapshotEvent && event.isResync);
             final before = reconcile ? _inboxIds() : const <String>{};
             if (event is SessionSnapshotEvent) _trackSnapshotClaims(event.events);
-            final changed = _transcript.apply(event);
+            // A snapshot keeps the cached history when it continues this log;
+            // `apply` falls back to a replacement on a reset or a seq hole.
+            final changed = event is SessionSnapshotEvent
+                ? _transcript.apply(event, preserveOlderHistory: true)
+                : _transcript.apply(event);
             if (_awayLong && !_quiet && _transcript.running) scheduleMicrotask(_quietIfRunning);
             if (reconcile) {
               final removed = before.difference(_inboxIds());
@@ -921,6 +955,9 @@ class ChatController extends Notifier<ChatState> {
             if (!_syncReady.isCompleted) _syncReady.complete(false);
             // Deleted elsewhere: back to a new chat, nothing to report.
             if (e is DshRemoteException && e.code == 'session/not-found') {
+              if (_transcriptHostKey case final hostKey?) {
+                ref.read(chatTranscriptCacheProvider).evict(hostKey, sessionId);
+              }
               if (ref.read(currentSessionProvider) == sessionId) {
                 ref.read(currentSessionProvider.notifier).select(null);
               }

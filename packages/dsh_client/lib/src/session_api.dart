@@ -67,6 +67,7 @@ class WatchOptions {
     this.onActivationChecked,
     this.turnWindow = const TurnWindow(50, 2),
     this.maxMessages = 500,
+    this.initialSeq,
     this.includeHostEvents = true,
     this.includeConnectionEvents = true,
     this.includeSyncEvents = false,
@@ -99,6 +100,16 @@ class WatchOptions {
   /// 50-message window cuts mid-turn. 500 as in the official web client
   /// (`HISTORY_PAGE_OPTIONS`).
   final int? maxMessages;
+
+  /// Last durable seq the caller already holds, when it keeps a local
+  /// transcript across watches (session switching, cached screens).
+  ///
+  /// The Host still answers with its snapshot, but the follow repairs only the
+  /// gap after [initialSeq]: a warm caller downloads the delta instead of the
+  /// whole initial window, and its cached older history stays valid. When the
+  /// snapshot cursor is behind [initialSeq] the log was reset upstream and the
+  /// follow adopts the snapshot whole, exactly as without this option.
+  final int? initialSeq;
 
   /// Forward this session's approvals, questions, status and errors.
   final bool includeHostEvents;
@@ -997,7 +1008,8 @@ class _Resync implements Exception {
 ///    pending when the stream was opened; after a reconnect they may repeat
 ///    with the same `eventId` (dedupe by it).
 class _SessionWatch {
-  _SessionWatch(this.client, this.sessionId, this.options) {
+  _SessionWatch(this.client, this.sessionId, this.options)
+    : _seedSeq = options.initialSeq ?? -1 {
     _controller = StreamController<DshEvent>(onListen: _start, onCancel: _stop);
   }
 
@@ -1011,6 +1023,10 @@ class _SessionWatch {
   MuxStream? _current;
   bool _stopped = false;
   int _lastSeq = -1;
+
+  /// Caller-held cursor from [WatchOptions.initialSeq]. Only the first
+  /// snapshot's gap repair uses it; it does not make that snapshot a resync.
+  final int _seedSeq;
   int? _assistantRevision;
   int _failures = 0;
   int _resyncs = 0;
@@ -1261,13 +1277,16 @@ class _SessionWatch {
     final epoch = _epoch!;
     _assistantRevision = snapshot.assistantRevision;
     var events = snapshot.events;
-    if (_lastSeq >= 0 && snapshot.cursor > _lastSeq) {
+    // A caller that already holds the log (cached screen) resumes from its
+    // cursor; the first snapshot then repairs only the gap after it.
+    final resumeFrom = _lastSeq >= 0 ? _lastSeq : _seedSeq;
+    if (resumeFrom >= 0 && snapshot.cursor > resumeFrom) {
       final firstSeq = events.isEmpty ? snapshot.cursor + 1 : events.first.seq;
-      if (firstSeq > _lastSeq + 1) {
-        final filled = await _fill(from: _lastSeq + 1, before: firstSeq, through: snapshot.cursor);
+      if (firstSeq > resumeFrom + 1) {
+        final filled = await _fill(from: resumeFrom + 1, before: firstSeq, through: snapshot.cursor);
         _checkHistoryOwner(epoch);
         if (options.includeSyncEvents) {
-          var expected = _lastSeq + 1;
+          var expected = resumeFrom + 1;
           for (final event in filled) {
             if (event.seq != expected++) throw const _Resync('incomplete snapshot history repair');
           }
