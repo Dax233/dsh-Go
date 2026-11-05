@@ -462,13 +462,11 @@ class SshHostLink implements HostLink {
       final script = _phoneProfileScript.replaceAll('__RELAY_PATH__', '$stateDir/phone-relay.cjs');
       await transport.run(script, timeout: const Duration(seconds: 25));
       final port = _phoneBridge!.hostPort;
-      final changed = port != null && PhoneBridgeLink.lastPublishedPort != null && port != PhoneBridgeLink.lastPublishedPort;
-      PhoneBridgeLink.lastPublishedPort = port;
       _phoneProfileLaunch = 'dsh --profile web-phone';
       await _bridgeBreadcrumb(transport, 'ok port=${port ?? -1} profile=web-phone');
-      // A reused engine keeps its old relay, which still points at the previous
-      // mux port; restart only when that port actually changed.
-      if (changed) _forceRestart = true;
+      // The relay reconnects by itself when the mux port changes, so the engine
+      // must never be restarted here: a restart reconnects the app, publishes a
+      // new port, and restarts again forever.
     } catch (e) {
       _phoneBridge = null;
       _phoneProfileLaunch = null;
