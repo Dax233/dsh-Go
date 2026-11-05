@@ -26,6 +26,15 @@ class PhoneBridgeLink {
   StreamSubscription<Uint8List>? _sub;
   bool _closed = false;
 
+  /// The loopback port the host mux announced (the relay's target).
+  int? _announcedPort;
+
+  /// Null until the mux announced its port.
+  int? get hostPort => _announcedPort;
+
+  /// Last port published by any link in this process, to notice a change.
+  static int? lastPublishedPort;
+
   /// Starts the link for [transport] when phone control is on; null otherwise.
   static Future<PhoneBridgeLink?> start(SshTransport transport, PhoneChannel phone) async {
     final status = await phone.status().timeout(const Duration(seconds: 2));
@@ -86,7 +95,10 @@ class PhoneBridgeLink {
     final kind = frame['t'];
     if (kind == 'listen') {
       final port = frame['port'];
-      if (port is int && !_port.isCompleted) _port.complete(port);
+      if (port is int) {
+        _announcedPort = port;
+        if (!_port.isCompleted) _port.complete(port);
+      }
       return;
     }
     final id = frame['id'];
