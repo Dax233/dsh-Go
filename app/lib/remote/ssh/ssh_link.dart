@@ -281,6 +281,7 @@ class SshHostLink implements HostLink {
     }
     // Own the authenticated connection while bootstrap/probe are pending.
     _connectingTransport = transport;
+    await _bridgeBreadcrumb(transport, 'link ok');
     // Publish where a remote engine finds the phone bridge before `dsh web` starts.
     await _publishPhoneBridge(transport);
     at(HostLinkStep.startDsh, detail: appL10n.remoteCheckingDsh);
@@ -297,6 +298,7 @@ class SshHostLink implements HostLink {
       );
       _checkOpen();
       _forceRestart = false;
+      await _bridgeBreadcrumb(transport, 'engine port=${endpoint.port} reused=${endpoint.reused}');
 
       at(HostLinkStep.tunnel, detail: '127.0.0.1:${endpoint.port}');
       try {
@@ -311,6 +313,7 @@ class SshHostLink implements HostLink {
         if (endpoint.reused && e is TunnelRefused) _forceRestart = true;
         throw HostLinkError(HostLinkErrorKind.tunnelFailed, appL10n.remoteErrDshPort, detail: '$e', retryable: true);
       }
+      await _bridgeBreadcrumb(transport, 'tunnel ok');
       _checkOpen();
       final previous = _endpoint;
       _endpoint = endpoint;
@@ -335,9 +338,11 @@ class SshHostLink implements HostLink {
           detail: endpoint.reused ? appL10n.remoteDshReused : appL10n.remoteDshStarted,
         ),
       );
+      await _bridgeBreadcrumb(transport, 'client ok');
       _startKeepAlive();
       return client;
     } catch (e) {
+      await _bridgeBreadcrumb(transport, 'failed $e');
       transport.close();
       if (identical(_transport, transport)) _teardownTransport();
       rethrow;
