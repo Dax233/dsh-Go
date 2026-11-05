@@ -412,6 +412,9 @@ class SshHostLink implements HostLink {
     try {
       _phoneBridge = await PhoneBridgeLink.start(transport, _phone).timeout(const Duration(seconds: 12));
       if (_phoneBridge == null) return;
+      final homeRes = await transport.run(r'printf %s "$HOME"', timeout: const Duration(seconds: 15));
+      final home = homeRes.stdout.trim();
+      if (home.isEmpty) return;
       // A dedicated profile, so the engine loads mcp-phone without touching the
       // user's own profile or relying on command-line flag order.
       await transport.run(r'''
