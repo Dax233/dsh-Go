@@ -17,7 +17,7 @@ class BackgroundGateStateTest {
         val state = BackgroundGateState()
         val before = state.snapshot
 
-        assertFalse(state.update(false, "probeBusy", false, "busyInputError", "busyDetail"))
+        assertFalse(state.update(state.begin { true }!!, false, "probeBusy", false, "busyInputError", "busyDetail"))
 
         assertEquals(
             BackgroundGateState.Snapshot(null, null, null, null),
@@ -28,10 +28,10 @@ class BackgroundGateStateTest {
 
     @Test fun busyProbePreservesSuccessfulCapabilitiesAndDetail() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, true, null, "trustedDisplayReady"))
+        assertTrue(state.update(state.begin { true }!!, true, null, true, null, "trustedDisplayReady"))
         val before = state.snapshot
 
-        assertFalse(state.update(false, "probeBusy", false, "busyInputError", "busyDetail"))
+        assertFalse(state.update(state.begin { true }!!, false, "probeBusy", false, "busyInputError", "busyDetail"))
 
         assertEquals(
             BackgroundGateState.Snapshot(true, true, null, "trustedDisplayReady"),
@@ -42,10 +42,10 @@ class BackgroundGateStateTest {
 
     @Test fun busyProbePreservesFailedCapabilitiesErrorAndDetail() {
         val state = BackgroundGateState()
-        assertTrue(state.update(false, "displayRejected", false, "inputRejected", "failedDetail"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", false, "inputRejected", "failedDetail"))
         val before = state.snapshot
 
-        assertFalse(state.update(true, "probeBusy", true, null, "busyDetail"))
+        assertFalse(state.update(state.begin { true }!!, true, "probeBusy", true, null, "busyDetail"))
 
         assertEquals(
             BackgroundGateState.Snapshot(false, false, "inputRejected", "failedDetail"),
@@ -56,10 +56,10 @@ class BackgroundGateStateTest {
 
     @Test fun busyProbeDoesNotTurnUnknownInjectionIntoFailure() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, null, null, "displayOnly"))
+        assertTrue(state.update(state.begin { true }!!, true, null, null, null, "displayOnly"))
         val before = state.snapshot
 
-        assertFalse(state.update(false, "probeBusy", false, "busyInputError", null))
+        assertFalse(state.update(state.begin { true }!!, false, "probeBusy", false, "busyInputError", null))
 
         assertEquals(
             BackgroundGateState.Snapshot(true, null, null, "displayOnly"),
@@ -70,9 +70,9 @@ class BackgroundGateStateTest {
 
     @Test fun realDisplayFailureReplacesPreviouslySuccessfulCapabilities() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, true, null, "ready"))
+        assertTrue(state.update(state.begin { true }!!, true, null, true, null, "ready"))
 
-        assertTrue(state.update(false, "displayRejected", null, null, "displayDenied"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", null, null, "displayDenied"))
 
         assertEquals(
             BackgroundGateState.Snapshot(false, null, null, "displayDenied"),
@@ -82,9 +82,9 @@ class BackgroundGateStateTest {
 
     @Test fun realInjectionFailureUpdatesErrorWithoutLosingDisplaySuccess() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, true, null, "ready"))
+        assertTrue(state.update(state.begin { true }!!, true, null, true, null, "ready"))
 
-        assertTrue(state.update(true, null, false, "inputRejected", "injectionDenied"))
+        assertTrue(state.update(state.begin { true }!!, true, null, false, "inputRejected", "injectionDenied"))
 
         assertEquals(
             BackgroundGateState.Snapshot(true, false, "inputRejected", "injectionDenied"),
@@ -94,9 +94,9 @@ class BackgroundGateStateTest {
 
     @Test fun subsequentFailureReplacesOldErrorAndDetail() {
         val state = BackgroundGateState()
-        assertTrue(state.update(false, "displayRejected", false, "oldInputError", "oldDetail"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", false, "oldInputError", "oldDetail"))
 
-        assertTrue(state.update(true, null, false, "newInputError", "newDetail"))
+        assertTrue(state.update(state.begin { true }!!, true, null, false, "newInputError", "newDetail"))
 
         assertEquals(
             BackgroundGateState.Snapshot(true, false, "newInputError", "newDetail"),
@@ -106,9 +106,9 @@ class BackgroundGateStateTest {
 
     @Test fun successfulInjectionClearsOldErrorAndAbsentDetail() {
         val state = BackgroundGateState()
-        assertTrue(state.update(false, "displayRejected", false, "oldInputError", "oldDetail"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", false, "oldInputError", "oldDetail"))
 
-        assertTrue(state.update(true, null, true, "irrelevantInputError", null))
+        assertTrue(state.update(state.begin { true }!!, true, null, true, "irrelevantInputError", null))
 
         assertEquals(
             BackgroundGateState.Snapshot(true, true, null, null),
@@ -118,9 +118,9 @@ class BackgroundGateStateTest {
 
     @Test fun unknownInjectionAlsoClearsOldError() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, false, "oldInputError", "oldDetail"))
+        assertTrue(state.update(state.begin { true }!!, true, null, false, "oldInputError", "oldDetail"))
 
-        assertTrue(state.update(false, "displayRejected", null, "irrelevantInputError", "displayDenied"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", null, "irrelevantInputError", "displayDenied"))
 
         assertEquals(
             BackgroundGateState.Snapshot(false, null, null, "displayDenied"),
@@ -130,7 +130,7 @@ class BackgroundGateStateTest {
 
     @Test fun resetClearsFailedCapabilitiesErrorAndDetail() {
         val state = BackgroundGateState()
-        assertTrue(state.update(false, "displayRejected", false, "inputRejected", "failedDetail"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", false, "inputRejected", "failedDetail"))
 
         state.reset()
 
@@ -142,7 +142,7 @@ class BackgroundGateStateTest {
 
     @Test fun resetClearsSuccessfulCapabilitiesAndAllowsFreshResult() {
         val state = BackgroundGateState()
-        assertTrue(state.update(true, null, true, null, "ready"))
+        assertTrue(state.update(state.begin { true }!!, true, null, true, null, "ready"))
 
         state.reset()
 
@@ -150,7 +150,7 @@ class BackgroundGateStateTest {
             BackgroundGateState.Snapshot(null, null, null, null),
             state.snapshot,
         )
-        assertTrue(state.update(false, "displayRejected", false, "freshInputError", "freshDetail"))
+        assertTrue(state.update(state.begin { true }!!, false, "displayRejected", false, "freshInputError", "freshDetail"))
         assertEquals(
             BackgroundGateState.Snapshot(false, false, "freshInputError", "freshDetail"),
             state.snapshot,

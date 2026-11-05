@@ -120,6 +120,28 @@ class ImageAttachment {
   final int? height;
   final String? name;
   final Map<String, Object?> raw;
+
+  Map<String, Object?> toJson() => {
+    'attachmentId': attachmentId,
+    'mediaType': mediaType,
+    'bytes': ?bytes,
+    'width': ?width,
+    'height': ?height,
+    'name': ?name,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ImageAttachment &&
+      attachmentId == other.attachmentId &&
+      mediaType == other.mediaType &&
+      bytes == other.bytes &&
+      width == other.width &&
+      height == other.height &&
+      name == other.name;
+
+  @override
+  int get hashCode => Object.hash(attachmentId, mediaType, bytes, width, height, name);
 }
 
 class FileAttachment {

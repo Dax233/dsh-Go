@@ -266,23 +266,36 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
 
     /** Makes every overlay window untouchable (true) so an injected stroke reaches the app below. */
     fun setPassThrough(on: Boolean) {
+        // Cleanup must survive a busy main thread or an interrupted gesture worker.
+        // Gesture calls are serialized; this stays ahead of the next queued enable.
+        if (!on) { main.post { applyPassThrough(false) }; return }
         if (Looper.myLooper() == Looper.getMainLooper()) { applyPassThrough(on); return }
         val changed = onMain(500) { applyPassThrough(on) } == true
-        if (on && changed) SystemClock.sleep(80) // input windows update a frame after the layout
+        if (changed) SystemClock.sleep(80) // input windows update a frame after the layout
     }
 
     /** Hides the overlay for a full-display screenshot (API 30–33). */
     fun hideForCapture(hide: Boolean) {
-        val changed = onMain(500) {
-            if (captureHidden == hide) return@onMain false
-            captureHidden = hide
-            val v = if (hide) View.INVISIBLE else View.VISIBLE
-            syncWindows()
-            confirmCard?.root?.visibility = v
-            handoffCard?.root?.visibility = v
-            pill != null || confirmCard != null || handoffCard != null
-        } == true
-        if (hide && changed) SystemClock.sleep(120)
+        if (!hide) {
+            // Recovery must still run if the screenshot worker times out or is interrupted.
+            main.post {
+                try { applyCaptureHidden(false) }
+                catch (e: Exception) { Log.w(TAG, "overlay main-thread call failed", e) }
+            }
+            return
+        }
+        val changed = onMain(500) { applyCaptureHidden(true) } == true
+        if (changed) SystemClock.sleep(120)
+    }
+
+    private fun applyCaptureHidden(hide: Boolean): Boolean {
+        if (captureHidden == hide) return false
+        captureHidden = hide
+        val v = if (hide) View.INVISIBLE else View.VISIBLE
+        syncWindows()
+        confirmCard?.root?.visibility = v
+        handoffCard?.root?.visibility = v
+        return pill != null || confirmCard != null || handoffCard != null
     }
 
     /** Screen off, lock, 停止 elsewhere, service going away: answer everything pending with STOP. */

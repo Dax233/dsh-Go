@@ -209,19 +209,27 @@ class DrawerViewController extends Notifier<DrawerView> {
     return id;
   }
 
-  /// Adds a folder at the top and moves [sessionIds] into it; returns its id.
-  Future<String> createFolder(String name, {int? tint, String? emoji, Iterable<String> sessionIds = const []}) async {
-    await _loading;
-    final id = _newId();
-    final members = sessionIds.toSet();
-    await _update(
-      (view) => view.copyWith(
+  /// Adds a folder at the top and moves [sessionIds] into it; returns its id,
+  /// or null when the originating action no longer belongs to this Host.
+  Future<String?> createFolder(
+    String name, {
+    int? tint,
+    String? emoji,
+    Iterable<String> sessionIds = const [],
+    bool Function()? isCurrent,
+  }) async {
+    String? id;
+    await _update((view) {
+      final created = _newId();
+      id = created;
+      final members = sessionIds.toSet();
+      return view.copyWith(
         folders: [
-          DrawerFolder(id: id, name: _clean(name), tint: tint, emoji: emoji, sessionIds: members.toList()),
+          DrawerFolder(id: created, name: _clean(name), tint: tint, emoji: emoji, sessionIds: members.toList()),
           for (final f in view.folders) _without(f, members),
         ],
-      ),
-    );
+      );
+    }, isCurrent: isCurrent);
     return id;
   }
 

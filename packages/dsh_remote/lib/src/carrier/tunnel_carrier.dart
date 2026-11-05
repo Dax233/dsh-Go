@@ -464,7 +464,14 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
         try {
           response = await session.rpc.call('harness.remote.call', request, timeout: timeout ?? callTimeout);
         } on RemoteRpcException catch (error) {
-          if (error.isLocal || error.code != 'RESPONSE_TOO_LARGE') rethrow;
+          // The Host checks response size after executing the request. A
+          // transfer retry would execute it again, not retrieve its result.
+          if (error.isLocal ||
+              error.code != 'RESPONSE_TOO_LARGE' ||
+              endpoint == 'commands/execute' ||
+              endpoint == 'settings/mutate') {
+            rethrow;
+          }
           response = await _callTransferred(session, endpoint, encoded, timeout);
         }
       }
@@ -534,14 +541,12 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
     final perCall = timeout ?? callTimeout;
     final transferId = uuidV7();
     final totalChunks = (encoded.length + remoteTransferChunkBytes - 1) ~/ remoteTransferChunkBytes;
-    var opened = false;
     try {
       await rpc.call('harness.remote.transfer.open', {
         'transferId': transferId,
         'totalBytes': encoded.length,
         'totalChunks': totalChunks,
       }, timeout: perCall);
-      opened = true;
       for (var index = 0; index < totalChunks; index++) {
         final start = index * remoteTransferChunkBytes;
         final end = start + remoteTransferChunkBytes < encoded.length
@@ -594,13 +599,13 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
       if (decoded == null) throw DshProtocolException('$endpoint: remote transfer is not JSON');
       return decoded;
     } finally {
-      if (opened) {
-        unawaited(
-          rpc
-              .call('harness.remote.transfer.close', {'transferId': transferId}, timeout: const Duration(seconds: 5))
-              .then((_) {}, onError: (Object _) {}),
-        );
-      }
+      // An open timeout can follow allocation on the Host. Closing a missing
+      // UUID is harmless; keep cleanup on this request's original connection.
+      unawaited(
+        rpc
+            .call('harness.remote.transfer.close', {'transferId': transferId}, timeout: const Duration(seconds: 5))
+            .then((_) {}, onError: (Object _) {}),
+      );
     }
   }
 

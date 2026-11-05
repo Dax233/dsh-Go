@@ -149,3 +149,24 @@ for(const malformed of ['cycle','unsafe-key'])test(`secret subtree keeps ${malfo
  const graph={uid:0,refs:{0:{type:'object',dict:{secret:1},meta:{}},1:{type:'transform',inner:2,meta:{role:'secret'}},2:malformed==='cycle'?{type:'transform',inner:1,meta:{}}:{type:'object',dict:{constructor:3},meta:{}},3:{type:'any',meta:{}}}};
  const schema=Object.assign(x=>x,{toJSON:()=>graph});assert.equal((await responseFor(schema,{})).status,404);
 });
+
+test('detail limits real rc4 Schemastery root serialization to its requested entry', async t => {
+ const counts=Array(200).fill(0);
+ const entries=counts.map((_,i)=>{
+  const schema=z.object({visible:z.string()});
+  const serialize=schema.toJSON;
+  Object.defineProperty(schema,'toJSON',{value:function(){counts[i]++;return serialize.call(this);},configurable:true});
+  const config={visible:`value-${i}`};
+  return {options:{id:`item-${i}`,name:'test-plugin',config},fiber:{state:2,runtime:{Config:schema},config:schema(config)}};
+ });
+ const editor={canWrite:()=>true,entries:()=>entries,configuration:()=>entries.map(entry=>({entry,inherited:entry.options.config,override:entry.options.config}))};
+ const ctx={get:n=>n==='configEditor'?editor:n==='loader'?{entries:()=>entries}:undefined};
+ withSources(ctx,entries);
+ let response;
+ const api=createPluginConfig(ctx,{send(_r,status,body){response={status,body}},readBody(){throw Error('unused');}});
+ await api.handle({method:'GET'},{},'/dsh-go/v1/plugin-config/item-123');
+ assert.equal(response.status,200);assert.deepEqual(response.body.value,{visible:'value-123'});
+ assert.equal(globalThis.__schemastery_refs__,undefined,'real serializer releases its temporary graph state');
+ t.diagnostic(`real rc4 detail entries=200 rootSerializations=${counts.reduce((a,b)=>a+b,0)}`);
+ assert.deepEqual(counts,counts.map((_,i)=>i===123?1:0));
+});

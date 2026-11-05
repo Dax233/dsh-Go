@@ -1,4 +1,4 @@
-// Real rc4 schemas, modeled editor/source services; HTTP Host evidence is separate.
+// Real installed schemas, modeled editor/source services; HTTP Host evidence is separate.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {writeFileSync} from 'node:fs';
@@ -22,6 +22,18 @@ function fixture(schema,raw={},extra={}){
 async function view(schema,raw){const f=fixture(schema,raw),r=await f.request();assert.equal(r.status,200);assert(!JSON.stringify(r.body).includes(SAMPLE));return r.body;}
 const facts=body=>Object.fromEntries(body.secrets.map(s=>[s.path.join('.'),s.configured]));
 
+test('Cordis effectiveConfig supplies defaults while raw input alone supplies secret facts',async()=>{
+ const schema=z.object({title:z.string().default('running default'),rows:z.array(z.object({secret:z.string().role('secret').default(SAMPLE)})).default([{}])});
+ const f=fixture(schema);f.entry.fiber.config={};
+ Object.defineProperty(f.entry.fiber,'effectiveConfig',{get:()=>schema({})});
+ const out=await f.request();assert.equal(out.status,200);assert.equal(out.body.value.title,'running default');
+ assert.deepEqual(facts(out.body),{'rows.0.secret':false});assert(!JSON.stringify(out.body).includes(SAMPLE));
+});
+test('present undefined effectiveConfig never falls back to raw config',async()=>{
+ const f=fixture(z.object({title:z.string()}),{title:'raw is not running'});
+ Object.defineProperty(f.entry.fiber,'effectiveConfig',{get:()=>undefined});
+ const out=await f.request();assert.equal(out.status,200);assert(!('title'in out.body.value));
+});
 test('labels use top-level bundle metadata, preserving localization and hiding diagnostics',async()=>{
  const f=fixture(z.object({count:z.number().default(1)}));f.source.bundle.meta={title:{en:'Own plugin',zh:'自造插件'},error:SAMPLE};f.source.bundle.rows[0].meta={title:'DO_NOT_PREFER_ROW_TITLE'};f.source.service.metaOf=()=>({title:'DO_NOT_PREFER_MODULE_TITLE'});
  assert.deepEqual((await f.request('GET',undefined,null)).body.entries[0].label,{en:'Own plugin',zh:'自造插件'});

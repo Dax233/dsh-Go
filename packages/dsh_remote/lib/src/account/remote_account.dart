@@ -314,8 +314,9 @@ class RemoteAccount {
   _Credentials? _credentials;
   Future<void> _credentialWrites = Future<void>.value();
   bool _restored = false;
+  Future<void>? _restoring;
   Map<String, _Pin>? _pins;
-  Future<String>? _refreshing;
+  ({_Credentials owner, Future<String> result})? _refreshing;
   _ActiveConnection? _active;
   final Map<String, DateTime> _directCooldown = {};
   final Map<String, DateTime> _turnCooldown = {};
@@ -346,9 +347,12 @@ class RemoteAccount {
     );
   }
 
-  Future<void> _restore() async {
-    if (_restored) return;
-    _restored = true;
+  Future<void> _restore() {
+    if (_restored) return Future<void>.value();
+    return _restoring ??= _readStoredAccount().whenComplete(() => _restoring = null);
+  }
+
+  Future<void> _readStoredAccount() async {
     final identity = asMap(tryDecodeJson(await _secrets.read(_identityKey) ?? ''));
     try {
       if (identity != null) _identity = _Identity.fromJson(identity);
@@ -364,6 +368,7 @@ class RemoteAccount {
     } on Object {
       _credentials = null;
     }
+    _restored = true;
   }
 
   /// QR-capable sign-in providers of this Server (empty on a self-hosted
@@ -529,8 +534,7 @@ class RemoteAccount {
     );
     await _secrets.write(_identityKey, jsonEncode(identity.toJson()));
     _identity = identity;
-    _credentials = null;
-    await _secrets.delete(_credentialsKey);
+    await _dropCredentials();
     return identity;
   }
 
@@ -560,8 +564,7 @@ class RemoteAccount {
         // Offline or already revoked: still sign out locally.
       }
     }
-    _credentials = null;
-    await _secrets.delete(_credentialsKey);
+    await _dropCredentials();
     if (revokeDevice) {
       _identity = null;
       await _secrets.delete(_identityKey);
@@ -586,12 +589,19 @@ class RemoteAccount {
     if (!forceRefresh && credentials.accessTokenExpiresAt.isAfter(DateTime.now().add(const Duration(seconds: 60)))) {
       return credentials.accessToken;
     }
-    return _refreshing ??= _rotate(credentials).whenComplete(() => _refreshing = null);
+    final refreshing = _refreshing;
+    if (refreshing != null && identical(refreshing.owner, credentials)) return refreshing.result;
+    late final Future<String> result;
+    result = _rotate(credentials).whenComplete(() {
+      if (identical(_refreshing?.result, result)) _refreshing = null;
+    });
+    _refreshing = (owner: credentials, result: result);
+    return result;
   }
 
   Future<String> _rotate(_Credentials credentials) async {
     if (!credentials.refreshTokenExpiresAt.isAfter(DateTime.now())) {
-      await _dropCredentials();
+      await _dropCredentials(credentials);
       throw const RemoteConnectException(
         RemoteFailure('ACCOUNT_AUTH_REQUIRED', 'The device sign-in expired; sign in again.', retryable: false),
       );
@@ -600,13 +610,20 @@ class RemoteAccount {
       final tokens = await api.refresh(credentials.deviceId, credentials.refreshToken);
       await _saveCredentials(
         _Credentials.fromTokens(credentials.deviceId, credentials.account, tokens, provider: credentials.provider),
+        beforeWrite: () {
+          if (!identical(_credentials, credentials)) {
+            throw const RemoteConnectException(
+              RemoteFailure('ACCOUNT_AUTH_REQUIRED', 'The device sign-in changed during refresh.', retryable: false),
+            );
+          }
+        },
       );
       return tokens.accessToken;
     } on RemoteApiException catch (error) {
       if (error.retryable || error.code == 'CONNECTION_FAILED' || error.code == 'RATE_LIMITED') {
         throw RemoteConnectException(RemoteFailure(error.code, error.message, retryable: true));
       }
-      await _dropCredentials();
+      await _dropCredentials(credentials);
       throw RemoteConnectException(
         RemoteFailure(
           'ACCOUNT_AUTH_REQUIRED',
@@ -617,9 +634,15 @@ class RemoteAccount {
     }
   }
 
-  Future<void> _dropCredentials() async {
-    _credentials = null;
-    await _secrets.delete(_credentialsKey);
+  Future<void> _dropCredentials([_Credentials? owner]) {
+    // Deletes share the commit queue; retired refreshes recheck their owner here.
+    final write = _credentialWrites.then((_) async {
+      if (owner != null && !identical(_credentials, owner)) return;
+      _credentials = null;
+      await _secrets.delete(_credentialsKey);
+    });
+    _credentialWrites = write.catchError((Object _) {});
+    return write;
   }
 
   // ---------------------------------------------------------------------------

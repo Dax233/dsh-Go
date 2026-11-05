@@ -62,6 +62,12 @@ export function createDeletionSeam(storage, { acquire, parseGeneration, notFound
     const handle = await open(path, 'r');
     try { await handle.sync(); } finally { await handle.close(); }
   };
+  const syncMarkerDirectories = async (id) => {
+    await syncDir(slot(id));
+    await syncDir(control);
+    await syncDir(root);
+    await syncDir(dirname(root));
+  };
   const writeMarker = async (id, dir) => {
     await mkdir(slot(id), { recursive: true, mode: 0o700 });
     const temporary = join(slot(id), `.${randomUUID()}.tmp`);
@@ -73,10 +79,7 @@ export function createDeletionSeam(storage, { acquire, parseGeneration, notFound
       } finally { await handle.close(); }
       await link(temporary, marker(id));
     } finally { await rm(temporary, { force: true }); }
-    await syncDir(slot(id));
-    await syncDir(control);
-    await syncDir(root);
-    await syncDir(dirname(root));
+    await syncMarkerDirectories(id);
   };
   const savedDirectory = (id) => {
     const record = JSON.parse(readFileSync(marker(id), 'utf8'));
@@ -176,6 +179,7 @@ export function createDeletionSeam(storage, { acquire, parseGeneration, notFound
           }
           const files = await logFiles(dir);
           if (!retry) await writeMarker(id, dir); // Durable point of no return; retry completes cleanup.
+          else await syncMarkerDirectories(id); // A previous attempt may have failed after linking the marker.
           storage.coldLogMemo.delete(id);
           storage.migrationPreparations.get(id)?.controller.abort();
           storage.migrationPreparations.delete(id);

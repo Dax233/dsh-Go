@@ -21,8 +21,9 @@ internal class InputProbe(private val displayId: Int) {
         ready.countDown()
     }
 
+    /** Receiver setup failed before injection; even SecurityException is a window failure here. */
     fun fail(error: Throwable) {
-        failure = error
+        failure = Failure("inputWindowNotReady").apply { initCause(error) }
         ready.countDown()
     }
 

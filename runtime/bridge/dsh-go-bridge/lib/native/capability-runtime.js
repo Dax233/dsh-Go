@@ -148,7 +148,9 @@ export class CapabilityRuntime {
     });
     const transfer = async () => {
       const result = await call(reg.def, { ...e.scope }, { key, locale: e.locale, signal: controller.signal });
-      if (controller.signal.aborted || !this.alive(e) || !this.leases.has(e.lease)) fail(410, 'cancelled', 'media cancelled');
+      // Registration changes precede the deferred sweep; their old bytes must not be published.
+      if (controller.signal.aborted || !this.alive(e) || !this.leases.has(e.lease)
+        || this.core.registration(pkg, 'media', id)?.token !== reg.token) fail(410, 'cancelled', 'media cancelled');
       if (!result || !(result.body instanceof Uint8Array) || !AUDIO_TYPES.has(result.contentType)) fail(502, 'invalid-media', 'expected bounded audio bytes and supported MIME');
       if (result.body.byteLength === 0 || result.body.byteLength > L.mediaBytes) fail(413, 'too-large', 'audio must be 1..16 MiB');
       // Keep the slot and cancellation live until Node has finished the response.
@@ -222,7 +224,7 @@ class MicroFeed {
     if (this.started) return;
     this.started = true;
     call(this.reg.def.data, { ...this.scope }, value => this.emit(value), { protocol: 1, locale: this.locale }).then(cancel => {
-      if (typeof cancel === 'function') { if (this.closed) { try { cancel(); } catch {} } else this.cancel = cancel; }
+      if (typeof cancel === 'function') { if (this.closed) { try { Promise.resolve(cancel()).catch(() => {}); } catch {} } else this.cancel = cancel; }
     }, () => this.stop('error'));
   }
   emit(value) {
@@ -247,7 +249,7 @@ class MicroFeed {
   stop(reason) {
     if (this.closed) return;
     this.closed = true; clearTimeout(this.timer);
-    try { this.cancel?.(); } catch {}
+    try { if (this.cancel) Promise.resolve(this.cancel()).catch(() => {}); } catch {}
     this.runtime.feeds.delete(this.key);
     for (const sub of this.subs) { sub.conn.microSubs?.delete(sub.id); if (reason) sub.conn.send({ t: 'micro.end', sub: sub.id, reason }); }
     this.subs.clear();

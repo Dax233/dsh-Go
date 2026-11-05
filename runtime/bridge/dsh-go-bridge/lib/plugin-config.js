@@ -255,17 +255,20 @@ export function createPluginConfig(ctx,{readBody,send}){
   let writable=false;if(!reason&&origin.kind==='plugin')try{writable=service().dshGoAsyncChange===true&&service().canWrite?.(entry)===true;}catch{}
   return {summary:{entryId:entry.options.id,package:origin.package,owner:origin.owner,bundle:origin.bundle,kind:origin.kind,source:origin.source,label:labelOf(origin.label,entry),state,configurable:!reason,writable,...reason?{reason}:!writable?{reason:service().dshGoAsyncChange===true?'overridden':'host-unavailable'}:{}},schema,graph,origin};
  }
- async function rows(){
+ async function rows(targetId){
   const editor=service(),manager=ctx.get('pluginManager');if(typeof manager?.listBundles!=='function')throw fault(503,'host-unavailable');
   const bundles=await manager.listBundles();if(serviceIdentity(ctx.get('pluginManager'))!==serviceIdentity(manager)||serviceIdentity(service())!==serviceIdentity(editor))throw fault(409,'conflict');
   const all=[...ctx.get('loader').entries()].filter(e=>typeof e.options.id==='string'),address=new Set(editor.entries()),sources=bundleEntrySources(ctx,all,bundles);const count=new Map();for(const e of all)count.set(e.options.id,(count.get(e.options.id)??0)+1);
-  return all.map((entry,index)=>{const item=inspect(entry,address.has(entry),sources[index]);if(count.get(entry.options.id)>1){item.summary={...item.summary,state:'unsupported',configurable:false,writable:false,reason:'ambiguous-id'};}return {entry,...item};});
+  // Source ownership and duplicate IDs still depend on the full current entry set.
+  // A detail request only needs to serialize/validate its own schema.
+  return all.flatMap((entry,index)=>{if(targetId!==undefined&&entry.options.id!==targetId)return [];const item=inspect(entry,address.has(entry),sources[index]);if(count.get(entry.options.id)>1){item.summary={...item.summary,state:'unsupported',configurable:false,writable:false,reason:'ambiguous-id'};}return {entry,...item};});
  }
- async function locate(id){const row=(await rows()).find(x=>x.summary.entryId===id);if(row&&!row.origin.allowed)throw fault(403,'entry-unavailable');if(!row?.summary.configurable)throw fault(404,'entry-unavailable');return row;}
+ async function locate(id){const row=(await rows(id)).find(x=>x.summary.entryId===id);if(row&&!row.origin.allowed)throw fault(403,'entry-unavailable');if(!row?.summary.configurable)throw fault(404,'entry-unavailable');return row;}
  function token(row,layer){const e=row.entry;return createHmac('sha256',key).update(JSON.stringify([identity(e),identity(e.fiber),identity(e.fiber?.runtime),generations.get(e.fiber)??0,row.origin.proof,row.graph,e.options.config??{},layer.inherited,layer.override,row.summary.writable])).digest('base64url');}
  async function snapshot(id){const row=await locate(id),layer=service().configuration().find(x=>x.entry===row.entry);if(!layer)throw fault(404,'entry-unavailable');
   let inherited=layer.inherited;try{inherited=row.schema(inherited);}catch{}
-  const resolved=plain(row.entry.fiber.config),value=project(row.graph,row.graph.uid,resolved)??{};
+  // Cordis 4.1 retains raw input in config; effectiveConfig is the running value.
+  const fiber=row.entry.fiber,resolved=plain('effectiveConfig'in fiber?fiber.effectiveConfig:fiber.config),value=project(row.graph,row.graph.uid,resolved)??{};
   return {row,layer,body:{v:1,entryId:id,kind:'plugin',owner:row.origin.owner,bundle:row.origin.bundle,source:row.origin.source,revision:token(row,layer),schema:cleanSchema(row.graph),value,base:project(row.graph,row.graph.uid,plain(inherited))??{},user:project(row.graph,row.graph.uid,plain(layer.override))??{},secrets:secretFacts(row.graph,row.entry.options.config,resolved),writable:row.summary.writable}};
  }
  async function update(id,input){

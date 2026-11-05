@@ -91,6 +91,8 @@ class FakeRemoteServer {
   /// One-shot response gates for real HTTP cancellation tests.
   Future<void> Function()? beforeAccountLookupResponse;
   Future<void> Function()? beforeRegistrationResponse;
+  Future<void> Function()? beforeRefreshRequest;
+  Future<void> Function()? beforeRefreshResponse;
   Duration accessTtl = const Duration(hours: 1);
   int refreshCount = 0;
   int controlConnects = 0;
@@ -169,10 +171,12 @@ class FakeRemoteServer {
     final beforeResponse = switch (path) {
       '/api/v1/auth/me' => beforeAccountLookupResponse,
       '/api/v1/devices/register' => beforeRegistrationResponse,
+      '/api/v1/auth/refresh' => beforeRefreshResponse,
       _ => null,
     };
     if (path == '/api/v1/auth/me') beforeAccountLookupResponse = null;
     if (path == '/api/v1/devices/register') beforeRegistrationResponse = null;
+    if (path == '/api/v1/auth/refresh') beforeRefreshResponse = null;
     Future<void> json(int status, Object? body) async {
       if (beforeResponse != null) await beforeResponse();
       response.statusCode = status;
@@ -253,6 +257,9 @@ class FakeRemoteServer {
       return json(200, _issue(device['deviceId']! as String));
     }
     if (request.method == 'POST' && path == '/api/v1/auth/refresh') {
+      final beforeRequest = beforeRefreshRequest;
+      beforeRefreshRequest = null;
+      if (beforeRequest != null) await beforeRequest();
       final b = await body();
       final token = _tokens[b['refreshToken']];
       if (token == null || token.kind != 'refresh' || token.deviceId != b['deviceId']) {
@@ -791,6 +798,8 @@ class FakeRemoteHost {
   final List<String> rpcMethods = [];
   final List<Map<String, Object?>> openedStreamParams = [];
   Future<Map<String, Object?>> Function(Map<String, Object?>)? transferRead;
+  /// Holds an open reply after the Host has registered its incoming transfer.
+  Future<void> Function(String transferId)? beforeTransferOpenResponse;
 
   /// Independent top-level workspace upload RPCs (plugin 0.6.2).
   Future<Object?> Function(String method, Map<String, Object?> params)? workspaceUpload;
@@ -1116,6 +1125,8 @@ class FakeRemoteHost {
           'totalChunks': params['totalChunks'],
           'chunks': <List<int>>[],
         };
+        final beforeOpenResponse = beforeTransferOpenResponse;
+        if (beforeOpenResponse != null) await beforeOpenResponse(params['transferId']! as String);
         respond({'opened': true, 'transferId': params['transferId']});
       case 'harness.remote.transfer.chunk':
         final transfer = connection.transfers[params['transferId']]!;

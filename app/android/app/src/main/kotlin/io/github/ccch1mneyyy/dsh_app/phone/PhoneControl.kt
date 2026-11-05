@@ -501,21 +501,27 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
      * self-ADB. Shizuku without its own permission asks for that first (`pending`) and grants once
      * the person allows. Blocks; the plugin thread.
      */
-    fun grantSecureSettings(): Map<String, Any?> = when (val path = background.grantPath(A11yKeeper.granted(app))) {
-        SecureSettingsGrant.GRANTED -> mapOf("ok" to true)
-        SecureSettingsGrant.SHIZUKU, SecureSettingsGrant.ADB -> {
-            background.grantSecureSettings(path)
-            val ok = A11yKeeper.granted(app)
-            if (ok) ticker.execute(::keep)
-            emitStatus()
-            val failed = if (path == SecureSettingsGrant.ADB) R.string.background_adb_disconnected else R.string.a11y_keeper_grant_failed
-            mapOf("ok" to ok, "reason" to if (ok) null else AppStrings.get(app, failed))
+    fun grantSecureSettings(mayStart: () -> Boolean): Map<String, Any?> {
+        if (!mayStart()) return mapOf("ok" to false,
+            "reason" to AppStrings.get(app, R.string.background_selection_cancelled))
+        return when (val path = background.grantPath(A11yKeeper.granted(app))) {
+            SecureSettingsGrant.GRANTED -> mapOf("ok" to true)
+            SecureSettingsGrant.SHIZUKU, SecureSettingsGrant.ADB -> {
+                background.grantSecureSettings(path, mayStart)
+                val ok = A11yKeeper.granted(app)
+                if (ok) ticker.execute(::keep)
+                emitStatus()
+                val failed = if (path == SecureSettingsGrant.ADB) R.string.background_adb_disconnected else R.string.a11y_keeper_grant_failed
+                mapOf("ok" to ok, "reason" to if (ok) null else AppStrings.get(app, failed))
+            }
+            SecureSettingsGrant.SHIZUKU_PERMISSION -> {
+                // Permission may arrive after a new mode/off intent. Keep the original UI lease
+                // through both the manager callback and this worker's queue.
+                val asked = background.requestShizukuPermission { ticker.execute { grantSecureSettings(mayStart) } }
+                mapOf("ok" to false, "pending" to asked, "reason" to if (asked) null else AppStrings.get(app, R.string.background_shizuku_permission))
+            }
+            else -> mapOf("ok" to false, "reason" to AppStrings.get(app, R.string.a11y_keeper_needs_setup))
         }
-        SecureSettingsGrant.SHIZUKU_PERMISSION -> {
-            val asked = background.requestShizukuPermission { ticker.execute { grantSecureSettings() } }
-            mapOf("ok" to false, "pending" to asked, "reason" to if (asked) null else AppStrings.get(app, R.string.background_shizuku_permission))
-        }
-        else -> mapOf("ok" to false, "reason" to AppStrings.get(app, R.string.a11y_keeper_needs_setup))
     }
 
     private fun keep() {

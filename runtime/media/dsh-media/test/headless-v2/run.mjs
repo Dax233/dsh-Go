@@ -15,7 +15,7 @@ const PRODUCT = fileURLToPath(new URL('../../', import.meta.url));
 const PLUGIN = fileURLToPath(new URL('./plugin.mjs', import.meta.url));
 const require = createRequire(import.meta.url);
 const cliPackage = require.resolve('@deepseek-ai/dsh/package.json');
-assert.equal(JSON.parse(await readFile(cliPackage)).version, '0.2.1-rc.4');
+assert.equal(JSON.parse(await readFile(cliPackage)).version, '0.2.2-rc.1');
 const cli = join(dirname(cliPackage), 'lib/bin.js');
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ6sAAAAASUVORK5CYII=', 'base64');
 const MP4 = Buffer.from((await readFile(new URL('../fixtures/video.base64', import.meta.url), 'utf8')).trim(), 'base64');
@@ -91,13 +91,13 @@ async function runCase(root, kind) {
       { id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-flash' } },
       { id: 'session-persistence-jsonl', config: { root: join(home, 'sessions'), compression: 'none' } },
       { id: 'sandbox-policy', config: { mode: 'workspace-write', workspaceRoot: workspace } },
-      { id: 'fs-sandbox', config: { cwd: workspace } }, { id: 'tools', config: { mode: 'native' } },
+      { id: 'fs-sandbox', config: { cwd: workspace } }, { id: 'tool-executor-native', disabled: false }, { id: 'tool-executor-ptc', disabled: true },
       { insert: [{ id: 'media-v2-headless-probe', name: PLUGIN, config: { dshHome: home, services: [{ id: 'probe', enabled: true, provider: 'test-only',
         baseUrl: kind === 'image' ? 'https://api.openai.com/v1' : 'https://ark.cn-beijing.volces.com', profile: kind === 'image' ? 'openai-gpt-image' : 'ark-video', models: model, keyRef: 'DSH_MEDIA_SLOT_1_API_KEY' }] } }] },
     ];
     const patchPath = join(directory, 'probe.patch.json'); await json(patchPath, patch);
     const env = Object.fromEntries(['PATH', 'LANG', 'LC_ALL', 'TMPDIR'].filter(k => process.env[k]).map(k => [k, process.env[k]]));
-    Object.assign(env, { TZ: 'Asia/Shanghai', DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DSH_TOOLS_MODE: 'native', DSH_MEDIA_HEADLESS_PROBE: '1', DSH_MEDIA_PROBE_CAPTURE_DIR: capture,
+    Object.assign(env, { TZ: 'Asia/Shanghai', DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DSH_MEDIA_HEADLESS_PROBE: '1', DSH_MEDIA_PROBE_CAPTURE_DIR: capture,
       DSH_MEDIA_PROBE_IMAGE_ORIGIN: providerOrigin, DSH_MEDIA_SLOT_1_API_KEY: KEY, DSH_MEDIA_PROBE_LLM_KEY: LLMKEY });
     const task = formatGenerationMessage({ kind, prompt: '一个蓝色圆形。', ...(kind === 'image' ? { n: 1 } : {}), model: { label: kind === 'image' ? 'GPT Image 2.5 Flare' : 'Seedance 2.5', serviceId: 'probe', id: model } });
     const processResult = await runProcess(['headless', '--patch', patchPath, '--json', task], workspace, env);
@@ -134,7 +134,7 @@ await mkdir(values.out, { mode: 0o700 });
 const files = (await readdir(join(PRODUCT, 'src'))).filter(name => name.endsWith('.js'));
 const hashes = {};
 for (const file of ['package.json', 'data/models.json', ...files.map(name => 'src/' + name)]) hashes[file] = sha(await readFile(join(PRODUCT, file)));
-await json(join(values.out, 'identity.json'), { node: process.version, dsh: '0.2.1-rc.4', cliSha256: sha(await readFile(cli)), files: hashes, testLockSha256: sha(await readFile(join(dirname(cliPackage), '../../../package-lock.json'))) });
+await json(join(values.out, 'identity.json'), { node: process.version, dsh: '0.2.2-rc.1', cliSha256: sha(await readFile(cli)), files: hashes, testLockSha256: sha(await readFile(join(dirname(cliPackage), '../../../package-lock.json'))) });
 const records = [];
 for (const kind of ['image', 'video']) records.push(await runCase(values.out, kind));
 await json(join(values.out, 'summary.json'), { status: 'passed-local-mock', records, limits: ['scripted local LLM', 'no paid provider request', 'one-shot headless keeps LLM response open while job finishes; no registry wait'] });

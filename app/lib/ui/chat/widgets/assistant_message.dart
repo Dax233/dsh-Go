@@ -1,10 +1,13 @@
 // Portions derived from PiPilot (https://github.com/CikeSeven/pi_pilot), MIT, Copyright (c) 2026 CikeSeven. See THIRD_PARTY_NOTICES.md.
 
+import 'dart:async';
+
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/l10n.dart';
 import '../../common/expand_reveal.dart';
+import '../../common/fluid_bits.dart';
 import '../../common/typing_indicator.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
@@ -82,6 +85,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
   Widget? _body;
   String? _bodyText;
   bool? _bodyStreaming;
+  bool? _bodyReveal;
 
   /// 这条回复在这里等过(画过三个点)。只有它才包交接动画:打开会话时已有的、
   /// 翻回去重建的回复都不多这一层。
@@ -93,10 +97,19 @@ class _AssistantMessageState extends State<AssistantMessage> {
   static bool _waiting(AssistantChatItem item) =>
       item.streaming && item.text.trimRight().isEmpty && item.reasoning.trim().isEmpty;
 
+  /// This reply started empty here, so all of it can be revealed as it arrives. One
+  /// mounted halfway (the chat opened mid-stream, scrolled back to) shows what is there.
+  bool _startedEmpty = false;
+
+  /// The fluid tier's reveal, once it started it stays for this reply: see
+  /// [MarkdownBody.reveal].
+  bool _reveal = false;
+
   @override
   void initState() {
     super.initState();
     _waited = _waiting(widget.item);
+    _startedEmpty = widget.item.text.trimRight().isEmpty;
   }
 
   @override
@@ -116,15 +129,30 @@ class _AssistantMessageState extends State<AssistantMessage> {
   /// 同一段文字只建一次 Markdown 子树:列表每 32ms 重建一次时,
   /// 没变的消息直接复用同一个 widget 实例,Flutter 不会再往下走。
   Widget _markdown(String text, bool streaming) {
-    if (_body == null || _bodyText != text || _bodyStreaming != streaming) {
+    final reveal = _reveal = _reveal || (streaming && _startedEmpty && AppMotion.fluid(context));
+    if (_body == null || _bodyText != text || _bodyStreaming != streaming || _bodyReveal != reveal) {
       // Long-press opens the menu; selecting text is one of its entries.
       // repairBareViews: a model that forgets the ```dsh-ui fence still gets
       // its view drawn instead of a wall of JSON.
-      _body = MarkdownBody(text: text, streaming: streaming, selectable: false, repairBareViews: true);
+      _body = MarkdownBody(text: text, streaming: streaming, reveal: reveal, selectable: false, repairBareViews: true);
       _bodyText = text;
       _bodyStreaming = streaming;
+      _bodyReveal = reveal;
     }
-    return _body!;
+    if (!reveal) return _body!;
+    // The reveal has no cursor: a long pause gets a quiet dot under the text instead.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _body!,
+        if (streaming)
+          PositionedDirectional(
+            start: 1,
+            bottom: -_StallDot.size - 6,
+            child: _StallDot(text: text),
+          ),
+      ],
+    );
   }
 
   @override
@@ -151,7 +179,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
     }
 
     final actions = widget.showActions && !streaming && text.isNotEmpty;
-    final reply = GestureDetector(
+    final reply = HoldLift(
       behavior: HitTestBehavior.opaque,
       onLongPress: streaming || text.isEmpty ? null : () => _menu(text),
       child: Column(
@@ -341,6 +369,83 @@ class _InterruptedMark extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: danger, height: 1.3),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A reply that has gone quiet but isn't over: after a moment with no new text, one
+/// small dot breathes where the next line would start. New text puts it away.
+class _StallDot extends StatefulWidget {
+  const _StallDot({required this.text});
+
+  /// What has arrived so far: a change is the stream moving.
+  final String text;
+
+  static const size = 5.0;
+  static const _after = Duration(milliseconds: 900);
+
+  @override
+  State<_StallDot> createState() => _StallDotState();
+}
+
+class _StallDotState extends State<_StallDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _breath = AnimationController(vsync: this, duration: AppMotion.breath ~/ 2);
+  late final Animation<double> _level = Tween(
+    begin: 0.25,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _breath, curve: Curves.easeInOut));
+  Timer? _wait;
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  void _arm() {
+    _wait?.cancel();
+    _wait = Timer(_StallDot._after, () {
+      if (!mounted) return;
+      setState(() => _shown = true);
+      unawaited(_breath.repeat(reverse: true));
+    });
+  }
+
+  @override
+  void didUpdateWidget(_StallDot old) {
+    super.didUpdateWidget(old);
+    if (old.text == widget.text) return;
+    _breath.stop();
+    if (_shown) setState(() => _shown = false);
+    _arm();
+  }
+
+  @override
+  void dispose() {
+    _wait?.cancel();
+    _breath.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = DshColors.of(context).textTertiary;
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _shown ? 1 : 0,
+        duration: AppMotion.of(context, AppMotion.standard),
+        child: RepaintBoundary(
+          child: FadeTransition(
+            opacity: _level,
+            child: Container(
+              width: _StallDot.size,
+              height: _StallDot.size,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+          ),
+        ),
       ),
     );
   }

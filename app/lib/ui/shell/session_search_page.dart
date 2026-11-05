@@ -400,7 +400,7 @@ class _SearchBody extends ConsumerWidget {
     });
     final connections = container.listen(activeConnectionProvider, (_, next) {
       if (next.isLoading || next.hasError || !identical(next.value, connection)) retired = true;
-    });
+    }, fireImmediately: true);
     bool owned() =>
         !retired && !hosts.closed && !connections.closed && identical(connection?.client.mux.generation, generation);
     try {

@@ -83,7 +83,7 @@ Future<MarketFile> fetchMarketFile(Uri url, {String? etag}) async {
       return (text: null, etag: etag);
     }
     if (response.statusCode != HttpStatus.ok) {
-      await response.drain<void>();
+      // The error page is unused; finally closes this request's client.
       throw MarketFetchException(appL10n.stateMarketHttpError(response.statusCode), statusCode: response.statusCode);
     }
     final text = await response

@@ -69,7 +69,18 @@ class BackgroundDisplay(
             putBoolean(Proto.DETAIL, detail)
             putBoolean(Proto.WANT_IMAGE, image)
         }
-        return snapshot(channel().execute(request), markNew = false)
+        val response = channel().execute(request)
+        requireObservation(response.getBoolean(Proto.OK), response.getString(Proto.ERROR), response.getString(Proto.ERROR_DETAIL))
+        return snapshot(response, markNew = false)
+    }
+
+    /** A failed read is not an empty snapshot; old element numbers are no longer actionable. */
+    internal fun requireObservation(ok: Boolean, code: String?, detail: String?) {
+        if (ok) return
+        lastScreenId = null
+        lastElements = emptyList()
+        previousLabels = emptySet()
+        throw IllegalStateException(Reasons.of(code, detail))
     }
 
     override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?): CollectResult {

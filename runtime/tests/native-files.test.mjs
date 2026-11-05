@@ -75,6 +75,18 @@ async function fixture(t, declaration = manifest, native = {}) {
 }
 
 
+test('native stream accepts empty continuations after the guarded upgrade and hello', async t => {
+  const f = await fixture(t);
+  const w = await f.ws([]);
+  assert.ok(f.guardCalls() > 0);
+  const frames = [encodeFrame(1, '', { mask: true, fin: false })];
+  for (let i = 0; i < 2048; i++) frames.push(encodeFrame(0, '', { mask: true, fin: false }));
+  frames.push(encodeFrame(0, JSON.stringify({ t: 'ping', at: 225 }), { mask: true }));
+  w.socket.write(Buffer.concat(frames));
+  assert.deepEqual(await w.next(m => m.t === 'pong'), { t: 'pong', at: 225 });
+});
+
+
 const choice = { type: 'pickFile', action: 'selected', maxFiles: 4 };
 const filePath = (w, effect, op, extra = {}) => `files/${effect.request}/${op}?${new URLSearchParams({ stream: w.welcome.conn, ...extra })}`;
 const upload = async (f, w, effect, bytes, name = 'note.txt', options = {}) => {

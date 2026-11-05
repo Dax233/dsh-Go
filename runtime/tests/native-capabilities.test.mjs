@@ -234,9 +234,20 @@ test('eight leases per connection are bounded independently of plugin allowance'
 });
 
 test('30 second media deadline aborts producer instead of returning partial audio', { timeout: 35000 }, async t => {
-  const f = await fixture(t), w = await f.ws(['audio']); let signal;
-  f.service.media('clip', (scope, event) => { signal = event.signal; return new Promise(() => {}); }); f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'slow', src: 'media:clip' }));
-  const e = (await f.invoke(w)).effects[0]; const response = await f.request(f.mediaPath(e)); assert.equal(response.status, 504); assert.equal(signal.aborted, true); assert.equal((await response.json()).error.code, 'timeout');
+  const f = await fixture(t), w = await f.ws(['audio']); let signal, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  f.service.media('clip', (scope, event) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    signal = event.signal; started(); return new Promise(() => {});
+  }); f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'slow', src: 'media:clip' }));
+  const e = (await f.invoke(w)).effects[0]; const pending = f.request(f.mediaPath(e));
+  await ready;
+  t.mock.timers.tick(29999);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(signal.aborted, false, 'producer keeps its full 30 second budget');
+  t.mock.timers.tick(1);
+  const response = await pending; assert.equal(response.status, 504); assert.equal(signal.aborted, true); assert.equal((await response.json()).error.code, 'timeout');
+  t.mock.timers.reset();
 });
 
 for (const [order, state] of ['voice-first', 'audio-first'].flatMap(order => ['audio-active', 'after-speech'].map(state => [order, state]))) {
@@ -261,11 +272,16 @@ async function until(predicate, message, timeout = 1500) {
   const end = Date.now() + timeout;
   while (!predicate()) { if (Date.now() > end) throw new Error(message); await delay(10); }
 }
-async function pausedMedia(t, f, effect) {
+async function pausedMedia(t, f, effect, producerReady) {
   const count = f.responses.length;
   const socket = connect(f.port, '127.0.0.1'); t.after(() => socket.destroy()); await once(socket, 'connect');
   socket.pause(); socket.write(`GET /dsh-go/v1/${f.mediaPath(effect)} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test\r\nConnection: close\r\n\r\n`);
-  await until(() => f.responses.length > count && f.responses[count].headersSent, 'media headers were not produced');
+  if (producerReady) {
+    await producerReady;
+    // Let the actual transfer continuation write its headers and body before checking backpressure.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(f.responses.length > count && f.responses[count].headersSent, 'media headers were not produced');
+  } else await until(() => f.responses.length > count && f.responses[count].headersSent, 'media headers were not produced');
   const res = f.responses[count]; assert.equal(res.writableFinished, false, 'fixture must hold actual HTTP backpressure');
   return { socket, res };
 }
@@ -282,12 +298,23 @@ test('NJS3 slow response keeps plugin slot and stop aborts unfinished HTTP body'
 });
 
 test('NJS3 total media deadline includes the slow response, not only producer', { timeout: 35000 }, async t => {
-  const f = await fixture(t), w = await f.ws(['audio']); let signal;
-  f.service.media('clip', (scope, event) => { signal = event.signal; return { body: Buffer.alloc(16 * 1024 * 1024), contentType: 'audio/wav' }; });
+  const f = await fixture(t), w = await f.ws(['audio']); let signal, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  f.service.media('clip', (scope, event) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    signal = event.signal; started(); return { body: Buffer.alloc(16 * 1024 * 1024), contentType: 'audio/wav' };
+  });
   f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'deadline-reader', src: 'media:clip' }));
-  const effect = (await f.invoke(w)).effects[0]; const held = await pausedMedia(t, f, effect);
-  await until(() => held.res.destroyed, 'response did not reach the shared media deadline', 32500);
+  const effect = (await f.invoke(w)).effects[0]; const held = await pausedMedia(t, f, effect, ready);
+  t.mock.timers.tick(29999);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(held.res.destroyed, false, 'unfinished response keeps its full 30 second budget');
+  assert.equal(signal.aborted, false);
+  t.mock.timers.tick(1);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(held.res.destroyed, true, 'shared media deadline destroys the unfinished response');
   assert.equal(held.res.writableFinished, false); assert.equal(signal.aborted, true);
+  t.mock.timers.reset();
   // Replace the callback after timeout to establish that the old slot was released.
   f.service.media('clip', () => ({ body: Buffer.from('next'), contentType: 'audio/wav' }));
   const next = (await f.invoke(w)).effects[0]; assert.equal((await f.request(f.mediaPath(next))).status, 200);
@@ -299,6 +326,55 @@ test('terminal callback signal is deliberately lease-bound across async continua
   f.service.onCapability(async (scope, event) => { observed.push(event.signal.aborted); await Promise.resolve(); observed.push(event.signal.aborted); });
   const effect = (await f.invoke(w)).effects[0]; w.send({ t: 'cap.event', lease: effect.lease, seq: 1, event: 'voice.stopped' });
   await until(() => observed.length === 2, 'terminal callback did not settle'); assert.deepEqual(observed, [false, true]);
+});
+
+for (const mode of ['dispose', 'replace']) {
+  test(`W15 463 media completion rejects its retired registration: ${mode}`, async t => {
+    const f = await fixture(t);
+    const next = () => ({ body: Buffer.from('fresh audio'), contentType: 'audio/wav' });
+    let signal, remove;
+    remove = f.service.media('clip', (scope, event) => {
+      signal = event.signal;
+      // The service's ordinary disposer/re-registration happens before this
+      // callback returns; no private runtime mutation or timer is involved.
+      if (mode === 'dispose') remove();
+      else f.service.media('clip', next);
+      return { body: Buffer.from(`retired audio: ${mode}`), contentType: 'audio/wav' };
+    });
+    f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'a', src: 'media:clip' }));
+    const w = await f.ws(['audio']);
+    const effect = (await f.invoke(w)).effects[0];
+    const response = await f.request(f.mediaPath(effect));
+    const text = await response.text();
+    assert.equal(response.status, 410, text);
+    assert.equal(JSON.parse(text).error.code, 'cancelled');
+    assert.equal(signal.aborted, true);
+
+    if (mode === 'dispose') f.service.media('clip', next);
+    const fresh = (await f.invoke(w)).effects[0];
+    assert.notEqual(fresh.lease, effect.lease);
+    const good = await f.request(f.mediaPath(fresh));
+    assert.equal(good.status, 200);
+    assert.equal(await good.text(), 'fresh audio');
+  });
+}
+
+test('W15 463 another resource registration does not retire this media result', async t => {
+  const f = await fixture(t);
+  let calls = 0;
+  f.service.media('clip', () => {
+    calls++;
+    const remove = f.service.micro('caption', { data() {} });
+    remove();
+    return { body: Buffer.from('current audio'), contentType: 'audio/wav' };
+  });
+  f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'a', src: 'media:clip' }));
+  const w = await f.ws(['audio']);
+  const effect = (await f.invoke(w)).effects[0];
+  const response = await f.request(f.mediaPath(effect));
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'current audio');
+  assert.equal(calls, 1);
 });
 
 test('NJS2 duplicate role start is rejected without returning a stale earlier lease', async t => {

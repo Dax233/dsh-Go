@@ -118,7 +118,7 @@ class DiagnosticsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val current = File(dir, "dsh.log")
         val rotated = File(dir, "dsh.log.1")
         val fromCurrent = tail(current, maxBytes)
-        val room = maxBytes - fromCurrent.sumOf { it.length + 1 }
+        val room = maxBytes - fromCurrent.sumOf { it.toByteArray(Charsets.UTF_8).size + 1 }
         val fromRotated = if (room > 1024) tail(rotated, room) else emptyList()
         return fromRotated + fromCurrent
     }

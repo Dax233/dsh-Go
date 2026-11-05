@@ -69,7 +69,7 @@ internal class BackgroundInputProbe(private val context: Context, private val di
                 dialog.show()
                 window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
             } catch (e: Exception) {
-                probe.fail(if (e is SecurityException) e else InputProbe.Failure("inputWindowNotReady"))
+                probe.fail(e)
             }
         }) throw InputProbe.Failure("inputWindowNotReady")
         probe.verify(now = SystemClock::uptimeMillis, send = { target, time ->

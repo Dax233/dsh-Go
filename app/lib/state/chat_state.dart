@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../diagnostics/app_error_log.dart';
 import '../l10n/l10n.dart';
 import '../usage/usage_stats.dart';
 import 'attachments.dart';
@@ -526,9 +527,7 @@ class ChatController extends Notifier<ChatState> {
       // These requests belong to the previous Host, even if the new Host has
       // the same session id. A new watch replays its own mux's pending requests.
       // Retire only the local cards; do not answer or cancel the old Host's work.
-      for (final id in [..._transcript.pendingApprovals.keys, ..._transcript.pendingQuestions.keys]) {
-        _transcript.apply(HostRequestCancelledEvent(id));
-      }
+      _retireHostRequests();
       _approvalHost = host;
       _defaultModelSaveFailed = false;
       _approvalScope = Object();
@@ -751,6 +750,12 @@ class ChatController extends Notifier<ChatState> {
     });
   }
 
+  void _retireHostRequests() {
+    for (final id in [..._transcript.pendingApprovals.keys, ..._transcript.pendingQuestions.keys]) {
+      _transcript.apply(HostRequestCancelledEvent(id));
+    }
+  }
+
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
     final owner = ref;
     final listener = _listenOwner = Object();
@@ -760,6 +765,10 @@ class ChatController extends Notifier<ChatState> {
     _syncReady = Completer<bool>();
     _markSyncing(building: building);
     unawaited(_sub?.cancel());
+    // A new watch replays its own mux's pending requests. It cannot retract
+    // cards forwarded only by the previous watch and settled while it was away.
+    // Retire local cards before replay; consent and in-flight answers stay intact.
+    _retireHostRequests();
     _sub = client
         .watch(
           sessionId,
@@ -776,6 +785,10 @@ class ChatController extends Notifier<ChatState> {
         .listen(
           (event) {
             if (!current()) return;
+            if (event is SessionErrorEvent) {
+              // Remote hosts have no local engine log in the diagnostics ZIP.
+              appErrorLog.record(AppErrorSource.session, event.message, StackTrace.empty);
+            }
             if (event is SessionSyncEvent) {
               _markSyncing(epoch: event.epoch);
               return;
@@ -838,6 +851,11 @@ class ChatController extends Notifier<ChatState> {
             for (final end in endings) {
               _settleClaims(end);
             }
+            if (event is UserMessageEvent) {
+              _dropEchoed([event]);
+            } else if (event is SessionSnapshotEvent) {
+              _dropEchoed(event.events);
+            }
             // The stopped turn is over, even when what waited in the inbox
             // starts the next one at once (running never reads false).
             if (event is TurnEndedEvent && state.stopping) _endStopping();
@@ -857,7 +875,7 @@ class ChatController extends Notifier<ChatState> {
               _schedule();
             }
           },
-          onError: (Object e) {
+          onError: (Object e, StackTrace stack) {
             if (!current()) return;
             _watchEnded = true;
             _markSyncing();
@@ -869,6 +887,7 @@ class ChatController extends Notifier<ChatState> {
               }
               return;
             }
+            appErrorLog.record(AppErrorSource.session, e, stack);
             _scheduleFollowRetry();
             state = state.copyWith(
               error: chatErrorText(e, action: appL10n.stateChatSyncInterrupted),
@@ -1125,7 +1144,6 @@ class ChatController extends Notifier<ChatState> {
       _stopTimeout?.cancel();
       _stoppingOperation = null;
     }
-    if (_pending.isNotEmpty) _dropEchoed(items);
     if (_withdrawn.isNotEmpty) {
       final inbox = _inboxIds();
       _pending = List.unmodifiable(
@@ -1218,17 +1236,13 @@ class ChatController extends Notifier<ChatState> {
     return [for (final q in _transcript.inbox) ?placed[q.id]];
   }
 
-  /// Removes optimistic bubbles whose `user/message` has landed.
-  void _dropEchoed(List<ChatItem> items) {
-    final echoed = <String>{};
-    // Echoes are near the end; a bounded scan keeps this O(1) per frame.
-    for (var i = items.length - 1, seen = 0; i >= 0 && seen < 12; i--) {
-      final item = items[i];
-      if (item is UserChatItem) {
-        seen++;
-        if (item.requestId case final id?) echoed.add(id);
-      }
-    }
+  /// Reconcile newly received echoes, not a bounded tail of rendered history.
+  void _dropEchoed(Iterable<SessionLogEvent> events) {
+    if (_pending.isEmpty) return;
+    final echoed = {
+      for (final event in events.whereType<UserMessageEvent>())
+        if (event.isHumanPrompt) ?event.requestId,
+    };
     if (echoed.isEmpty) return;
     final rest = _pending.where((p) => !echoed.contains(p.requestId)).toList();
     if (rest.length != _pending.length) _pending = List.unmodifiable(rest);
@@ -1251,7 +1265,8 @@ class ChatController extends Notifier<ChatState> {
     if (!ref.mounted || !identical(client, _client) || !_canControl) return false;
     final operation = _ChatOperation(ref, client, _syncScope);
     final content = _contentKey(trimmed, attachments);
-    final requestId = _unsettled?.content == content ? _unsettled!.requestId : _requestId();
+    final retrying = _unsettled?.content == content;
+    final requestId = retrying ? _unsettled!.requestId : _requestId();
     _unsettled = null;
     final running = state.running;
     final effective = running ? (mode == SendMode.now ? SendMode.steer : mode) : SendMode.now;
@@ -1265,6 +1280,8 @@ class ChatController extends Notifier<ChatState> {
         attachments: List.unmodifiable(attachments),
       ),
     ]);
+    // A retried request can already be in the log; the Host will not echo it twice.
+    if (retrying) _dropEchoed(_transcript.events);
     state = state.copyWith(
       pending: _placePending(),
       // A lost stream keeps saying so.
@@ -1360,9 +1377,12 @@ class ChatController extends Notifier<ChatState> {
     if (ref.mounted) ref.read(usageStatsProvider.notifier).count(UsageCount.turns);
   }
 
-  /// What a send is matched on when it is tried again ([_unsettled]).
-  static String _contentKey(String text, List<DraftAttachment> attachments) =>
-      [text, for (final a in attachments) a.name].join('\n');
+  /// Retry the same text and attachment selections. Picking again is a new
+  /// intent even if the name matches; encoding preserves text boundaries.
+  static String _contentKey(String text, List<DraftAttachment> attachments) => jsonEncode([
+    text,
+    [for (final a in attachments) a.id],
+  ]);
 
   /// Stages attachment receipts locally/over SSH, or publishes Remote files
   /// into the current workspace. Images stay inline unless [images] is set.
@@ -1573,6 +1593,8 @@ class ChatController extends Notifier<ChatState> {
           sourceForm: prompt.sourceForm,
         ),
       ]);
+      // The selected queue card can outlive its echo arriving from the Host.
+      _dropEchoed(_transcript.events);
     }
     _moving[prompt.requestId] = operation;
     state = state.copyWith(pending: _placePending());
@@ -1838,6 +1860,7 @@ class ChatController extends Notifier<ChatState> {
       );
       if (!current()) return;
       _transcript.prependHistory(page);
+      _dropEchoed(page.events);
       // A done event may have arrived before its run was loaded. Fold the
       // merged log in seq order so paging cannot resurrect a finished command.
       _transcript.events.forEach(_applyCommandEvent);

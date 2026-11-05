@@ -231,7 +231,13 @@ void main() {
   });
 
   testWidgets('性能', (tester) async {
-    await _check(tester, SettingsPageId.performance, () => _app(tester, const PerformancePage(), _running()));
+    await _check(
+      tester,
+      SettingsPageId.performance,
+      () => _app(tester, const PerformancePage(), _running()),
+      // Only with animations on, which tests run without.
+      absent: {'fluid-motion'},
+    );
   });
 
   testWidgets('通知', (tester) async {

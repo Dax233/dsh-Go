@@ -149,9 +149,13 @@ export async function generateMedia(request, context) {
       try { cancelledRemote = await client.cancel(request, providerTask, secret, { signal: AbortSignal.timeout(20_000) }); }
       catch { cancelledRemote = 'unconfirmed'; }
     }
-    if (!submitted) await context.admission?.releaseUnsent();
-    const cleaned = store ? await store.abort().catch(() => false) : true;
-    if (!cleaned) throw new MediaError('cleanup_failed');
+    try {
+      if (!submitted) await context.admission?.releaseUnsent();
+    } finally {
+      // A failed ledger release must not leave the prepared store behind.
+      const cleaned = store ? await store.abort().catch(() => false) : true;
+      if (!cleaned) throw new MediaError('cleanup_failed');
+    }
     if (cancelledRemote === 'cancelled') fail('cancelled');
     if (signal.aborted && providerTask && cancelledRemote !== 'cancelled') fail('remote_may_continue');
     if (signal.aborted && submitted && !providerTask) fail('submission_unknown');

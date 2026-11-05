@@ -6587,6 +6587,9 @@ class L10nEn extends L10n {
   String get featuresRepeatAdvanced => 'Advanced';
 
   @override
+  String get featuresRepeatCustom => 'Custom';
+
+  @override
   String get featuresIntervalSeconds => 'Seconds';
 
   @override
@@ -8853,6 +8856,13 @@ class L10nEn extends L10n {
 
   @override
   String get performanceSystemMotion => 'Also follows the system\'s remove animations setting';
+
+  @override
+  String get performanceFluid => 'Fluid motion';
+
+  @override
+  String get performanceFluidHint =>
+      'Springy releases, a soft glow under your finger, cards that open into pages. Costs almost no battery';
 
   @override
   String get performanceFollowMode => 'Follow the performance mode';
@@ -12188,6 +12198,15 @@ class L10nEn extends L10n {
   String get pluginsLoadRemoteLogs => 'Check the engine logs on this host.';
 
   @override
+  String get plugslotsSurfaceComposerTools => 'Plus panel tools';
+
+  @override
+  String get plugslotsSurfaceSessionActions => 'Chat actions';
+
+  @override
+  String get plugslotsSurfaceTurnNote => 'Turn notes';
+
+  @override
   String get plugslotsSurfaceComposerActions => 'Composer buttons';
 
   @override
@@ -14329,6 +14348,9 @@ class L10nEn extends L10n {
   String get searchNeedsEngineField => 'Available when the host has it';
 
   @override
+  String get searchNeedsAnimations => 'Available with animations on';
+
+  @override
   String get searchNeedsChat => 'Available with a chat open';
 
   @override
@@ -14502,6 +14524,9 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwAnimations => 'animation,motion,reduce motion';
+
+  @override
+  String get searchKwFluidMotion => 'fluid,spring,bounce,glow,smooth';
 
   @override
   String get searchKwNotifyEnabled => 'notifications on,turn off notifications';
@@ -15737,6 +15762,24 @@ class L10nEn extends L10n {
     );
     return '$_temp0; $_temp1';
   }
+
+  @override
+  String get shellPanelOverview => 'Info';
+
+  @override
+  String get shellPanelWorkspace => 'Workspace';
+
+  @override
+  String get shellPanelModel => 'Model';
+
+  @override
+  String get shellPanelHost => 'Host';
+
+  @override
+  String get shellPanelOpenFull => 'Open full page';
+
+  @override
+  String get shellPanelNoPlugins => 'No plugin panels for this chat yet';
 
   @override
   String get shellQuickPanel => 'Shortcuts';

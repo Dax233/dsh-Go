@@ -262,7 +262,7 @@ class CachedImageReader implements WorkspaceImageReader {
 
 /// Reads images the connected engine serves itself, such as a plugin's
 /// `/api/…` assets: they need the session's cookie, which NetworkImage can't
-/// send. [path] is the image's full URL.
+/// send. [path] is the image's full URL or root-relative API path.
 class EngineImageReader implements WorkspaceImageReader {
   const EngineImageReader(this.client);
 
@@ -384,7 +384,7 @@ class _MarkdownImageState extends ConsumerState<MarkdownImage> {
   String? _sessionId;
   String? _path;
 
-  /// A web image the connected engine serves itself: read with its cookie.
+  /// An image the connected engine serves itself: read with its cookie.
   String? _engineUrl;
   Future<LoadedImage>? _future;
   LoadedImage? _loaded;
@@ -412,9 +412,12 @@ class _MarkdownImageState extends ConsumerState<MarkdownImage> {
 
   void _resolve() {
     final source = _source;
-    if (source is WebImageSource) {
-      final engine = ref.read(artifactFilesProvider).connection?.client.isEngineUrl(source.url) ?? false;
-      final next = engine ? source.url : null;
+    final url = source is WebImageSource ? source.url : widget.url.trim();
+    final engine =
+        (source is WebImageSource || source is WorkspaceImageSource) &&
+        (ref.read(artifactFilesProvider).connection?.client.isEngineUrl(url) ?? false);
+    if (source is WebImageSource || engine) {
+      final next = engine ? url : null;
       if (next == _engineUrl && (next == null || _future != null || _loaded != null)) return;
       _engineUrl = next;
       _sessionId = null;
@@ -527,7 +530,7 @@ class _MarkdownImageState extends ConsumerState<MarkdownImage> {
   Widget build(BuildContext context) {
     // A replaced connection has its own cookie and cache: read through it again.
     ref.listen(artifactFilesProvider.select((files) => files.connection?.client), (_, _) {
-      if (_source is! WebImageSource) return;
+      if (_source is! WebImageSource && _source is! WorkspaceImageSource) return;
       setState(() {
         _engineUrl = null;
         _resolve();

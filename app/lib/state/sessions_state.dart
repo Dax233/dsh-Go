@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -130,6 +131,7 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
 
   /// Bumped by every build and refresh: only the newest load may land.
   int _loadSeq = 0;
+  int _appliedRefreshSeq = 0;
   List<SessionSummary> _all = const [];
   Set<String> _archived = const {};
   ReadListOrigin? _origin;
@@ -232,11 +234,16 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
         if (_applyInPlace(event)) return;
         // Ready alone changes no conversation: it doesn't read the list a
         // second time behind the one a (re)connection is reading.
+        final readyAt = event is HostReadyEvent ? _loadSeq : null;
         _debouncedChange |= event is! HostReadyEvent;
         _debounce?.cancel();
         _debounce = Timer(const Duration(milliseconds: 400), () {
           final change = _debouncedChange;
           _debouncedChange = false;
+          // Only a successful request started after this ready covers it.
+          // A pre-ready response, newer pending/failing read or later change
+          // still needs the existing recovery path.
+          if (!change && readyAt != null && _appliedRefreshSeq == _loadSeq && _appliedRefreshSeq > readyAt) return;
           unawaited(_refresh(afterBuild: change));
         });
       }
@@ -317,21 +324,21 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
     return true;
   }
 
-  List<SessionSummary> _visible() => ref
-      .read(readListCacheProvider)
-      .derive(
-        _rows()
-            .where(
-              (s) =>
-                  !s.blank &&
-                  !s.isSubagent &&
-                  !_archived.contains(s.sessionId) &&
-                  !_archives.any((pending) => pending.ids.contains(s.sessionId)),
-            )
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
-        _origin,
-      );
+  List<SessionSummary> _visible() {
+    final pendingIds = {for (final pending in _archives) ...pending.ids};
+    return ref
+        .read(readListCacheProvider)
+        .derive(
+          _rows()
+              .where(
+                (s) =>
+                    !s.blank && !s.isSubagent && !_archived.contains(s.sessionId) && !pendingIds.contains(s.sessionId),
+              )
+              .toList()
+            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
+          _origin,
+        );
+  }
 
   /// The last `session/list`, with the titles read since ([_readTitles]).
   List<SessionSummary> _rows() => _titles.isEmpty ? _all : [for (final s in _all) _withTitle(s)];
@@ -538,6 +545,7 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
       if (r.mounted && seq == _loadSeq) {
         state = AsyncData(sessions);
         cache.finishRefresh(ReadListKind.sessions, activity);
+        _appliedRefreshSeq = seq;
       }
     } catch (error, stack) {
       // A failed background refresh keeps the list it had.
@@ -586,23 +594,27 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
     }
     final conn = ref.read(activeConnectionProvider).value;
     final host = ref.read(activeHostProvider);
-    final ids = sessionIds.toSet().toList();
+    final idsSet = sessionIds.toSet();
+    final ids = idsSet.toList();
     if (conn == null ||
         !identical(ref.read(readListLiveConnectionProvider), conn) ||
         ids.isEmpty ||
         state.isLoading ||
-        ids.any(
-          (id) =>
-              !_all.any((s) => s.sessionId == id && !s.blank && !s.isSubagent) ||
-              _archived.contains(id) ||
-              _deleting.contains(id),
-        )) {
+        ids.any((id) => _archived.contains(id) || _deleting.contains(id))) {
+      throw const DshClosedException('session owner or inventory changed');
+    }
+    final remaining = Set<String>.of(idsSet);
+    for (final row in _all) {
+      if (!row.blank && !row.isSubagent) remaining.remove(row.sessionId);
+      if (remaining.isEmpty) break;
+    }
+    if (remaining.isNotEmpty) {
       throw const DshClosedException('session owner or inventory changed');
     }
     for (final existing in _archives) {
-      if (existing.ids.any(ids.contains)) {
+      if (existing.ids.any(idsSet.contains)) {
         if (existing._committing) throw StateError('archive already committing');
-        if (existing.ids.length == ids.length && existing.ids.every(ids.contains)) return existing;
+        if (existing.ids.length == ids.length && existing.ids.every(idsSet.contains)) return existing;
       }
     }
     final generation = conn.client.mux.generation;
@@ -824,6 +836,9 @@ final pendingSessionFolderProvider = NotifierProvider<PendingSessionFolderContro
 /// The session shown in the chat screen; null means "new chat".
 class CurrentSessionController extends Notifier<String?> {
   static const _key = 'last_session_id';
+  static const _selectionKey = 'last_session_selection';
+
+  static String _hostKey(HostRef host) => '${host.kind.name}:${host.id}';
 
   /// Every explicit choice counts, including selecting the already-null new chat.
   int _selectionRevision = 0;
@@ -841,10 +856,28 @@ class CurrentSessionController extends Notifier<String?> {
 
   /// Reopens the conversation that was open when the app was last closed.
   Future<void> _restore() async {
+    final owner = ref;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final last = prefs.getString(_key);
-      if (last != null && state == null && !_touched) state = last;
+      if (!owner.mounted || _touched || state != null) return;
+      final raw = prefs.getString(_selectionKey);
+      final legacy = prefs.getString(_key);
+      if (raw == null && legacy == null) return;
+
+      await owner.read(activeHostProvider.notifier).ready;
+      if (!owner.mounted || _touched || state != null) return;
+      final host = owner.read(activeHostProvider);
+      if (raw != null) {
+        final saved = jsonDecode(raw);
+        if (saved is! Map || saved['host'] != _hostKey(host)) return;
+        final id = saved['sessionId'];
+        if (id is String) state = id;
+      } else {
+        // Old IDs have no host binding. Keep their existing compatibility
+        // only when startup actually chose the saved host; a skipped remote
+        // must not turn its unbound ID into a local conversation.
+        if (HostRef.decode(prefs.getString(ActiveHostController.prefsKey)) == host) state = legacy;
+      }
     } catch (_) {
       // No preferences backend (tests) or unreadable store: start with a new chat.
     }
@@ -853,13 +886,20 @@ class CurrentSessionController extends Notifier<String?> {
   void select(String? sessionId) {
     _selectionRevision++;
     _touched = true;
+    final host = ref.read(activeHostProvider);
     ref.read(pendingSessionFolderProvider.notifier).select(null);
     state = sessionId;
-    unawaited(
-      SharedPreferences.getInstance()
-          .then((prefs) => sessionId == null ? prefs.remove(_key) : prefs.setString(_key, sessionId))
-          .catchError((_) => false),
-    );
+    unawaited(_persist(host, sessionId));
+  }
+
+  Future<void> _persist(HostRef host, String? sessionId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // One value owns both pieces, including an explicit new-chat choice.
+      // Its null ID also wins if removing a leftover legacy key fails.
+      await prefs.setString(_selectionKey, jsonEncode({'host': _hostKey(host), 'sessionId': sessionId}));
+      await prefs.remove(_key);
+    } catch (_) {}
   }
 }
 

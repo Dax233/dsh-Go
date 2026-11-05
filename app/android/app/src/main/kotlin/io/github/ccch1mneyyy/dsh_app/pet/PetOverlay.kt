@@ -1557,7 +1557,18 @@ internal object PetOverlay {
     private fun startRecording(view: AskBarView) {
         stopRecording()
         val gen = ++recording
-        val r = WavRecorder(maxSeconds = 60, onLevel = {}, onLimit = { main.post { if (gen == recording) micUp(cancelled = false) } })
+        lateinit var r: WavRecorder
+        r = WavRecorder(
+            maxSeconds = 60,
+            onLevel = {},
+            onLimit = { main.post { if (gen == recording) micUp(cancelled = false) } },
+            onError = { main.post {
+                if (gen == recording && recorder === r) {
+                    stopRecording()
+                    if (askView === view) view.setStatus(AppStrings.get(app, R.string.pet_ask_not_heard), error = true)
+                }
+            } },
+        )
         val mic = MicArbiter.beginDictation()
         if (!runCatching { r.start() }.getOrDefault(false)) {
             MicArbiter.endDictation(mic)

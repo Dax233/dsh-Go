@@ -210,7 +210,7 @@ class _PetHostState extends ConsumerState<_PetHost> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(petOverlayBridgeProvider);
+    ref.listen<void>(petOverlayBridgeProvider, (_, _) {});
     return const SizedBox.shrink();
   }
 }

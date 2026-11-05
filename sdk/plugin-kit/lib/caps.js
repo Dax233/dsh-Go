@@ -6,6 +6,8 @@ import { V1_COMPONENTS, isBinding } from './view.js'
 
 /** Surfaces of protocol v1. */
 export const SURFACES = Object.freeze(['composer.actions', 'message.actions', 'composer.strip', 'panels'])
+/** Newer than v1: an app that draws them lists them in `caps.surfaces`. */
+export const NEWER_SURFACES = Object.freeze(['composer.tools', 'session.actions', 'turn.note', 'plugin'])
 
 const list = (v) => (Array.isArray(v) ? v : undefined)
 

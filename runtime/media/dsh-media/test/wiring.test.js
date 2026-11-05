@@ -68,6 +68,7 @@ async function fixture(t, { raw = {}, configured = [], generate, describe } = {}
       listeners.set(event, entries);
       return () => listeners.set(event, entries.filter(item => item !== callback));
     },
+    jobs: { events: { subscribe() { return () => {}; } } },
     tools: {
       register(definition) {
         assert.equal(registered.has(definition.name), false);

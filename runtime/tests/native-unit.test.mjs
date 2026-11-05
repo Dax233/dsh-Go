@@ -11,6 +11,7 @@ const LIB = new URL("../bridge/dsh-go-bridge/lib/native/", import.meta.url);
 const { checkManifest, parseManifest, renderPlugin } = await import(new URL("manifest.js", LIB));
 const { checkEffects, normalize, splitPending, validate } = await import(new URL("effects.js", LIB));
 const util = await import(new URL("util.js", LIB));
+const { createNativeRoutes } = await import(new URL("routes.js", LIB));
 const { NativeCore } = await import(new URL("core.js", LIB));
 const { LIMITS, effectiveLimits } = await import(new URL("limits.js", LIB));
 const { WsConnection, encodeFrame } = await import(new URL("ws.js", LIB));
@@ -508,4 +509,122 @@ test("deferred: splitPending shapes, clamps and the deferred whitelist", () => {
     assert.equal(r.violation, true);
     assert.match(r.issues[0].message, /deferred/);
   }
+});
+
+
+test("JSON helpers preserve own prototype-named keys", () => {
+  const value = JSON.parse('{"__proto__":{"label":"own"},"nested":{"__proto__":7},"constructor":"data"}');
+  assert.deepEqual(util.withoutNulls(value), value);
+  const added = util.mergeDiff({}, value);
+  assert.deepEqual(added, value);
+  assert.deepEqual(util.mergeApply({}, added), value);
+  const removed = util.mergeDiff(value, {});
+  assert.deepEqual(util.mergeApply(value, removed), {});
+  assert.equal(Object.getPrototypeOf(util.mergeApply({}, value)), Object.prototype);
+});
+
+test("core: real panel feed retains prototype-named JSON keys in data and patches", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000000 });
+  const a = pkgDir("own-keys", { v: 1, contributes: { panels: [{ id: "p", title: "P" }] } });
+  const host = fakeHost([a]);
+  const core = new NativeCore(host.ctx, LIMITS, "test");
+  t.after(() => core.dispose());
+  let emit;
+  const first = JSON.parse('{"__proto__":{"label":"first"},"nested":{"__proto__":7}}');
+  core.service.panel.call({ ctx: host.callerOf(host.entries[0]) }, "p", { view: {}, data: (_, e) => { emit = e; e(first); } });
+  const scope = util.normalizeScope({ sessionId: "s" });
+  const feed = core.feed("own-keys", "p", "panel", scope);
+  t.mock.timers.tick(1);
+  const messages = [];
+  feed.attach({ id: "own", send: m => messages.push(JSON.parse(JSON.stringify(m))) });
+  assert.deepEqual(messages[0].data, first);
+  const next = JSON.parse('{"__proto__":{"label":"second"},"nested":{"__proto__":8}}');
+  emit(next);
+  t.mock.timers.tick(250);
+  assert.equal(messages.at(-1).t, "patch");
+  assert.deepEqual(messages.at(-1).merge, JSON.parse('{"__proto__":{"label":"second"},"nested":{"__proto__":8}}'));
+  assert.deepEqual(util.mergeApply(first, messages.at(-1).merge), next);
+  const normalized = normalize({ type: "patch", id: "p", data: JSON.parse('{"__proto__":{"extra":true}}') }, { panels: new Set(["p"]) });
+  assert.equal(normalized.violation, false);
+  core.patchFeed("own-keys", "p", scope, normalized.effects[0].data);
+  t.mock.timers.tick(250);
+  assert.deepEqual(feed.data, JSON.parse('{"__proto__":{"label":"second","extra":true},"nested":{"__proto__":8}}'));
+  const removed = { nested: {} };
+  emit(removed);
+  t.mock.timers.tick(250);
+  assert.deepEqual(messages.at(-1).merge, JSON.parse('{"__proto__":null,"nested":{"__proto__":null}}'));
+  assert.deepEqual(util.mergeApply(next, messages.at(-1).merge), removed);
+});
+
+
+test("core: completed first-data deadlines release their waiters while the feed stays live", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
+  const a = pkgDir("waiter-a", { v: 1, contributes: { panels: [{ id: "p", title: "P" }] } });
+  const host = fakeHost([a]);
+  const core = new NativeCore(host.ctx, LIMITS, "test");
+  const routes = createNativeRoutes(core);
+  t.after(() => { routes.dispose(); core.dispose(); });
+  const svc = { ...core.service, ctx: host.callerOf(host.entries[0]), panel: core.service.panel };
+  let emit;
+  let cancelled = 0;
+  svc.panel("p", { view: { type: "text", text: "Waiting" }, data: (_scope, send) => {
+    emit = send;
+    return () => cancelled++;
+  } });
+  const feed = core.feed("waiter-a", "p", "panel", util.normalizeScope({}));
+  const messages = [];
+  const sub = { id: "panel", send: (message) => messages.push(message) };
+  feed.attach(sub);
+  for (let i = 0; i < 3; i++) {
+    const url = new URL("http://local/dsh-go/v1/views/waiter-a/p");
+    let status;
+    let body;
+    const res = { headersSent: false, writeHead(code) { status = code; this.headersSent = true; }, end(value) { body = JSON.parse(value); } };
+    const response = routes.handle({ method: "GET", headers: {} }, res, url.pathname, url);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(feed.waiters.length, 1, "one active first-data wait per GET");
+    t.mock.timers.tick(LIMITS.firstDataWaitMs);
+    assert.equal(await response, true);
+    assert.equal(status, 200);
+    assert.equal(body.live, true);
+    assert.equal(body.data, null);
+    assert.equal(feed.waiters.length, 0, "completed deadline must not stay retained by the live feed");
+  }
+  assert.equal(cancelled, 0);
+  emit({ ready: true });
+  t.mock.timers.tick(250);
+  assert.deepEqual(messages.at(-1).data, { ready: true });
+  feed.detach(sub);
+  t.mock.timers.tick(LIMITS.feedLingerMs);
+  assert.equal(cancelled, 1);
+});
+
+test("core: concurrent first-data waits settle once on data or stop", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
+  const a = pkgDir("waiter-b", { v: 1, contributes: { panels: [{ id: "p", title: "P" }] } });
+  const host = fakeHost([a]);
+  const core = new NativeCore(host.ctx, LIMITS, "test");
+  t.after(() => core.dispose());
+  const svc = { ...core.service, ctx: host.callerOf(host.entries[0]), panel: core.service.panel };
+  let emit;
+  svc.panel("p", { view: {}, data: (_scope, send) => { emit = send; } });
+  const feed = core.feed("waiter-b", "p", "panel", util.normalizeScope({}));
+  let settled = 0;
+  const first = feed.waitFirst(100).then(() => settled++);
+  const second = feed.waitFirst(200).then(() => settled++);
+  t.mock.timers.tick(100);
+  await first;
+  assert.equal(feed.waiters.length, 1, "only the unfinished wait remains");
+  emit({ value: 1 });
+  t.mock.timers.tick(1);
+  await second;
+  assert.equal(feed.waiters.length, 0);
+  t.mock.timers.tick(200);
+  assert.equal(settled, 2);
+  const other = core.feed("waiter-b", "p", "panel", util.normalizeScope({ sessionId: "other" }));
+  const stopped = other.waitFirst(100);
+  other.stop();
+  await stopped;
+  assert.equal(other.waiters.length, 0);
+  t.mock.timers.tick(100);
 });

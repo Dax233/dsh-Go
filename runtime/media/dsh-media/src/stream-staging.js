@@ -22,12 +22,21 @@ function abortable(promise, signal) {
   });
 }
 
+// Classify only calls to the local file handle, not HTTP/response failures.
+async function storageOperation(operation) {
+  try {
+    return await operation;
+  } catch (error) {
+    throw error instanceof MediaError ? error : new MediaError('storage');
+  }
+}
+
 /** Bounded sequential writes; exported solely for internal reuse/partial-write regression. */
 export async function writeStagedChunk(handle, chunk, hash, signal) {
   let offset = 0;
   while (offset < chunk.length) {
     checkAbort(signal);
-    const { bytesWritten } = await handle.write(chunk, offset, chunk.length - offset, null);
+    const { bytesWritten } = await storageOperation(handle.write(chunk, offset, chunk.length - offset, null));
     if (!Number.isInteger(bytesWritten) || bytesWritten <= 0 || bytesWritten > chunk.length - offset) fail('storage');
     hash.update(chunk.subarray(offset, offset + bytesWritten));
     offset += bytesWritten;
@@ -80,12 +89,16 @@ export function createStreamStager({ allowLoopback = false, lookup = dnsLookup }
       directoryHandle = await open(directory, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
       if (!same(await directoryHandle.stat({ bigint: true }), dirIdentity)) fail('permission');
       // Probe/sync even an existing directory. Existence is not a durability receipt.
-      await directoryHandle.sync();
+      await storageOperation(directoryHandle.sync());
       // Persist the selected directory's name too, even when it already existed.
       // No caller-created ancestor is assumed durable merely because stat found it.
       for (let ancestor = dirname(directory); ; ancestor = dirname(ancestor)) {
         const parent = await open(ancestor, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
-        try { await parent.sync(); } finally { await parent.close(); }
+        try {
+          await storageOperation(parent.sync());
+        } finally {
+          await storageOperation(parent.close());
+        }
         active();
         if (dirname(ancestor) === ancestor) break;
       }
@@ -135,12 +148,14 @@ export function createStreamStager({ allowLoopback = false, lookup = dnsLookup }
       active();
       if (!response.complete || bytes === 0 || (declared !== undefined && bytes !== Number(declared))) fail('response');
       await guardFile();
-      await handle.sync();
-      await handle.close(); handle = undefined;
-      await directoryHandle.sync();
+      await storageOperation(handle.sync());
+      await storageOperation(handle.close());
+      handle = undefined;
+      await storageOperation(directoryHandle.sync());
       await guardFile();
       // Close failures are not silently turned into a successful receipt.
-      await directoryHandle.close(); directoryHandle = undefined;
+      await storageOperation(directoryHandle.close());
+      directoryHandle = undefined;
       active();
       const receipt = { kind: 'private-download', path, bytes, sha256: hash.digest('hex') };
       success = true;

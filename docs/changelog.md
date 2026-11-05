@@ -2,6 +2,44 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.11 · 2026-11-05
+
+### 中文
+
+- **更新前请注意：这一版换了运行时，内置引擎升到 DSH 0.2.2-rc.1。** 升级后 Linux 环境里只保留 `/root`，用 `apt` 装的软件和放在 `/usr/local`、`/opt` 等目录的文件会被清掉，需要重新装。对话和设置不受影响。也因为换了运行时，这次还是下整包。新引擎写入后，定时任务不保证还能被旧版引擎读回，不建议退回旧版。
+- **这一版的引擎升级还没在真机上验证过。** 目前在 x86_64 模拟器上用测试模型走过从 1.0.10 升级、发消息、定时任务、窄屏网页版和手机工具，没用过真实模型账号。遇到问题请开 issue 反馈。
+- 网页版：手机宽度下改用官方的抽屉和设置页，顶部的菜单按钮打开官方抽屉。平板和横屏沿用原来的布局。
+- 定时任务：**这里改了 1.0.10 的规则。** 官方页面新增的手动新建现在能用：你自己在页面或 App 里新建、修改任务不再二次确认，和官方一致。助手用工具新建、修改任务仍然要单独确认，拒绝或两分钟内没确认都不保存。确认卡防不住能读到凭据文件的程序，不能代替系统隔离。
+- 定时任务：助手现在创建的任务用新的规则格式，列表里显示「自定义」，和官方一致。这类任务在 App 里能改名字和指令，时间不在这里改，请在对话里让助手改。
+- 对话：手机顶栏把位置留给标题，第二行只放状态和工作区；输入框点进去展开成两行，换模型的按钮就在里面。左滑面板在开着对话时显示这段对话的信息和插件。
+- 动效：新增「灵动动效」，有按压回弹、卡片展开成页面，文字匀速吐出并淡入。默认开启，省电模式和系统关闭动画时不生效，可在 `设置 › 性能` 里关掉。
+- 插件：新增五个可放置的位置：`+` 面板的工具、侧栏的操作、回合脚注、插件页面板和弹窗面板。
+- 手机操控：后台截图处理好了带行填充的画面，操作结束后浮层和触摸都会恢复，已结束的调用不再占着队列。
+- 更新：取消下载后不再改写已有分片；响应头或错误内容很慢时不再一直占着连接；升级后的清理不再删掉刚校验好的新安装包。
+- 分享和文件：损坏的分享链接会被拒绝；截断文字时不再切开表情；保存文件时先占住文件名，互不覆盖。
+- 远程：请求超时后不再启动迟到的请求，也不再留下迟到的连接；重连不会取消已经选定的系统听写。
+- 语音：录音读取失败时结束这次录音，不再留下半截文件；迟到的取消回执不再影响新一轮。
+- 引擎：大量后台路径减少了重复计算和内存分配，比如长输出截断、文件搜索和会话列表。
+- 限制：官方远程插件 0.6.2 还不支持新版的修改和立即运行，通过它连 0.2.2 主机时不能修改、删除或立即运行定时任务，可以查看。如果你在配置里完整复制过旧版的预设，新引擎可能启动不了这个预设，做法见 `docs/maintenance/dsh022-saved-preset-migration.md`。
+
+### English
+
+- **Before you update: this version changes the runtime, and the built-in engine is now DSH 0.2.2-rc.1.** Only `/root` stays in the Linux environment. Software installed with `apt` and files in `/usr/local`, `/opt` and similar places are removed and need installing again. Chats and settings aren't affected. Because the runtime changes, this is a full download. Once the new engine has written them, scheduled tasks may not read back on an older engine, so going back isn't recommended.
+- **The engine upgrade hasn't been verified on a real phone yet.** So far it has run on an x86_64 emulator with a test model: updating from 1.0.10, messages, scheduled tasks, the narrow web UI and phone tools. No real model account was used. If you hit a problem, please open an issue.
+- Web UI: at phone width it now uses the official drawer and settings sheet, and the menu button at the top opens the official drawer. Tablets and landscape keep the previous layout.
+- Scheduled tasks: **this changes the rule from 1.0.10.** The official page's new manual create now works: when you create or edit a task yourself on the page or in the app, there's no second confirmation, as upstream has it. When the assistant creates or edits one through its tools, it still needs separate confirmation, and rejecting or not confirming within two minutes saves nothing. The card can't stop a program that can read the credentials file, so it doesn't replace system isolation.
+- Scheduled tasks: tasks the assistant creates now use a new rule format and read "Custom" in the list, as on the official page. You can change their name and instruction in the app. To change the time, ask the assistant in a chat.
+- Chat: the phone header gives its room to the title, with only status and workspace on the second line. The composer opens into two rows when you tap it, with the model button inside. With a chat open, the swipe panel shows that chat's info and plugins.
+- Motion: a new "Fluid motion" setting adds press rebound, cards that expand into pages, and text that streams at an even pace and fades in. It's on by default, has no effect in battery saver or when the system turns animations off, and can be turned off in `Settings › Performance`.
+- Plugins: five more places to put things: tools on the `+` panel, actions in the side panel, turn notes, panels on a plugin's own page, and panels that open as a sheet.
+- Phone control: background screenshots handle frames with row padding, the overlay and touch come back after an action, and finished calls no longer hold up the queue.
+- Updates: cancelling a download no longer rewrites existing chunks, a slow response header or error body no longer holds a connection, and cleanup after an update no longer deletes a freshly verified package.
+- Sharing and files: damaged share links are refused, truncating text no longer cuts an emoji in half, and saving a file claims its name first so saves don't overwrite each other.
+- Remote: a request that timed out no longer starts late or leaves a late connection, and reconnecting no longer cancels a system dictation you already chose.
+- Voice: a failed recording read ends that recording instead of leaving a partial file, and a late cancel no longer affects the next round.
+- Engine: many background paths do less repeated work and allocate less, such as long output truncation, file search and the session list.
+- Limits: the official remote plugin 0.6.2 doesn't support the new edit and run yet, so through it on a 0.2.2 host you can view scheduled tasks but not edit, delete or run them. If you copied a whole old preset into your config, the new engine may fail to start it; see `docs/maintenance/dsh022-saved-preset-migration.md`.
+
 ## 1.0.10 · 2026-11-04
 
 ### 中文

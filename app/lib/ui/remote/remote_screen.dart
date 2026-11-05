@@ -11,6 +11,7 @@ import '../../runtime/runtime_state.dart';
 import '../../state/app_info.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../common/app_dialog.dart';
 import '../common/ask_ai.dart';
 import '../common/overview_card.dart';
 import '../common/status_chip.dart';
@@ -451,7 +452,7 @@ class _RelaySection extends ConsumerWidget {
 
   Future<void> _confirmLogout(BuildContext context, RelayAccountController notifier) async {
     final l10n = context.l10n;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text(l10n.remoteRelaySignOutTitle),

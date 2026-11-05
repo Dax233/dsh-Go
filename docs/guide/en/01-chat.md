@@ -15,7 +15,7 @@ With a hardware keyboard, Enter adds a line break and Ctrl+Enter or ⌘+Enter se
 
 ## Choose a model
 
-Tap the model capsule at the top right to open **Choose model**. Tap a model to switch right away; if it supports levels, pick one under **Thinking effort**. Typing `/model` in the composer opens it too. **Manage models** at the bottom goes straight to the models page in Settings; to add and manage models, see [Models and providers](02-models.md).
+On a phone, tap into the composer, then tap the model under it. On a tablet or wider screen, tap the model capsule at the top right. Either way opens **Choose model**. Tap a model to switch right away; if it supports levels, pick one under **Thinking effort**. Typing `/model` in the composer opens it too. **Manage models** at the bottom goes straight to the models page in Settings; to add and manage models, see [Models and providers](02-models.md).
 
 ## Images, files and voice
 
@@ -105,6 +105,8 @@ Touch and hold a chat for **Pin**, **Rename**, **Move to folder**, **Share**, **
 Swipe right to left over the chat and **Shortcuts** slides in from the right; tap one to open that page. It starts with **Plugins**, **Local engine** and **Settings**. Swiping on code blocks, tables and other content that scrolls sideways still scrolls them. Back closes the panel first.
 
 You can turn off **Open with a left swipe**, and under **What it lists** tick what to show and drag to reorder. There's no swipe while the chat list stays open at the side.
+
+With a conversation open, the panel is about that conversation, in two parts, **Info** and **Plugins**: Info has the whole title, workspace, model and host, with the full page a tap away at the top right; Plugins has every plugin panel, switched along its top when there are several. The shortcuts you ticked sit along the bottom. On a phone the header has no model chip, with the status and workspace under the title, and while you type, the composer shows the model and thinking depth at its foot: tap them to change, or use Overview.
 
 ## Hardware keyboard
 

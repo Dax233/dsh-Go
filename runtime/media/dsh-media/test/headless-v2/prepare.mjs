@@ -1,4 +1,4 @@
-// Build an independent test prefix without re-resolving any rc.4 runtime entry.
+// Build an independent test prefix without re-resolving any 0.2.2-rc.1 runtime entry.
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
@@ -6,13 +6,13 @@ import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
 const { values } = parseArgs({ options: { out: { type: 'string' } } });
 assert.ok(isAbsolute(values.out ?? ''), '--out must be a new absolute directory');
-const base = new URL('../../../../locks/dsh-0.2.1-rc.4/', import.meta.url);
+const base = new URL('../../../../locks/dsh-0.2.2-rc.1/', import.meta.url);
 const original = await readFile(new URL('package-lock.json', base));
 const manifest = JSON.parse(await readFile(new URL('package.json', base)));
 const lock = JSON.parse(original);
-assert.equal(manifest.dependencies['@deepseek-ai/dsh'], '0.2.1-rc.4');
+assert.equal(manifest.dependencies['@deepseek-ai/dsh'], '0.2.2-rc.1');
 const additions = [
-  ['@deepseek-ai/dsh-llm-mock-server', '0.2.1-rc.4', 'https://registry.npmjs.org/@deepseek-ai/dsh-llm-mock-server/-/dsh-llm-mock-server-0.2.1-rc.4.tgz', 'sha512-XgQQ1GaBBEhKYSv3+rwhJuuf0OuVvX/PBO9WloYsG70V93aSabVvZBR3r/Y5+D5G0KIYaehe6qSMAvPcPmE6Tw=='],
+  ['@deepseek-ai/dsh-llm-mock-server', '0.2.2-rc.1', 'https://registry.npmjs.org/@deepseek-ai/dsh-llm-mock-server/-/dsh-llm-mock-server-0.2.2-rc.1.tgz', 'sha512-hxBNmQEGeibDdmdEtWv3Pmm/11omcnvWbyh6RULkasUQoNVfgppJbrBtres2EaqUjaEULIRuMFhdLZcX13zMhQ=='],
   ['image-size', '2.0.2', 'https://registry.npmjs.org/image-size/-/image-size-2.0.2.tgz', 'sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w=='],
 ];
 for (const [name, version, resolved, integrity] of additions) {

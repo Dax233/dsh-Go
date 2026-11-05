@@ -198,13 +198,16 @@ export class FilePickerRuntime {
     const event = { surface: e.surface, id: e.id, action: e.action, locale: e.locale,
       signal: e.controller.signal, value: { status, files: e.files.map(f => this.metadata(f)) } };
     try {
-      const result = await withTimeout(this.delivery.run(e, () => call(e.fn, { ...e.scope.scope }, event)), this.core.limits.handlerTimeoutMs);
+      const result = await withTimeout(this.delivery.run(e, () => call(e.fn, { ...e.scope.scope }, event).then(result => {
+        // Own eager work even when metadata is invalid, the request is retired,
+        // or the callback settles after its timeout. Never start a lazy function.
+        const deferred = splitPending(result);
+        const work = deferred?.ok ? deferred.work : deferred ? result.result : undefined;
+        if (typeof work?.then === 'function') work.then(undefined, () => {});
+        return result;
+      })), this.core.limits.handlerTimeoutMs);
       if (!this.alive(e)) this.fail(410, 'cancelled', 'file selection expired');
       const rec = this.core.plugin(e.pkg);
-      const deferred = splitPending(result);
-      // A callback may copy bytes and start its own work, but cannot acquire a
-      // deferred effect channel. Observe an eager rejected Promise before dropping it.
-      if (typeof deferred?.work?.then === 'function') deferred.work.then(undefined, () => {});
       const norm = normalize(result, { panels: new Set(rec.parsed.items.panels.map(p => p.id)),
         source: e.surface === 'panel' ? e.id : undefined, fileResult: true,
         capabilities: { declared: rec.parsed.capabilities, features: e.conn.features } });

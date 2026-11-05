@@ -148,7 +148,7 @@ class PrivilegedDisplayCore(private val context: Context) {
             }
             Proto.OP_OBSERVE -> {
                 requireDisplay(); requireForeground(pkg)
-                observe(pkg, request.getBoolean(Proto.WANT_IMAGE), response)
+                observe(pkg, request.getBoolean(Proto.WANT_IMAGE), response, requireTree = true)
             }
             Proto.OP_TAP -> {
                 requireDisplay(); requireForeground(pkg)
@@ -287,7 +287,7 @@ class PrivilegedDisplayCore(private val context: Context) {
 
     // ---- observation (tree + optional screenshot) --------------------------
 
-    private fun observe(pkg: String, wantImage: Boolean, response: Bundle) {
+    private fun observe(pkg: String, wantImage: Boolean, response: Bundle, requireTree: Boolean = false) {
         val id = displayId()
         response.putInt(Proto.DISPLAY_ID, id)
         response.putString(Proto.FG_PKG, pkg)
@@ -296,12 +296,14 @@ class PrivilegedDisplayCore(private val context: Context) {
         var secure = shot?.black == true
         val label = runCatching { appLabel(pkg) }.getOrNull()
         label?.let { response.putString(Proto.APP_LABEL, it) }
-        val tree = runCatching { readTree(id, pkg) }.getOrElse {
-            if (it is Fault && it.code == "secureWindow") secure = true
-            null
-        }
+        val treeResult = runCatching { readTree(id, pkg) }
+        val failure = treeResult.exceptionOrNull()
+        if (failure is Fault && failure.code == "secureWindow") secure = true
         response.putBoolean(Proto.SECURE, secure)
         if (secure) { response.putBoolean(Proto.POOR, false); response.putInt(Proto.COUNT, 0); return }
+        // A read must report its failure; observation after an already-dispatched write
+        // must not turn that write into a failed action that a caller might replay.
+        val tree = if (requireTree) treeResult.getOrThrow() else treeResult.getOrNull()
         // The screenshot contains the whole viewport, including nodes beyond the 120-line
         // text limit. Never attach it when secrets were found or the scan was incomplete.
         // The typing unlock changes permission to write, never permission to reveal a secret.
@@ -371,7 +373,7 @@ class PrivilegedDisplayCore(private val context: Context) {
                 val src = plane.buffer.duplicate()
                 for (row in 0 until height) {
                     val start = row * plane.rowStride
-                    src.position(start); src.limit(start + width * 4)
+                    src.limit(start + width * 4); src.position(start)
                     pixels.put(src)
                 }
                 pixels.flip()

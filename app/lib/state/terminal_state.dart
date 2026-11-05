@@ -469,7 +469,10 @@ class TerminalWorkspace extends Notifier<TerminalWorkspaceState> {
     if (cached != null) return cached;
     final backend = _backend;
     if (backend == null) return const [];
-    return _shells = await backend.shells();
+    final epoch = _epoch;
+    final shells = await backend.shells();
+    if (_stale(epoch)) return const [];
+    return _shells = shells;
   }
 
   // ── Connection ──

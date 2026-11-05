@@ -186,7 +186,7 @@ class PatchDsh(unittest.TestCase):
         name = "fs-create-exclusive.diff"
         rel = "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js"
         pins = load(os.path.join(shipped, "pins.json"))
-        pin = pins["patches"][name]["0.2.1-rc.2"][rel]
+        pin = pins["patches"][name]["0.2.2-rc.1"][rel]
         with open(os.environ["DSH_FS_LOCAL_ORIGINAL_JS"], "rb") as source:
             original = source.read()
         self.assertEqual(hashlib.sha256(original).hexdigest(), pin["before"])
@@ -200,15 +200,15 @@ class PatchDsh(unittest.TestCase):
         with open(os.path.join(self.patches, "pins.json"), "w") as out:
             json.dump({"schema": 1, "patches": {name: pins["patches"][name]}}, out)
 
-        result = self.run_cli("--dsh-version", "0.2.1-rc.2")
+        result = self.run_cli("--dsh-version", "0.2.2-rc.1")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(sha(read(target)), pin["after"])
-        again = self.run_cli("--dsh-version", "0.2.1-rc.2")
+        again = self.run_cli("--dsh-version", "0.2.2-rc.1")
         self.assertEqual(again.returncode, 0, again.stdout)
         self.assertIn("already patched", again.stdout)
         with open(target, "wb") as out:
             out.write(original + b"// upstream drift\n")
-        changed = self.run_cli("--dsh-version", "0.2.1-rc.2")
+        changed = self.run_cli("--dsh-version", "0.2.2-rc.1")
         self.assertNotEqual(changed.returncode, 0)
         self.assertIn("differs from the vetted", changed.stdout)
         with open(target, "rb") as source:

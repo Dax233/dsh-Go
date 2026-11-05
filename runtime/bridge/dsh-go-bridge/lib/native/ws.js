@@ -49,6 +49,7 @@ export class WsConnection extends EventEmitter {
   closed = false;
   #socket;
   #buf = Buffer.alloc(0);
+  #storage;
   #fragments = [];
   #fragmentBytes = 0;
   #maxMessage;
@@ -59,7 +60,7 @@ export class WsConnection extends EventEmitter {
     this.#socket = socket;
     this.#maxMessage = maxMessage;
     socket.on("data", (chunk) => this.#onData(chunk));
-    socket.on("close", () => this.#finish(1006));
+    socket.on("close", () => { clearTimeout(this.#closeTimer); this.#finish(1006); });
     // An upgraded HTTP socket may remain half-open after peer FIN. Release owners now.
     socket.on("end", () => { socket.end(); this.#finish(1006); });
     socket.on("error", () => this.#finish(1006));
@@ -96,12 +97,32 @@ export class WsConnection extends EventEmitter {
   #finish(code) {
     if (this.closed) return;
     this.closed = true;
+    this.#storage = undefined;
+    this.#buf = Buffer.alloc(0);
     this.emit("close", code);
   }
 
   #onData(chunk) {
     if (this.closed) return;
-    this.#buf = this.#buf.length === 0 ? chunk : Buffer.concat([this.#buf, chunk]);
+    const previous = this.#buf;
+    const size = previous.length + chunk.length;
+    // Keep complete socket chunks borrowed. Only partial frames need owned storage.
+    // The cap is one maximum frame, not a limit on a TCP chunk containing many frames.
+    const capacity = this.#maxMessage + 14;
+    if (previous.length === 0) this.#buf = chunk;
+    else if (size > capacity) this.#buf = Buffer.concat([previous, chunk]);
+    else {
+      let storage = this.#storage;
+      if (!storage || storage.length < size) {
+        storage = Buffer.alloc(Math.min(capacity, Math.max(size, (storage?.length ?? 32) * 2)));
+      }
+      if (previous.buffer !== storage.buffer || previous.byteOffset !== storage.byteOffset) {
+        previous.copy(storage, 0);
+      }
+      chunk.copy(storage, previous.length);
+      this.#storage = storage;
+      this.#buf = storage.subarray(0, size);
+    }
     while (!this.closed) {
       const b = this.#buf;
       if (b.length < 2) return;
@@ -141,7 +162,8 @@ export class WsConnection extends EventEmitter {
         if (opcode === 0x0 && this.#fragments.length === 0) return this.close(1002, "unexpected continuation");
         this.#fragmentBytes += payload.length;
         if (this.#fragmentBytes > this.#maxMessage) return this.close(1009, "message too big");
-        this.#fragments.push(payload);
+        // Keep the first fragment as the message marker, without accumulating empty continuations.
+        if (payload.length > 0 || this.#fragments.length === 0) this.#fragments.push(payload);
         if (!fin) return;
         const whole = this.#fragments.length === 1 ? this.#fragments[0] : Buffer.concat(this.#fragments);
         this.#fragments = [];
