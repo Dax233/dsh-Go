@@ -35,8 +35,16 @@ typedef DshClientConnector = Future<DshClient> Function({
   required String hostHeader,
 });
 
+/// Diagnostics sink for mux/carrier state changes (installed by the host link).
+void Function(DshTraceEntry entry)? dshLinkTrace;
+
 Future<DshClient> _defaultConnector({required Uri baseUri, required String token, required String hostHeader}) =>
-    DshClient.connect(baseUri: baseUri, token: token, hostHeader: hostHeader);
+    DshClient.connect(
+      baseUri: baseUri,
+      token: token,
+      hostHeader: hostHeader,
+      tracer: (entry) => dshLinkTrace?.call(entry),
+    );
 
 /// Trust-on-first-use check against the pinned fingerprint.
 enum HostKeyVerdict { trusted, unknown, mismatch }
@@ -360,6 +368,15 @@ class SshHostLink implements HostLink {
       existing.mux.reconnect();
       return existing;
     }
+    // Diagnostics: surface mux/carrier state changes on the host breadcrumb.
+    final traceTransport = _transport;
+    if (traceTransport != null) {
+      dshLinkTrace = (entry) {
+        if (entry.channel == 'state') {
+          unawaited(_bridgeBreadcrumb(traceTransport, 'mux ${entry.data}'));
+        }
+      };
+    }
     final DshClient client;
     try {
       client = await _connectClient(
@@ -380,15 +397,6 @@ class SshHostLink implements HostLink {
       );
     } on DshException catch (e) {
       throw HostLinkError(HostLinkErrorKind.tunnelFailed, appL10n.remoteErrDshTunnel, detail: '$e', retryable: true);
-    }
-    // Diagnostics: surface mux/carrier state changes on the host breadcrumb.
-    final traceTransport = _transport;
-    if (traceTransport != null) {
-      client.tracer = (entry) {
-        if (entry.channel == 'state') {
-          unawaited(_bridgeBreadcrumb(traceTransport, 'mux ${entry.data}'));
-        }
-      };
     }
     if (_closed) {
       await client.close().catchError((_) {});
