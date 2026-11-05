@@ -262,7 +262,7 @@ class SshHostLink implements HostLink {
     try {
       final bootstrap = RemoteDshBootstrap(
         transport,
-        launchCommand: _config.launchCommand,
+        launchCommand: '${_config.launchCommand}${_phonePatchArg ?? ''}',
         workingDirectory: _config.workingDirectory,
         environment: remoteEnvironment,
       );
@@ -406,21 +406,46 @@ class SshHostLink implements HostLink {
 
   final PhoneChannel _phone = PhoneChannel();
   PhoneBridgeLink? _phoneBridge;
+  String? _phonePatchArg;
 
   Future<void> _publishPhoneBridge(SshTransport transport) async {
     try {
       _phoneBridge = await PhoneBridgeLink.start(transport, _phone);
-      // A reused `dsh web` was started before the bridge existed; restart it so
-      // its MCP client picks up mcp-phone.
-      if (_phoneBridge != null) _forceRestart = true;
+      if (_phoneBridge == null) return;
+      final home = (await transport.run(r'printf %s "$HOME"')).stdout.trim();
+      if (home.isEmpty) return;
+      final stateDir = '$home/.dsh';
+      final patchPath = '$stateDir/phone.patch.yml';
+      final relayPath = '$stateDir/phone-relay.cjs';
+      final yaml = '''
+- insert:
+    - id: mcp-phone
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: phone
+        transport: stdio
+        command: node
+        args: ['$relayPath']
+        toolCallTimeoutMs: 120000
+''';
+      await transport.run(
+        'mkdir -p ${shQuote(stateDir)} && printf %s ${shQuote(yaml)} > ${shQuote(patchPath)} && chmod 600 ${shQuote(patchPath)}',
+        timeout: const Duration(seconds: 20),
+      );
+      _phonePatchArg = ' --patch ${shQuote(patchPath)}';
+      // A reused `dsh web` was started without the phone tools; restart it so
+      // its MCP client picks up the patched profile.
+      _forceRestart = true;
     } catch (_) {
       _phoneBridge = null;
+      _phonePatchArg = null;
     }
   }
 
   void _teardownTransport() {
     unawaited(_phoneBridge?.close());
     _phoneBridge = null;
+    _phonePatchArg = null;
     _keepAlive?.cancel();
     _keepAlive = null;
     final transport = _transport;
