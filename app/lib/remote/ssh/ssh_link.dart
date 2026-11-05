@@ -410,6 +410,9 @@ class SshHostLink implements HostLink {
   Future<void> _publishPhoneBridge(SshTransport transport) async {
     try {
       _phoneBridge = await PhoneBridgeLink.start(transport, _phone);
+      // A reused `dsh web` was started before the bridge existed; restart it so
+      // its MCP client picks up mcp-phone.
+      if (_phoneBridge != null) _forceRestart = true;
     } catch (_) {
       _phoneBridge = null;
     }
