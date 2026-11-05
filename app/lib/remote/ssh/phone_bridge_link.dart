@@ -21,6 +21,8 @@ class PhoneBridgeLink {
   final int _bridgePort;
   final PhoneChannel _phone;
   final Map<int, Socket> _sockets = <int, Socket>{};
+  /// Bytes that arrived before the phone-side socket for that id existed.
+  final Map<int, List<int>> _pendingData = <int, List<int>>{};
   final Completer<int> _port = Completer<int>();
   final List<int> _pending = <int>[];
   StreamSubscription<Uint8List>? _sub;
@@ -107,8 +109,19 @@ class PhoneBridgeLink {
       _open(id);
     } else if (kind == 'data') {
       final b = frame['b'];
-      if (b is String) _sockets[id]?.add(base64Decode(b));
+      if (b is String) {
+        final bytes = base64Decode(b);
+        final socket = _sockets[id];
+        if (socket != null) {
+          socket.add(bytes);
+        } else {
+          // The relay sends its hello line as soon as it connects, which is
+          // before this side has finished opening the phone bridge socket.
+          _pendingData.putIfAbsent(id, () => <int>[]).addAll(bytes);
+        }
+      }
     } else if (kind == 'close') {
+      _pendingData.remove(id);
       _sockets.remove(id)?.destroy();
     }
   }
@@ -121,6 +134,8 @@ class PhoneBridgeLink {
         return;
       }
       _sockets[id] = socket;
+      final queued = _pendingData.remove(id);
+      if (queued != null) socket.add(queued);
       socket.listen(
         (data) => _send(<String, Object>{'t': 'data', 'id': id, 'b': base64Encode(data)}),
         onDone: () => _drop(id),
