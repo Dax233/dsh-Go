@@ -381,6 +381,15 @@ class SshHostLink implements HostLink {
     } on DshException catch (e) {
       throw HostLinkError(HostLinkErrorKind.tunnelFailed, appL10n.remoteErrDshTunnel, detail: '$e', retryable: true);
     }
+    // Diagnostics: surface mux/carrier state changes on the host breadcrumb.
+    final traceTransport = _transport;
+    if (traceTransport != null) {
+      client.tracer = (entry) {
+        if (entry.channel == 'state') {
+          unawaited(_bridgeBreadcrumb(traceTransport, 'mux ${entry.data}'));
+        }
+      };
+    }
     if (_closed) {
       await client.close().catchError((_) {});
       throw StateError('link closed');
