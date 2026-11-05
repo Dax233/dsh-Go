@@ -191,7 +191,7 @@ class DshHttpCarrier extends DshCarrier {
 /// pings every 2 s (`dart:io` answers); [pingInterval] adds client pings for
 /// dead-link detection.
 class _WebSocketMuxLink implements DshMuxLink {
-  _WebSocketMuxLink(this._socket, this._tracer, Duration pingInterval) {
+  _WebSocketMuxLink(this._socket, this._tracer, Duration? pingInterval) {
     _socket.pingInterval = pingInterval;
   }
 

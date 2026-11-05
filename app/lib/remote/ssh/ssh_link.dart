@@ -44,6 +44,10 @@ Future<DshClient> _defaultConnector({required Uri baseUri, required String token
       token: token,
       hostHeader: hostHeader,
       tracer: (entry) => dshLinkTrace?.call(entry),
+      // The SSH link carries this mux, so the SSH keepalive is the physical
+      // liveness check. dart:io's WebSocket ping timer would close a healthy
+      // socket with 1001 whenever a pong is merely late across the tunnel.
+      muxOptions: const MuxOptions(pingInterval: null),
     );
 
 /// Trust-on-first-use check against the pinned fingerprint.
@@ -105,6 +109,7 @@ class SshHostLink implements HostLink {
     this.remoteEnvironment = const {},
     this.keepAliveInterval = const Duration(seconds: 20),
     this.keepAliveTimeout = const Duration(seconds: 30),
+    this.muxProbeDelay = const Duration(seconds: 30),
     this.tunnelProbeTimeout = const Duration(seconds: 10),
     this.retryFirstOpen = true,
   }) : _transportFactory = transportFactory ?? DartSshTransport.connect,
@@ -123,6 +128,14 @@ class SshHostLink implements HostLink {
   final Map<String, String> remoteEnvironment;
   final Duration keepAliveInterval;
   final Duration keepAliveTimeout;
+
+  /// How long the mux may stay disconnected before the DSH port is probed.
+  ///
+  /// The Host recycles idle mux sockets as a matter of course; that reconnect
+  /// is not evidence that the DSH process died. Probing it immediately used to
+  /// turn one ordinary socket recycle into a full SSH reconnect (new phone
+  /// bridge port, every stream torn down), several times a minute.
+  final Duration muxProbeDelay;
 
   /// Bounds the initial probe and subsequent forwarded channel opens.
   final Duration tunnelProbeTimeout;
@@ -145,7 +158,16 @@ class SshHostLink implements HostLink {
   DshClient? _client;
   Future<DshClient>? _opening;
   Timer? _keepAlive;
+  bool _keepAliveTickInFlight = false;
   int _missedPings = 0;
+
+  /// When the mux first stopped being connected, or null while it is
+  /// connected. A sustained outage - not one reconnect - may touch DSH.
+  DateTime? _muxDownSince;
+  /// Upper bound on one SSH global keepalive request. The channel round-trip
+  /// that follows it gets the caller's whole budget instead.
+  static const Duration _pingRequestTimeout = Duration(seconds: 8);
+
   bool _closed = false;
   bool _recovering = false;
   bool _needsRelogin = false;
@@ -364,8 +386,10 @@ class SshHostLink implements HostLink {
     final sameServer = previous != null && previous.port == endpoint.port && previous.token == endpoint.token;
     if (existing != null && sameServer && !_needsRelogin) {
       // Same process behind the same port: the cookie still works and the mux
-      // reconnects through the forwarder by itself. Skip its backoff.
-      existing.mux.reconnect();
+      // reconnects through the forwarder by itself. Leave a mux that already
+      // recovered alone: reconnect() would drop a healthy generation and make
+      // every stream re-open and re-pull its snapshot over the same slow link.
+      if (existing.mux.state != DshConnectionState.connected) existing.mux.reconnect();
       return existing;
     }
     // Diagnostics: surface mux/carrier state changes on the host breadcrumb.
@@ -414,8 +438,17 @@ class SshHostLink implements HostLink {
 
   void _watchMux(DshClient client) {
     unawaited(_muxSub?.cancel());
+    // A client handed over while its mux is already retrying starts the grace
+    // clock now; otherwise the first state change does.
+    if (client.mux.state != DshConnectionState.connected) _muxDownSince ??= DateTime.now();
     _muxSub = client.mux.states.listen((state) {
-      if (state == DshConnectionState.unauthorized && identical(client, _client)) {
+      if (!identical(client, _client)) return;
+      if (state == DshConnectionState.connected) {
+        _muxDownSince = null;
+      } else {
+        _muxDownSince ??= DateTime.now();
+      }
+      if (state == DshConnectionState.unauthorized) {
         _needsRelogin = true;
         _lost(HostLinkError(HostLinkErrorKind.loginFailed, appL10n.remoteErrDshSignInExpired, retryable: true));
       }
@@ -424,6 +457,14 @@ class SshHostLink implements HostLink {
 
   /// SSH answers but the mux can't get through: if nothing listens on DSH's
   /// port any more, reconnect, which starts it again.
+  ///
+  /// Only a refused connection proves the DSH process is gone. Anything else
+  /// (a slow channel open, a gateway refusing direct-tcpip, a timeout) is
+  /// inconclusive: tearing the SSH link down for it reconnects every stream,
+  /// republishes the phone bridge and restarts DSH's relay - for nothing.
+  /// When the port probe is inconclusive, a channel round-trip decides whether
+  /// the SSH link itself is still alive; a live link keeps its connection and
+  /// lets the mux retry.
   Future<void> _probeDsh() async {
     final transport = _transport;
     final endpoint = _endpoint;
@@ -431,12 +472,30 @@ class SshHostLink implements HostLink {
     try {
       // A channel that opens after the timeout is still closed.
       final probe = transport.openTunnel('127.0.0.1', endpoint.port).then((channel) => channel.destroy());
-      await probe.timeout(const Duration(seconds: 5));
-    } catch (_) {
+      await probe.timeout(tunnelProbeTimeout);
+      return;
+    } on TunnelRefused {
       if (!identical(transport, _transport)) return;
       _backoff.reset();
       _lost(HostLinkError(HostLinkErrorKind.dshStartFailed, appL10n.remoteErrDshStopped, retryable: true));
+      return;
+    } catch (_) {
+      // Inconclusive; check SSH below instead of declaring the Host dead.
     }
+    // Two consecutive channel round-trips must fail before the SSH link is
+    // declared dead: one slow reply is not a lost link.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await transport.run('true', timeout: tunnelProbeTimeout);
+        return;
+      } catch (_) {
+        if (!identical(transport, _transport)) return;
+        if (attempt == 0) await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    }
+    if (!identical(transport, _transport)) return;
+    _backoff.reset();
+    _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshDisconnected, retryable: true));
   }
 
   void _installTransport(SshTransport transport) {
@@ -496,6 +555,8 @@ class SshHostLink implements HostLink {
     _phoneProfileLaunch = null;
     _keepAlive?.cancel();
     _keepAlive = null;
+    _muxDownSince = null;
+    _missedPings = 0;
     final transport = _transport;
     _transport = null;
     if (_ready.isCompleted) _ready = Completer<SshTransport>();
@@ -532,37 +593,57 @@ class SshHostLink implements HostLink {
   void _startKeepAlive() {
     _keepAlive?.cancel();
     _missedPings = 0;
-    _keepAlive = Timer.periodic(keepAliveInterval, (_) => unawaited(_keepAliveTick()));
+    _keepAlive = Timer.periodic(keepAliveInterval, (_) {
+      // Traffic floor: the gateway drops a connection that is idle for ~62s,
+      // and one slow tick can outlast an interval. This request is fired on
+      // every interval regardless of what the in-flight tick is still doing.
+      _nudgeTraffic();
+      unawaited(_keepAliveTick());
+    });
+  }
+
+  /// Fire-and-forget SSH global keepalive, sent only to reset the gateway's
+  /// idle timer. Never awaited: dartssh2 4.1.0's reply may never arrive.
+  void _nudgeTraffic() {
+    final transport = _transport;
+    if (transport == null || _closed) return;
+    unawaited(transport.ping(timeout: _pingRequestTimeout).catchError((Object _) {}));
   }
 
   Future<void> _keepAliveTick() async {
-    if (!await _ping(keepAliveTimeout)) return;
-    final mux = _client?.mux.state;
-    if (mux == DshConnectionState.connecting || mux == DshConnectionState.reconnecting) await _probeDsh();
+    // One tick at a time. Timer.periodic keeps firing while a tick awaits a
+    // slow ping and its channel fallback, and every overlapping tick used to
+    // count its own "missed" ping: one hiccup could produce three.
+    if (_keepAliveTickInFlight) return;
+    _keepAliveTickInFlight = true;
+    try {
+      if (!await _ping(keepAliveTimeout)) return;
+      if (_client?.mux.state == DshConnectionState.connected) return;
+      final downSince = _muxDownSince;
+      if (downSince == null) return;
+      if (DateTime.now().difference(downSince) < muxProbeDelay) return;
+      await _probeDsh();
+    } finally {
+      _keepAliveTickInFlight = false;
+    }
   }
 
   Future<bool> _ping(Duration timeout) async {
     final transport = _transport;
     if (transport == null || _closed) return false;
+    // A global keepalive request is optional for the protocol and its reply
+    // is never waited for (see _nudgeTraffic). A real channel round-trip is the
+    // authoritative dead-link check and carries its own timeout.
     try {
-      await transport.ping(timeout: timeout);
+      await transport.run('true', timeout: timeout);
       _missedPings = 0;
       return true;
     } catch (_) {
-      // Some SSH gateways never answer the global keepalive request, so a
-      // ping timeout alone does not mean the link is gone. A real channel
-      // round-trip is authoritative: if 'true' still runs, we are alive.
-      try {
-        await transport.run('true', timeout: timeout);
-        _missedPings = 0;
-        return true;
-      } catch (_) {
-        _missedPings++;
-        if (_missedPings >= 3 && identical(transport, _transport)) {
-          _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
-        }
-        return false;
+      _missedPings++;
+      if (_missedPings >= 3 && identical(transport, _transport)) {
+        _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
       }
+      return false;
     }
   }
 

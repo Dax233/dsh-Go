@@ -73,8 +73,9 @@ class MuxOptions {
 
   /// Client ping cadence; a missing pong closes the socket (dead-link
   /// detection). Used by WebSocket carriers; tunnel carriers run their own
-  /// health checks.
-  final Duration pingInterval;
+  /// health checks, and can pass null to leave liveness to the tunnel: a
+  /// delayed pong across a slow tunnel must not close a healthy socket.
+  final Duration? pingInterval;
 
   /// Backoff caps per attempt (50-100 % jitter), the last one repeats; same
   /// schedule as the official web client.

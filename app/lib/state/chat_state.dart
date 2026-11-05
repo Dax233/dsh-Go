@@ -701,12 +701,27 @@ class ChatController extends Notifier<ChatState> {
     if (_resyncFuture case final existing?) return existing;
     final client = _client;
     if (client == null) return Future.value(false);
+    // A closed client is terminal: no listener, no timer, no reconnect (a
+    // closed mux ignores reconnect()). The watch already reported the error.
+    if (client.mux.state == DshConnectionState.closed) return Future.value(false);
     final owner = ref;
     final attempt = _resyncOwner = Object();
     state = state.copyWith(resyncing: true);
-    _listen(client, ref.read(runPulseProvider(sessionId)));
+    // A live watch reopens its own follow on the ready successor generation
+    // (DshWatch.loop does this itself). Rebuilding it here would cancel that
+    // recovery and pull the whole snapshot again; wait for the successor
+    // instead. Only a watch that already ended is replaced.
+    final awaitingSuccessor = !_watchEnded && _sub != null;
+    if (!awaitingSuccessor) _listen(client, ref.read(runPulseProvider(sessionId)));
     final listener = _listenOwner;
-    if (client.mux.state != DshConnectionState.connected) client.mux.reconnect();
+    // Only a mux that gave up (idle/closed) or lost its login needs a kick.
+    // Calling reconnect() while the mux is connecting or reconnecting would
+    // reset its backoff and fail every stream again, including the follow this
+    // resync just opened.
+    final muxState = client.mux.state;
+    if (muxState == DshConnectionState.idle || muxState == DshConnectionState.unauthorized) {
+      client.mux.reconnect();
+    }
     final ready = _syncReady.future;
     return _resyncFuture = (() async {
       try {
@@ -720,6 +735,8 @@ class ChatController extends Notifier<ChatState> {
                   if (!_syncReady.isCompleted) _syncReady.complete(false);
                   unawaited(_sub?.cancel());
                   state = state.copyWith(streamLost: true, loading: false);
+                  // This attempt never replaced the watch, so arm the next one.
+                  if (awaitingSuccessor) _scheduleFollowRetry();
                 }
                 return false;
               },
@@ -737,14 +754,36 @@ class ChatController extends Notifier<ChatState> {
     })();
   }
 
+  /// Backoff between follow-stream reopen attempts: 1, 2, 4, 8, 16, then
+  /// every 30 seconds, each jittered by ±20%. Never gives up: a stream can
+  /// also end while the mux itself stays connected, and then no mux event will
+  /// ever reopen it - the screen would sit at "syncing" until it is rebuilt.
+  ///
+  /// The jitter keeps several sessions from re-pulling their snapshots in the
+  /// same second; that burst is what blocks the socket in the first place.
+  static Duration followRetryDelay(int retries) {
+    final seconds = retries <= 0 ? 1 : (retries >= 5 ? 30 : 1 << retries);
+    final millis = (seconds * 1000 * (0.8 + 0.4 * _retryJitter.nextDouble())).round();
+    return Duration(milliseconds: millis);
+  }
+
+  static final Random _retryJitter = Random();
+
   /// A follow stream can end (tunnel blip, host restart) without anyone asking
   /// for a resync; reopen it with backoff so the UI leaves "syncing" by itself.
   void _scheduleFollowRetry() {
-    if (_followRetries >= 5) return;
+    // A closed client is terminal; rearming here would leave a pending timer
+    // behind a disposed screen and spin against a mux that can never answer.
+    if (ref.mounted && _client?.mux.state == DshConnectionState.closed) return;
     _followRetry?.cancel();
-    final delay = Duration(seconds: 1 << _followRetries);
-    _followRetry = Timer(delay, () {
+    _followRetry = Timer(followRetryDelay(_followRetries), () {
       if (!ref.mounted) return;
+      // A resync may already be in flight (the UI or a previous attempt):
+      // let it settle instead of burning a retry against it.
+      if (_resyncFuture != null) {
+        _scheduleFollowRetry();
+        return;
+      }
       _followRetries++;
       unawaited(resync());
     });

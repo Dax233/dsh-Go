@@ -44,6 +44,7 @@ void main() {
     Backoff? backoff,
     bool retryFirstOpen = true,
     StreamController<void>? kicks,
+    Duration muxProbeDelay = const Duration(seconds: 30),
   }) {
     final l = SshHostLink(
       config: config,
@@ -57,13 +58,14 @@ void main() {
       kicks: kicks?.stream,
       keepAliveInterval: const Duration(milliseconds: 20),
       keepAliveTimeout: const Duration(milliseconds: 20),
+      muxProbeDelay: muxProbeDelay,
     );
     links.add(l);
     return l;
   }
 
   test('a mux stuck reconnecting over live SSH restarts a dead DSH', () async {
-    final l = link();
+    final l = link(muxProbeDelay: Duration.zero);
     final original = await l.open();
     final replaced = l.clients.first;
     server.remote.killServer();
@@ -75,7 +77,7 @@ void main() {
   });
 
   test('a live DSH is left alone while the mux retries', () async {
-    final l = link();
+    final l = link(muxProbeDelay: Duration.zero);
     final original = await l.open();
     original.mux.ready().ignore();
     // A few keepalive ticks, each probing the DSH port.
@@ -84,6 +86,44 @@ void main() {
     expect(server.transports, hasLength(1));
     expect(server.remote.launches, 1);
     expect(l.currentClient, same(original));
+  });
+
+  test('an inconclusive port probe keeps the live SSH link', () async {
+    final l = link(muxProbeDelay: Duration.zero);
+    final original = await l.open();
+    final before = server.transports.length;
+    // A slow channel open or a gateway refusing direct-tcpip is not proof that
+    // the SSH link (or the DSH process) is gone.
+    server.last.tunnelOpenFails = true;
+    original.mux.ready().ignore();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(server.transports, hasLength(before), reason: 'never rebuilt the SSH connection for a probe hiccup');
+    expect(l.status.isConnected, isTrue);
+    expect(l.currentClient, same(original));
+    expect(server.remote.launches, 1);
+  });
+
+  test('one failed channel round-trip is not a dead SSH link', () async {
+    final l = link(muxProbeDelay: Duration.zero);
+    final original = await l.open();
+    server.last.tunnelOpenFails = true;
+    server.last.runFailures = 1;
+    original.mux.ready().ignore();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(server.transports, hasLength(1), reason: 'two consecutive round-trip failures are required');
+    expect(l.status.isConnected, isTrue);
+    expect(l.currentClient, same(original));
+  });
+
+  test('a mux reconnect shorter than the grace period is not probed at all', () async {
+    final l = link(muxProbeDelay: const Duration(seconds: 5));
+    final original = await l.open();
+    original.mux.ready().ignore();
+    final before = server.last.tunnels.length;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(server.last.tunnels, hasLength(before), reason: 'no probe while the mux is allowed to reconnect');
+    expect(server.transports, hasLength(1));
+    expect(l.status.isConnected, isTrue);
   });
 
   test('a refused reused port forces just one fresh server', () async {
@@ -305,7 +345,9 @@ void main() {
     final l = link();
     await l.open();
     final connected = nextStatus(l, (s) => s.isConnected, what: '保活失败后重连');
+    // Both the global keepalive and the authoritative channel round-trip fail.
     server.last.pingOk = false;
+    server.last.runFails = true;
     await connected;
     expect(server.transports.length, greaterThanOrEqualTo(2));
     expect(l.status.isConnected, isTrue);

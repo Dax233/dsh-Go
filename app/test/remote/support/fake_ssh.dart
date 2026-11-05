@@ -76,6 +76,24 @@ class FakeChannel implements TunnelChannel {
   }
 }
 
+/// Exec channel that never carries traffic; phone-bridge tests subclass it.
+class FakeExecChannel implements RemoteExecChannel {
+  final _stdout = StreamController<Uint8List>();
+  final _stdin = StreamController<List<int>>();
+
+  @override
+  StreamSink<List<int>> get stdin => _stdin.sink;
+
+  @override
+  Stream<Uint8List> get stdout => _stdout.stream;
+
+  @override
+  Future<void> close() async {
+    if (!_stdout.isClosed) await _stdout.close();
+    if (!_stdin.isClosed) await _stdin.close();
+  }
+}
+
 class FakeTransport implements SshTransport {
   FakeTransport(this.remote, {this.pingOk = true});
 
@@ -84,6 +102,17 @@ class FakeTransport implements SshTransport {
   final _done = Completer<void>();
   final List<String> scripts = [];
   final List<(String, int)> tunnels = [];
+  final List<String> execs = [];
+
+  /// When set, every tunnel open fails with an inconclusive error (not a
+  /// refused port): a slow channel, a gateway refusing direct-tcpip, ...
+  bool tunnelOpenFails = false;
+
+  /// When set, exec channels fail too (a channel round-trip that cannot run).
+  bool runFails = false;
+
+  /// Fail this many of the next exec-channel round-trips, then recover.
+  int runFailures = 0;
 
   /// Simulates the network dropping the connection.
   void drop() {
@@ -93,6 +122,11 @@ class FakeTransport implements SshTransport {
   @override
   Future<RemoteExecResult> run(String script, {Duration timeout = const Duration(seconds: 30)}) async {
     if (_done.isCompleted) throw const HostLinkError(HostLinkErrorKind.unreachable, 'closed', retryable: true);
+    if (runFails) throw const HostLinkError(HostLinkErrorKind.unreachable, 'unresponsive', retryable: true);
+    if (runFailures > 0) {
+      runFailures--;
+      throw const HostLinkError(HostLinkErrorKind.unreachable, 'unresponsive', retryable: true);
+    }
     scripts.add(script);
     return remote.run(script);
   }
@@ -101,8 +135,16 @@ class FakeTransport implements SshTransport {
   Future<TunnelChannel> openTunnel(String host, int port) async {
     tunnels.add((host, port));
     if (remote.tunnelErrors.isNotEmpty) throw remote.tunnelErrors.removeAt(0);
+    if (tunnelOpenFails) throw StateError('channel open failed');
     if (remote.pid == null || port != remote.port) throw const TunnelRefused();
     return FakeChannel(echo: true);
+  }
+
+  @override
+  Future<RemoteExecChannel> execChannel(String command) async {
+    execs.add(command);
+    if (_done.isCompleted) throw const HostLinkError(HostLinkErrorKind.unreachable, 'closed', retryable: true);
+    return FakeExecChannel();
   }
 
   @override
