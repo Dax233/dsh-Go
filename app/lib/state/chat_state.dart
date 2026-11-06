@@ -670,11 +670,6 @@ class ChatController extends Notifier<ChatState> {
     _quiet = true;
   }
 
-  void _relisten() {
-    final client = _client;
-    if (client != null) _listen(client, ref.read(runPulseProvider(sessionId)));
-  }
-
   /// The loaded conversation without its live parts (running, approvals,
   /// questions), across a new or a lost connection.
   ChatState _retained({required bool loading}) => ChatState(

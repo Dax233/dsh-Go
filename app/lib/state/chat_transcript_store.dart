@@ -45,7 +45,7 @@ class ChatTranscriptStore {
   Future<void> appendSnapshot(String hostKey, String sessionId, int cursor, Object? item) async {
     try {
       final file = await _file(hostKey, sessionId);
-      await file.writeAsString(jsonEncode({'snapshot': cursor, 'item': item}) + '\n', flush: false);
+      await file.writeAsString('${jsonEncode({'snapshot': cursor, 'item': item})}\n', flush: false);
     } catch (_) {
       // Best effort.
     }

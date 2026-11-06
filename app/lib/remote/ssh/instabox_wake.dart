@@ -65,7 +65,7 @@ class InstaboxWake {
   static Future<T> _bounded<T>(Future<T> future) => future.timeout(
     _requestTimeout,
     onTimeout: () => throw InstaboxWakeError(
-      'InstaBox API timed out after ' + _requestTimeout.inSeconds.toString() + 's',
+      'InstaBox API timed out after ${_requestTimeout.inSeconds}s',
     ),
   );
 
@@ -106,15 +106,15 @@ class InstaboxWake {
         if (value == 'error') {
           throw InstaboxWakeError('InstaBox machine entered the error state');
         }
-        onProgress?.call('instabox: ' + (value ?? 'unknown'));
+        onProgress?.call('instabox: ${value ?? 'unknown'}');
       }
       throw InstaboxWakeError(
-        'InstaBox machine did not become ready within ' + timeout.inSeconds.toString() + 's',
+        'InstaBox machine did not become ready within ${timeout.inSeconds}s',
       );
     } on InstaboxWakeError {
       rethrow;
     } on IOException catch (e) {
-      throw InstaboxWakeError('InstaBox API unreachable: ' + e.toString());
+      throw InstaboxWakeError('InstaBox API unreachable: $e');
     } finally {
       client.close(force: true);
     }
@@ -146,10 +146,7 @@ class InstaboxWake {
   }
 
   static Uri _machineUri(String suffix) => Uri.parse(
-    instaboxWakeApiBase.replaceAll(RegExp(r'/+$'), '') +
-        '/v1/machines/' +
-        instaboxWakeMachineId +
-        suffix,
+    '${instaboxWakeApiBase.replaceAll(RegExp(r'/+$'), '')}/v1/machines/$instaboxWakeMachineId$suffix',
   );
 
   static Map<String, String> _headers({bool idempotent = false}) {
@@ -173,7 +170,7 @@ class InstaboxWake {
     final response = await _bounded(request.close());
     final body = await _bounded(utf8.decodeStream(response));
     if (response.statusCode != 200) {
-      throw InstaboxWakeError('InstaBox API ' + response.statusCode.toString() + ': ' + body);
+      throw InstaboxWakeError('InstaBox API ${response.statusCode}: $body');
     }
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
@@ -183,14 +180,14 @@ class InstaboxWake {
   }
 
   static Future<void> _post(HttpClient client, String action) async {
-    final request = await _bounded(client.postUrl(_machineUri('/' + action)));
+    final request = await _bounded(client.postUrl(_machineUri('/$action')));
     _headers(idempotent: true).forEach(request.headers.set);
     request.contentLength = 0;
     final response = await _bounded(request.close());
     final body = await _bounded(utf8.decodeStream(response));
     if (response.statusCode != 202 && response.statusCode != 200 && response.statusCode != 409) {
       throw InstaboxWakeError(
-        'InstaBox ' + action + ' failed (' + response.statusCode.toString() + '): ' + body,
+        'InstaBox $action failed (${response.statusCode}): $body',
       );
     }
   }

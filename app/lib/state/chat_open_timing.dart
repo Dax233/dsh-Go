@@ -27,7 +27,7 @@ class ChatOpenTiming {
       'seededFromDisk': seededFromDisk,
       'seedMs': seedMs,
       'firstPaintMs': firstPaintMs,
-      if (snapshotMs != null) 'snapshotMs': snapshotMs,
+      'snapshotMs': ?snapshotMs,
     });
     while (_recent.length > _max) {
       _recent.removeLast();
