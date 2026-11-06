@@ -207,29 +207,39 @@ class _WebSocketMuxLink implements DshMuxLink {
       (data) {
         if (_lost) return;
         if (data is! String) {
-          _protocolFailure('binary WebSocket message');
+          // A binary frame is not part of this protocol, but one unknown frame
+          // must not fail every stream multiplexed over the link: ignore and
+          // keep the link. A real protocol break shows up as a missing
+          // streamId below.
+          _tracer?.call(DshTraceEntry('in', 'mux-binary-ignored', {
+            'bytes': data is List<int> ? data.length : null,
+          }));
           return;
         }
         final frame = asMap(tryDecodeJson(data));
         final streamId = asString(frame?['streamId']);
         final type = asString(frame?['type']);
-        if (frame == null ||
-            streamId == null ||
-            streamId.isEmpty ||
-            (type != 'item' && type != 'end' && type != 'error')) {
+        if (frame == null || streamId == null || streamId.isEmpty) {
           _protocolFailure('invalid Remote stream frame');
+          return;
+        }
+        if (type != 'item' && type != 'end' && type != 'error') {
+          // A newer Host may add control frames (ack/meta/ping). Ignoring an
+          // unknown type is forward compatibility; treating it as a violation
+          // would restart every follow stream on the link for nothing.
+          _tracer?.call(DshTraceEntry('in', 'mux-unknown-frame', frame));
           return;
         }
         _tracer?.call(DshTraceEntry('in', 'mux', frame));
         onFrame(frame);
       },
-      onError: (Object error) => _lose(DshCarrierLostException('WebSocket error: $error'), null),
-      onDone: () => _lose(
-        DshCarrierLostException(
+      onError: (Object error) => _lose(DshCarrierLostException('WebSocket error: $error'), error),
+      onDone: () {
+        final failure = DshCarrierLostException(
           'WebSocket closed (${_socket.closeCode ?? 'no code'} ${_socket.closeReason ?? ''})'.trim(),
-        ),
-        null,
-      ),
+        );
+        _lose(failure, failure);
+      },
       cancelOnError: true,
     );
   }

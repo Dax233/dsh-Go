@@ -174,6 +174,11 @@ class DshMux {
       _handleLoss(link, const DshCarrierLostException('reconnect requested'));
       unawaited(link.close(4000, 'reconnect requested'));
     }
+    // _handleLoss arms the backoff timer; a reconnect asked for by the user (or
+    // by a fresh login) must not wait out that delay, nor leave it armed to
+    // fire a second connection later.
+    _retryTimer?.cancel();
+    _retryTimer = null;
     _ensureConnecting();
   }
 
@@ -238,7 +243,19 @@ class DshMux {
   void _ensureConnecting() {
     if (_closed || _connecting != null || _link != null) return;
     if (_retryTimer?.isActive ?? false) return;
-    _connecting = _connectOnce().whenComplete(() => _connecting = null);
+    _connecting = _connectOnce().catchError((Object error, StackTrace stack) {
+      // A carrier or platform error that is not a DshException used to escape
+      // into this unawaited future: the state machine stayed in `connecting`
+      // with no retry timer, so the UI hung on "连接服务器…" until the app was
+      // restarted. Every failure now lands back in the retry loop.
+      if (_closed) return;
+      final link = _link;
+      _link = null;
+      _generation = null;
+      if (link != null) unawaited(link.close(4000, 'connect failed'));
+      _lastError = error;
+      _scheduleRetry();
+    }).whenComplete(() => _connecting = null);
   }
 
   Future<void> _connectOnce() async {
