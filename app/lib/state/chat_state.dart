@@ -431,8 +431,13 @@ class ChatController extends Notifier<ChatState> {
   /// Cold open: recent messages enough for the first phone screen; older
   /// history pages in through [loadOlder] instead of shipping the desktop
   /// 500-message window (~1 MB) over a remote link.
-  static const int _coldWindow = 60;
-  static const TurnWindow _coldTurnWindow = TurnWindow(40, 2);
+  ///
+  /// 30, not 60: a measured InstaBox link runs at ~59 KB/s, and a long session
+  /// with image/tool payloads makes a 60-message window cost minutes. The disk
+  /// cache makes this a once-per-install path, so the first open can lean
+  /// shorter and page older history on demand.
+  static const int _coldWindow = 30;
+  static const TurnWindow _coldTurnWindow = TurnWindow(20, 2);
 
   /// Cache hit: the transcript already holds the history, so the snapshot only
   /// reconciles the tail and the follow fills the seq gap.
