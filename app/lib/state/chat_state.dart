@@ -646,15 +646,18 @@ class ChatController extends Notifier<ChatState> {
         _quietIfRunning();
       });
     } else if (_quiet) {
+      // Returning to the app must not rebuild the follow: a reopened stream
+      // makes the Host resend a window snapshot, the "syncing" the user sees
+      // on every return. The live follow was kept, so nothing to reopen.
       _quiet = false;
-      if (!building) _relisten();
     }
   }
 
   void _quietIfRunning() {
     if (!_awayLong || _quiet || !ref.mounted || !_transcript.running) return;
+    // Mark quiet but keep the live follow: rebuilding it forces a fresh window
+    // snapshot on both entering and leaving the background.
     _quiet = true;
-    _relisten();
   }
 
   void _relisten() {
