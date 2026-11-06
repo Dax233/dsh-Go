@@ -555,7 +555,6 @@ class ChatController extends Notifier<ChatState> {
       _transcript = ref.read(chatTranscriptCacheProvider).acquire(hostKey, sessionId);
       _transcriptHostKey = hostKey;
       _seededFromDisk = false;
-      _seedInFlight = null;
       _lastStoredSeq = -1;
     }
     if (_approvalHost != host) {
@@ -829,7 +828,6 @@ class ChatController extends Notifier<ChatState> {
   }
 
   bool _seededFromDisk = false;
-  Future<void>? _seedInFlight;
   int _lastStoredSeq = -1;
 
   /// Timing of the current open, for the diagnostics bundle (chat-timing.json).
@@ -839,9 +837,11 @@ class ChatController extends Notifier<ChatState> {
   int _openSeedMs = 0;
   int? _openSeedPaintMs;
 
-  /// Cold open paints the durable log from disk before opening the follow, so
-  /// the conversation shows at once and the follow repairs only the tail
-  /// (warm window) instead of downloading the whole initial window again.
+  /// A cold open paints the durable log from disk *while* the follow starts.
+  /// Waiting for the disk first delayed the stream itself — and where the path
+  /// provider never answers (widget tests, a locked device) it delayed it for
+  /// the whole timeout. The replayed history merges in and publishes on
+  /// arrival; the follow snapshot then repairs the tail.
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
     _openStartedAt = DateTime.now();
     _openRecorded = false;
@@ -849,54 +849,46 @@ class ChatController extends Notifier<ChatState> {
     _openSeedMs = 0;
     _openSeedPaintMs = null;
     if (_transcript.events.isEmpty && !_seededFromDisk) {
-      _seedInFlight ??= _seedThenListen(client, pulse, building);
-      return;
+      // One attempt per open, not one per reconnect.
+      _seededFromDisk = true;
+      unawaited(_seedFromDisk());
     }
     _listenNow(client, pulse, building: building);
   }
 
-  Future<void> _seedThenListen(DshClient client, RunPulse pulse, bool building) async {
+  Future<void> _seedFromDisk() async {
     final seedStarted = DateTime.now();
     try {
-      // Never let the cache stand between a cold open and its follow: a store
-      // that cannot open (path provider missing, IO blocked) must cost one
-      // cold start, not a permanently unsynchronised chat.
-      final store = await ref
-          .read(chatTranscriptStoreProvider.future)
-          .timeout(const Duration(seconds: 2));
+      // No timeout timer here: the seed is fire-and-forget, so a store that
+      // never answers costs the cache, not the chat — and a pending timer would
+      // outlive widget tests that use fake time.
+      final store = await ref.read(chatTranscriptStoreProvider.future);
       final hostKey = _transcriptHostKey;
-      if (hostKey != null && _transcript.events.isEmpty) {
-        final entries = await store.read(hostKey, sessionId);
-        for (final entry in entries) {
-          final item = entry['item'];
-          final event = parseFollowFrame(sessionId, item);
-          if (entry['snapshot'] is int) {
-            // A snapshot is the base of the stored log: replay it whole, then
-            // the items it does not already contain.
-            if (event is SessionSnapshotEvent) {
-              _transcript.apply(event, preserveOlderHistory: true);
-            }
-          } else if (entry['seq'] is int && event is SessionLogEvent) {
-            _transcript.apply(event);
+      if (hostKey == null || _transcript.events.isNotEmpty) return;
+      final entries = await store.read(hostKey, sessionId);
+      if (entries.isEmpty) return;
+      for (final entry in entries) {
+        final event = parseFollowFrame(sessionId, entry['item']);
+        if (entry['snapshot'] is int) {
+          // The snapshot is the base of the stored log: replay it whole, then
+          // the items it does not already contain.
+          if (event is SessionSnapshotEvent) {
+            _transcript.apply(event, preserveOlderHistory: true);
           }
-        }
-        if (entries.isNotEmpty) {
-          _openSeeded = true;
-          _lastStoredSeq = _transcript.newestSeq ?? -1;
-          final started = _openStartedAt;
-          if (started != null) _openSeedPaintMs = DateTime.now().difference(started).inMilliseconds;
-          _publish();
+        } else if (entry['seq'] is int && event is SessionLogEvent) {
+          _transcript.apply(event);
         }
       }
+      _openSeeded = true;
+      _lastStoredSeq = _transcript.newestSeq ?? -1;
+      final opened = _openStartedAt;
+      if (opened != null) _openSeedPaintMs = DateTime.now().difference(opened).inMilliseconds;
+      _publish();
     } catch (_) {
       // The disk log is an optimisation: a bad file just means a cold start.
     } finally {
-      _seededFromDisk = true;
-      _seedInFlight = null;
       _openSeedMs = DateTime.now().difference(seedStarted).inMilliseconds;
     }
-    if (!ref.mounted || !identical(client, _client)) return;
-    _listenNow(client, pulse, building: building);
   }
 
   /// Replaces the stored log with the opening snapshot (best effort).
