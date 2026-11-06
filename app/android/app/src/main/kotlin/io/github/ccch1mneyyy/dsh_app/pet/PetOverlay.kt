@@ -320,6 +320,15 @@ internal object PetOverlay {
 
     private val evaluateRunnable = Runnable { evaluate() }
 
+    /**
+     * Re-decide now. The pet polls every [POLL_MS], but a phone task starting or
+     * ending changes its visibility immediately; without this the two floating
+     * windows overlap for up to a poll interval.
+     */
+    fun kick() {
+        if (initialized) main.post(evaluateRunnable)
+    }
+
     fun evaluate() {
         if (!initialized) return
         main.removeCallbacks(evaluateRunnable)

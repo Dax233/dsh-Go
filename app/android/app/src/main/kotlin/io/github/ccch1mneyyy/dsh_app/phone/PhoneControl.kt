@@ -22,6 +22,7 @@ import android.provider.Settings
 import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.github.ccch1mneyyy.dsh_app.R
 import io.github.ccch1mneyyy.dsh_app.notify.LiveActivity
+import io.github.ccch1mneyyy.dsh_app.pet.PetOverlay
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.A11yKeeper
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.PhoneA11yService
 import io.github.ccch1mneyyy.dsh_app.phone.background.BackgroundControl
@@ -316,6 +317,11 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     fun bridgeStopRemote() {
         if (rootfs != null) return
         stopBridge()
+        // The remote client that drove this phone is gone: no turn can end the
+        // task any more, so end it here. Otherwise the overlay and the live
+        // activity keep saying the phone is being controlled until the idle
+        // timeout, with nobody driving it.
+        tasks.endTask()
         emitStatus()
     }
 
@@ -378,6 +384,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         }
         DshService.updateNotification(app)
         LiveActivity.refresh(app)
+        // The pet hides while a phone task runs; make that immediate instead of
+        // waiting for its next poll, so the two floating windows never overlap.
+        runCatching { PetOverlay.kick() }
         emitStatus()
     }
 
