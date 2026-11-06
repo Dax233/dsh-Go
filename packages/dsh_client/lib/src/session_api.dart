@@ -73,7 +73,7 @@ class WatchOptions {
     this.includeHostEvents = true,
     this.includeConnectionEvents = true,
     this.includeSyncEvents = false,
-    this.hostRequestGrace = const Duration(seconds: 3),
+    this.hostRequestGrace = const Duration(seconds: 10),
   });
 
   /// Request activation on a confirmed compatible Host. Passive readers keep

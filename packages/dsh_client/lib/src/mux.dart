@@ -112,6 +112,11 @@ class DshMux {
   Timer? _readyTimer;
   Object? _lastError;
 
+  /// Consecutive identical HTTP rejections (404/415) that never become a
+  /// connection. See [`_connectOnce`] for why they stop the retry loop.
+  int? _lastRejectCode;
+  int _rejectStreak = 0;
+
   DshConnectionState get state => _state;
   Stream<DshConnectionState> get states => _states.stream;
 
@@ -268,6 +273,27 @@ class DshMux {
       if (error.isUnauthorized || error.isForbidden) {
         _refuse(error);
         return;
+      }
+      // 404 is an endpoint this Host does not mount, 415 a body it refuses:
+      // neither is transient. A Host that is still starting can answer 404
+      // once, so allow a few tries, then settle on idle instead of retrying
+      // forever behind "正在重连" where the user cannot tell what is wrong.
+      if (error.statusCode == 404 || error.statusCode == 415) {
+        if (_lastRejectCode == error.statusCode) {
+          _rejectStreak++;
+        } else {
+          _lastRejectCode = error.statusCode;
+          _rejectStreak = 1;
+        }
+        if (_rejectStreak >= 4) {
+          _running = false;
+          _setState(DshConnectionState.idle);
+          _failWaiters(error);
+          return;
+        }
+      } else {
+        _lastRejectCode = null;
+        _rejectStreak = 0;
       }
       _scheduleRetry();
       return;
