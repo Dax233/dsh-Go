@@ -23,7 +23,12 @@ void main() {
         final result = await h.guard(h.recovered.future);
         expect(result.events.map((e) => e.seq), List.generate(11, (i) => i + 1));
         expect(h.requests.map((r) => r['beforeSeq']), [11, 7, 5]);
-        expect(h.requests.every((r) => r['throughSeq'] == 11 && r['maxMessages'] == 500), isTrue);
+        // The page size is bounded by the remaining gap: a 3-record gap must not
+        // download 500 records over a slow link. It never exceeds the Host cap.
+        expect(
+          h.requests.every((r) => r['throughSeq'] == 11 && (r['maxMessages'] as int) > 0 && (r['maxMessages'] as int) <= 500),
+          isTrue,
+        );
         expect(h.snapshots, hasLength(2));
       } finally {
         await h.close();

@@ -27,7 +27,13 @@ void main() {
             watch.stop();
             expect(result.events.map((e) => e.seq), List.generate(count + 1, (i) => i + 1));
             expect(h.requests, hasLength(pageCount));
-            expect(h.requests.every((r) => r['throughSeq'] == count + 1 && r['maxMessages'] == 500), isTrue);
+            // Each request asks for at most the gap it still needs (capped at 500).
+            expect(
+              h.requests.every(
+                (r) => r['throughSeq'] == count + 1 && (r['maxMessages'] as int) > 0 && (r['maxMessages'] as int) <= 500,
+              ),
+              isTrue,
+            );
             // Informational sample: no machine-dependent speed assertion.
             print(
               jsonEncode({
