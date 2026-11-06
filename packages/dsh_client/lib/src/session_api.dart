@@ -1368,8 +1368,18 @@ class _SessionWatch {
     while (beforeSeq > from) {
       _checkHistoryOwner(epoch);
       final HistoryPage page;
+      // Ask only for the gap. The Host returns up to maxMessages records before
+      // beforeSeq; a fixed 500 downloaded (and then discarded) history far
+      // outside the gap, which on a 60 KB/s remote link is the difference
+      // between a warm switch and ten seconds of "syncing".
+      final remaining = beforeSeq - from;
       try {
-        page = await client.history(sessionId, throughSeq: through, beforeSeq: beforeSeq, maxMessages: 500);
+        page = await client.history(
+          sessionId,
+          throughSeq: through,
+          beforeSeq: beforeSeq,
+          maxMessages: remaining < 500 ? remaining : 500,
+        );
       } catch (_) {
         // Closing the client keeps the original terminal error contract;
         // only a live successor must be protected from stale recovery.

@@ -38,6 +38,13 @@ HostStatusView watchHostStatus(WidgetRef ref, HostRef host) {
     final view = EngineStatusView.of(ref.watch(localRuntimeProvider));
     return HostStatusView(view.tone, view.label);
   }
+  // A live client is the connection itself; the status stream is one link's
+  // view of it. When they disagree (a stale or half-built link behind a working
+  // connection), trust what actually carries traffic: the user judges "connected"
+  // by whether the conversation works, not by a phase enum.
+  if (host == ref.watch(activeHostProvider) && ref.watch(activeConnectionProvider).value != null) {
+    return HostStatusView(StatusTone.ok, appL10n.remoteConnected);
+  }
   final status = ref.watch(hostLinkStatusProvider(host)).value ?? HostLinkStatus.idle;
   return HostStatusView.ofLink(status);
 }

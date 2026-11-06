@@ -633,6 +633,20 @@ class SshHostLink implements HostLink {
     if (_keepAliveTickInFlight) return;
     _keepAliveTickInFlight = true;
     try {
+      // A live client on a connected mux is the definition of connected. If the
+      // published phase disagrees (a status regressed while the client kept
+      // working), converge here instead of leaving the UI on "连接服务器…".
+      final live = _client;
+      if (live != null &&
+          live.mux.state == DshConnectionState.connected &&
+          _status.phase != HostLinkPhase.connected &&
+          !_recovering) {
+        _emit(HostLinkStatus(
+          HostLinkPhase.connected,
+          completed: HostLinkStep.values.toSet(),
+          detail: _status.detail,
+        ));
+      }
       if (!await _ping(keepAliveTimeout)) return;
       if (_client?.mux.state == DshConnectionState.connected) return;
       final downSince = _muxDownSince;

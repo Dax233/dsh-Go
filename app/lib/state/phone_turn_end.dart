@@ -28,6 +28,7 @@ import 'app_info.dart';
 import 'bots_state.dart';
 import 'chat_reveal.dart';
 import 'connection_state.dart';
+import 'hosts_state.dart' show activeHostProvider;
 import 'notify_state.dart' show appForegroundProvider, notifyChannelProvider;
 import 'phone_state.dart';
 
@@ -186,7 +187,7 @@ class PhoneTurnEndController extends Notifier<void> {
   void build() {
     final lifetime = _lifetime = Object();
     final channel = ref.watch(phoneChannelProvider);
-    ref.listen(localConnectionProvider, (before, after) {
+    ref.listen(activeConnectionProvider, (before, after) {
       final old = before?.value?.client;
       final next = after.value?.client;
       if (old != null && !identical(old, next)) {
@@ -258,7 +259,7 @@ class PhoneTurnEndController extends Notifier<void> {
       identical(_reading, read) &&
       link.armed &&
       link.taskId == read.taskId &&
-      identical(ref.read(localConnectionProvider).value?.client, read.client) &&
+      identical(ref.read(activeConnectionProvider).value?.client, read.client) &&
       identical(read.client.mux.generation, read.generation);
 
   void _settleDeferred(_OwnerRead read, {required bool resume}) {
@@ -286,7 +287,7 @@ class PhoneTurnEndController extends Notifier<void> {
 
   Future<void> _snapshot(int taskId) async {
     final scope = ref;
-    final client = scope.read(localConnectionProvider).value?.client;
+    final client = scope.read(activeConnectionProvider).value?.client;
     if (client == null) return;
     final previous = _reading;
     if (previous != null && previous.taskId == taskId && identical(previous.client, client)) return;
@@ -327,7 +328,10 @@ class PhoneTurnEndController extends Notifier<void> {
   /// requeue forever or turn the currently viewed conversation into proof.
   bool deferTurnEnd(ChatAlert alert, void Function() ready) {
     final read = _reading;
-    if (!alert.host.isLocal ||
+    // The task belongs to the Host that was active when control began: with a
+    // remote engine (the usual setup here) that is not the local one, and
+    // gating on isLocal left a remote-driven task running after its turn ended.
+    if (alert.host != ref.read(activeHostProvider) ||
         alert.key != turnKey ||
         alert.turnEndKind == null ||
         !link.armed ||
@@ -354,10 +358,15 @@ class PhoneTurnEndController extends Notifier<void> {
   /// then the overlay is closing (and the app maybe coming back to that
   /// conversation) and the future says how it went.
   Future<PhoneFinish>? onTurnEnd(ChatAlert alert) {
-    if (!alert.host.isLocal || alert.key != turnKey || alert.turnEndKind == null) return null;
+    // A remote Host drives the phone just as well as the local engine; the
+    // owner read below uses the active connection, so the gate is "same host",
+    // not "local host".
+    if (alert.host != ref.read(activeHostProvider) || alert.key != turnKey || alert.turnEndKind == null) {
+      return null;
+    }
     final scope = ref;
     final lifetime = _lifetime;
-    final client = scope.read(localConnectionProvider).value?.client;
+    final client = scope.read(activeConnectionProvider).value?.client;
     final generation = client?.mux.generation;
     if (link.candidates != null &&
         (!identical(client, _ownerClient) || !identical(client?.mux.generation, _ownerGeneration))) {
@@ -389,7 +398,7 @@ class PhoneTurnEndController extends Notifier<void> {
           !identical(_lifetime, lifetime) ||
           link.taskId != taskId ||
           !result.current ||
-          !identical(scope.read(localConnectionProvider).value?.client, client) ||
+          !identical(scope.read(activeConnectionProvider).value?.client, client) ||
           !identical(client?.mux.generation, generation)) {
         return result.retired();
       }
@@ -419,7 +428,7 @@ class PhoneTurnEndController extends Notifier<void> {
                   identical(_lifetime, lifetime) &&
                   link.taskId == taskId &&
                   !scope.read(appForegroundProvider) &&
-                  identical(scope.read(localConnectionProvider).value?.client, client) &&
+                  identical(scope.read(activeConnectionProvider).value?.client, client) &&
                   identical(client?.mux.generation, generation),
             );
         if (notified) return result.withNotice();
