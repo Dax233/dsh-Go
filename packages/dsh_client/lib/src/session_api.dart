@@ -68,6 +68,7 @@ class WatchOptions {
     this.turnWindow = const TurnWindow(50, 2),
     this.maxMessages = 500,
     this.initialSeq,
+    this.onRawItem,
     this.includeHostEvents = true,
     this.includeConnectionEvents = true,
     this.includeSyncEvents = false,
@@ -110,6 +111,10 @@ class WatchOptions {
   /// snapshot cursor is behind [initialSeq] the log was reset upstream and the
   /// follow adopts the snapshot whole, exactly as without this option.
   final int? initialSeq;
+
+  /// Receives every durable follow item (raw JSON) before parsing, so a caller
+  /// can keep a local log and replay it on a cold open.
+  final void Function(Object? item)? onRawItem;
 
   /// Forward this session's approvals, questions, status and errors.
   final bool includeHostEvents;
@@ -1304,6 +1309,9 @@ class _SessionWatch {
   }
 
   Future<void> _onFrame(Object? item) async {
+    try {
+      options.onRawItem?.call(item);
+    } catch (_) {}
     final event = parseFollowFrame(sessionId, item);
     switch (event) {
       case SessionLogEvent():
