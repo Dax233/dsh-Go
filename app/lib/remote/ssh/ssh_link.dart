@@ -265,7 +265,9 @@ class SshHostLink implements HostLink {
     }
 
     at(HostLinkStep.connect, detail: _config.address);
-    final secrets = await _loadSecrets();
+    // A locked keystore can leave this read pending indefinitely; the connect
+    // attempt must fail (and retry) instead of sitting at "连接服务器…".
+    final secrets = await _loadSecrets().timeout(const Duration(seconds: 30));
     _checkOpen();
 
     // InstaBox machines pause when idle; wake ours before the socket is opened.

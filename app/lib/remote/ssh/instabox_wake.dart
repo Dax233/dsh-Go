@@ -56,6 +56,19 @@ class InstaboxWake {
 
   static const Duration _pollInterval = Duration(seconds: 2);
 
+  /// Every HTTP leg is bounded: a stalled gateway must not leave the connect
+  /// attempt sitting at "连接服务器…" forever. The [ensureRunning] deadline is
+  /// only checked between polls, so an unanswered request would otherwise
+  /// outlive it.
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
+  static Future<T> _bounded<T>(Future<T> future) => future.timeout(
+    _requestTimeout,
+    onTimeout: () => throw InstaboxWakeError(
+      'InstaBox API timed out after ' + _requestTimeout.inSeconds.toString() + 's',
+    ),
+  );
+
   /// Resolves once the machine reports `running` with `runtime.ready`.
   ///
   /// Throws [InstaboxWakeError] when the API refuses, or when the machine is
@@ -155,10 +168,10 @@ class InstaboxWake {
   }
 
   static Future<Map<String, dynamic>> _readState(HttpClient client) async {
-    final request = await client.getUrl(_machineUri(''));
+    final request = await _bounded(client.getUrl(_machineUri('')));
     _headers().forEach(request.headers.set);
-    final response = await request.close();
-    final body = await utf8.decodeStream(response);
+    final response = await _bounded(request.close());
+    final body = await _bounded(utf8.decodeStream(response));
     if (response.statusCode != 200) {
       throw InstaboxWakeError('InstaBox API ' + response.statusCode.toString() + ': ' + body);
     }
@@ -170,11 +183,11 @@ class InstaboxWake {
   }
 
   static Future<void> _post(HttpClient client, String action) async {
-    final request = await client.postUrl(_machineUri('/' + action));
+    final request = await _bounded(client.postUrl(_machineUri('/' + action)));
     _headers(idempotent: true).forEach(request.headers.set);
     request.contentLength = 0;
-    final response = await request.close();
-    final body = await utf8.decodeStream(response);
+    final response = await _bounded(request.close());
+    final body = await _bounded(utf8.decodeStream(response));
     if (response.statusCode != 202 && response.statusCode != 200 && response.statusCode != 409) {
       throw InstaboxWakeError(
         'InstaBox ' + action + ' failed (' + response.statusCode.toString() + '): ' + body,
