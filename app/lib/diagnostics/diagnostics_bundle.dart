@@ -22,6 +22,7 @@ import '../runtime/runtime_bridge.dart';
 import '../performance/performance_state.dart';
 import '../runtime/runtime_state.dart';
 import '../state/app_info.dart';
+import '../state/chat_open_timing.dart';
 import '../state/connection_state.dart';
 import '../state/settings_state.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
@@ -177,6 +178,8 @@ abstract final class DiagnosticsBundle {
       if (s.engineLog.isNotEmpty) text('engine.log', log(s.engineLog)),
       if (s.failureLog.isNotEmpty) text('failure.log', log(s.failureLog)),
       if (s.appErrors.isNotEmpty) jsonFile('app-errors.json', s.appErrors.map((error) => error.toJson()).toList()),
+      // Recent session-open costs: seed (disk), first paint, follow snapshot.
+      if (ChatOpenTiming.snapshot().isNotEmpty) jsonFile('chat-timing.json', ChatOpenTiming.snapshot()),
     ];
   }
 

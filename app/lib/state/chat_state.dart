@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../usage/usage_stats.dart';
 import 'attachments.dart';
 import 'chat_error_text.dart';
+import 'chat_open_timing.dart';
 import 'chat_transcript_cache.dart';
 import 'chat_transcript_store.dart';
 import 'connection_state.dart';
@@ -833,10 +834,20 @@ class ChatController extends Notifier<ChatState> {
   Future<void>? _seedInFlight;
   int _lastStoredSeq = -1;
 
+  /// Timing of the current open, for the diagnostics bundle (chat-timing.json).
+  DateTime? _openStartedAt;
+  bool _openRecorded = false;
+  bool _openSeeded = false;
+  int _openSeedMs = 0;
+
   /// Cold open paints the durable log from disk before opening the follow, so
   /// the conversation shows at once and the follow repairs only the tail
   /// (warm window) instead of downloading the whole initial window again.
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
+    _openStartedAt = DateTime.now();
+    _openRecorded = false;
+    _openSeeded = false;
+    _openSeedMs = 0;
     if (_transcript.events.isEmpty && !_seededFromDisk) {
       _seedInFlight ??= _seedThenListen(client, pulse, building);
       return;
@@ -845,6 +856,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> _seedThenListen(DshClient client, RunPulse pulse, bool building) async {
+    final seedStarted = DateTime.now();
     try {
       // Never let the cache stand between a cold open and its follow: a store
       // that cannot open (path provider missing, IO blocked) must cost one
@@ -869,6 +881,7 @@ class ChatController extends Notifier<ChatState> {
           }
         }
         if (entries.isNotEmpty) {
+          _openSeeded = true;
           _lastStoredSeq = _transcript.newestSeq ?? -1;
           _publish();
         }
@@ -878,6 +891,7 @@ class ChatController extends Notifier<ChatState> {
     } finally {
       _seededFromDisk = true;
       _seedInFlight = null;
+      _openSeedMs = DateTime.now().difference(seedStarted).inMilliseconds;
     }
     if (!ref.mounted || !identical(client, _client)) return;
     _listenNow(client, pulse, building: building);
@@ -1043,6 +1057,17 @@ class ChatController extends Notifier<ChatState> {
               _synchronized = true;
               _followRetry?.cancel();
               _followRetries = 0;
+              final opened = _openStartedAt;
+              if (!_openRecorded && opened != null) {
+                _openRecorded = true;
+                ChatOpenTiming.add(
+                  host: _transcriptHostKey ?? 'unknown',
+                  sessionId: sessionId,
+                  seededFromDisk: _openSeeded,
+                  seedMs: _openSeedMs,
+                  firstPaintMs: DateTime.now().difference(opened).inMilliseconds,
+                );
+              }
               // One publication: no ready state containing the old inbox.
               _publish(freshSnapshot: true);
               if (!_syncReady.isCompleted) _syncReady.complete(true);
