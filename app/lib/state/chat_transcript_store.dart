@@ -21,13 +21,19 @@ class ChatTranscriptStore {
   final int maxEntriesPerSession;
   final int maxSessions;
 
+  /// Session files already seen in this process, so a new one can trigger the
+  /// directory-level prune without a stat on every appended item.
+  final Set<String> _known = <String>{};
+
   /// Appends one durable item for [hostKey]/[sessionId]. Ignores failures:
   /// the cache is an optimisation, never a correctness dependency.
   Future<void> append(String hostKey, String sessionId, int seq, Object? item) async {
     try {
       final file = await _file(hostKey, sessionId);
       final line = jsonEncode({'seq': seq, 'item': item});
+      final isNew = _known.add(file.path);
       await file.writeAsString('$line\n', mode: FileMode.append, flush: false);
+      if (isNew) await _pruneSessions(file.parent);
     } catch (_) {
       // Best effort.
     }
@@ -82,6 +88,28 @@ class ChatTranscriptStore {
     try {
       final file = await _file(hostKey, sessionId);
       if (await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
+  /// Keeps at most [maxSessions] files per host directory, oldest first out.
+  /// The cache is an optimisation; a session that loses its file only costs a
+  /// cold start.
+  Future<void> _pruneSessions(Directory dir) async {
+    try {
+      final files = await dir.list().where((e) => e is File).cast<File>().toList();
+      if (files.length <= maxSessions) return;
+      final stats = <(File, DateTime)>[];
+      for (final file in files) {
+        try {
+          stats.add((file, (await file.stat()).modified));
+        } catch (_) {}
+      }
+      stats.sort((a, b) => a.$2.compareTo(b.$2));
+      for (var i = 0; i < stats.length - maxSessions; i++) {
+        try {
+          await stats[i].$1.delete();
+        } catch (_) {}
+      }
     } catch (_) {}
   }
 

@@ -841,7 +841,12 @@ class ChatController extends Notifier<ChatState> {
 
   Future<void> _seedThenListen(DshClient client, RunPulse pulse, bool building) async {
     try {
-      final store = await ref.read(chatTranscriptStoreProvider.future);
+      // Never let the cache stand between a cold open and its follow: a store
+      // that cannot open (path provider missing, IO blocked) must cost one
+      // cold start, not a permanently unsynchronised chat.
+      final store = await ref
+          .read(chatTranscriptStoreProvider.future)
+          .timeout(const Duration(seconds: 2));
       final hostKey = _transcriptHostKey;
       if (hostKey != null && _transcript.events.isEmpty) {
         final entries = await store.read(hostKey, sessionId);
@@ -893,7 +898,9 @@ class ChatController extends Notifier<ChatState> {
     _lastStoredSeq = seq;
     unawaited(() async {
       try {
-        final store = await ref.read(chatTranscriptStoreProvider.future);
+        final store = await ref
+            .read(chatTranscriptStoreProvider.future)
+            .timeout(const Duration(seconds: 2));
         await store.append(hostKey, sessionId, seq, item);
       } catch (_) {}
     }());
