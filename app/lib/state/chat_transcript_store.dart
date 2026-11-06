@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+
 /// On-disk cache for one host's session logs.
 ///
 /// The chat screen rebuilds its transcript from a Host snapshot whenever it is
@@ -30,6 +33,18 @@ class ChatTranscriptStore {
     }
   }
 
+  /// Replaces the stored log with [item] as its new base snapshot: a snapshot
+  /// already carries the window, so replaying it plus later items rebuilds the
+  /// transcript, and the file stays bounded.
+  Future<void> appendSnapshot(String hostKey, String sessionId, int cursor, Object? item) async {
+    try {
+      final file = await _file(hostKey, sessionId);
+      await file.writeAsString(jsonEncode({'snapshot': cursor, 'item': item}) + '\n', flush: false);
+    } catch (_) {
+      // Best effort.
+    }
+  }
+
   /// The cached items for [hostKey]/[sessionId], oldest first.
   Future<List<Map<String, Object?>>> read(String hostKey, String sessionId) async {
     try {
@@ -42,10 +57,25 @@ class ChatTranscriptStore {
         final decoded = jsonDecode(line);
         if (decoded is Map<String, Object?>) out.add(decoded);
       }
+      // Append-only files outgrow the cap; compact on read (the rare path)
+      // instead of paying a rewrite on every append.
+      if (lines.length > maxEntriesPerSession * 2) {
+        await _rewrite(file, out.skip(out.length - maxEntriesPerSession).toList());
+      }
       return out;
     } catch (_) {
       return const [];
     }
+  }
+
+  Future<void> _rewrite(File file, List<Map<String, Object?>> entries) async {
+    try {
+      final buffer = StringBuffer();
+      for (final entry in entries) {
+        buffer.writeln(jsonEncode(entry));
+      }
+      await file.writeAsString(buffer.toString(), flush: false);
+    } catch (_) {}
   }
 
   Future<void> clear(String hostKey, String sessionId) async {
@@ -63,3 +93,9 @@ class ChatTranscriptStore {
 
   String _safe(String value) => value.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
 }
+
+/// The process-wide transcript cache directory under the app's support dir.
+final chatTranscriptStoreProvider = FutureProvider<ChatTranscriptStore>((ref) async {
+  final base = await getApplicationSupportDirectory();
+  return ChatTranscriptStore(Directory('${base.path}/chat_transcripts'));
+});

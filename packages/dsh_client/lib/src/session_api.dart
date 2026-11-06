@@ -69,6 +69,7 @@ class WatchOptions {
     this.maxMessages = 500,
     this.initialSeq,
     this.onRawItem,
+    this.onRawSnapshot,
     this.includeHostEvents = true,
     this.includeConnectionEvents = true,
     this.includeSyncEvents = false,
@@ -112,9 +113,15 @@ class WatchOptions {
   /// follow adopts the snapshot whole, exactly as without this option.
   final int? initialSeq;
 
-  /// Receives every durable follow item (raw JSON) before parsing, so a caller
-  /// can keep a local log and replay it on a cold open.
-  final void Function(Object? item)? onRawItem;
+  /// Receives every durable log item (its seq and raw JSON) so a caller can
+  /// keep a local log and replay it on a cold open. Only durable log records
+  /// arrive here; token deltas and host events are not part of the log.
+  final void Function(int seq, Object? item)? onRawItem;
+
+  /// Receives the opening snapshot (cursor + raw JSON). A cold open replays it
+  /// into an empty transcript, so the conversation paints before the network
+  /// answers. Snapshots replace an earlier one in the caller's local log.
+  final void Function(int cursor, Object? item)? onRawSnapshot;
 
   /// Forward this session's approvals, questions, status and errors.
   final bool includeHostEvents;
@@ -1208,6 +1215,9 @@ class _SessionWatch {
           if (!opened) {
             final first = parseFollowFrame(sessionId, item, isResync: _lastSeq >= 0);
             if (first is! SessionSnapshotEvent) throw const _Resync('follow opened without snapshot');
+            try {
+              options.onRawSnapshot?.call(first.cursor, item);
+            } catch (_) {}
             await _onSnapshot(first);
             opened = true;
             if (options.activate) {
@@ -1309,9 +1319,6 @@ class _SessionWatch {
   }
 
   Future<void> _onFrame(Object? item) async {
-    try {
-      options.onRawItem?.call(item);
-    } catch (_) {}
     final event = parseFollowFrame(sessionId, item);
     switch (event) {
       case SessionLogEvent():
@@ -1329,6 +1336,9 @@ class _SessionWatch {
           filled.forEach(_emit);
         }
         _lastSeq = event.seq;
+        try {
+          options.onRawItem?.call(event.seq, item);
+        } catch (_) {}
         _emit(event);
       case AssistantStreamEvent():
         final expected = (_assistantRevision ?? 0) + 1;

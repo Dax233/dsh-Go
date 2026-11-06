@@ -11,6 +11,7 @@ import '../usage/usage_stats.dart';
 import 'attachments.dart';
 import 'chat_error_text.dart';
 import 'chat_transcript_cache.dart';
+import 'chat_transcript_store.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
 import 'models_state.dart';
@@ -544,6 +545,9 @@ class ChatController extends Notifier<ChatState> {
     if (_transcriptHostKey != hostKey) {
       _transcript = ref.read(chatTranscriptCacheProvider).acquire(hostKey, sessionId);
       _transcriptHostKey = hostKey;
+      _seededFromDisk = false;
+      _seedInFlight = null;
+      _lastStoredSeq = -1;
     }
     if (_approvalHost != host) {
       // These requests belong to the previous Host, even if the new Host has
@@ -820,7 +824,89 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
+  bool _seededFromDisk = false;
+  Future<void>? _seedInFlight;
+  int _lastStoredSeq = -1;
+
+  /// Cold open paints the durable log from disk before opening the follow, so
+  /// the conversation shows at once and the follow repairs only the tail
+  /// (warm window) instead of downloading the whole initial window again.
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
+    if (_transcript.events.isEmpty && !_seededFromDisk) {
+      _seedInFlight ??= _seedThenListen(client, pulse, building);
+      return;
+    }
+    _listenNow(client, pulse, building: building);
+  }
+
+  Future<void> _seedThenListen(DshClient client, RunPulse pulse, bool building) async {
+    try {
+      final store = await ref.read(chatTranscriptStoreProvider.future);
+      final hostKey = _transcriptHostKey;
+      if (hostKey != null && _transcript.events.isEmpty) {
+        final entries = await store.read(hostKey, sessionId);
+        for (final entry in entries) {
+          final item = entry['item'];
+          final event = parseFollowFrame(sessionId, item);
+          if (entry['snapshot'] is int) {
+            // A snapshot is the base of the stored log: replay it whole, then
+            // the items it does not already contain.
+            if (event is SessionSnapshotEvent) {
+              _transcript.apply(event, preserveOlderHistory: true);
+            }
+          } else if (entry['seq'] is int && event is SessionLogEvent) {
+            _transcript.apply(event);
+          }
+        }
+        if (entries.isNotEmpty) {
+          _lastStoredSeq = _transcript.newestSeq ?? -1;
+          _publish();
+        }
+      }
+    } catch (_) {
+      // The disk log is an optimisation: a bad file just means a cold start.
+    } finally {
+      _seededFromDisk = true;
+      _seedInFlight = null;
+    }
+    if (!ref.mounted || !identical(client, _client)) return;
+    _listenNow(client, pulse, building: building);
+  }
+
+  /// Replaces the stored log with the opening snapshot (best effort).
+  void _persistSnapshot(int cursor, Object? item) {
+    final hostKey = _transcriptHostKey;
+    if (hostKey == null || cursor < _lastStoredSeq) return;
+    _lastStoredSeq = cursor;
+    unawaited(() async {
+      try {
+        final store = await ref.read(chatTranscriptStoreProvider.future);
+        await store.appendSnapshot(hostKey, sessionId, cursor, item);
+      } catch (_) {}
+    }());
+  }
+
+  /// Keeps the durable log on disk for the next cold open (best effort).
+  void _persistItem(int seq, Object? item) {
+    final hostKey = _transcriptHostKey;
+    if (hostKey == null || seq <= _lastStoredSeq) return;
+    _lastStoredSeq = seq;
+    unawaited(() async {
+      try {
+        final store = await ref.read(chatTranscriptStoreProvider.future);
+        await store.append(hostKey, sessionId, seq, item);
+      } catch (_) {}
+    }());
+  }
+
+  Future<void> _clearStoredLog(String hostKey) async {
+    try {
+      final store = await ref.read(chatTranscriptStoreProvider.future);
+      await store.clear(hostKey, sessionId);
+    } catch (_) {}
+  }
+
+  void _listenNow(DshClient client, RunPulse pulse, {bool building = false}) {
     final owner = ref;
     final listener = _listenOwner = Object();
     _watchEnded = false;
@@ -846,6 +932,8 @@ class ChatController extends Notifier<ChatState> {
             includeSyncEvents: true,
             activate: true,
             initialSeq: warm ? heldSeq : null,
+            onRawItem: _persistItem,
+            onRawSnapshot: _persistSnapshot,
             maxMessages: warm ? _warmWindow : _coldWindow,
             turnWindow: warm ? _warmTurnWindow : _coldTurnWindow,
             activationAllowed: () {
@@ -960,6 +1048,7 @@ class ChatController extends Notifier<ChatState> {
             if (e is DshRemoteException && e.code == 'session/not-found') {
               if (_transcriptHostKey case final hostKey?) {
                 ref.read(chatTranscriptCacheProvider).evict(hostKey, sessionId);
+                unawaited(_clearStoredLog(hostKey));
               }
               if (ref.read(currentSessionProvider) == sessionId) {
                 ref.read(currentSessionProvider.notifier).select(null);
