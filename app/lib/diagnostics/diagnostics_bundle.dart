@@ -23,6 +23,7 @@ import '../performance/performance_state.dart';
 import '../runtime/runtime_state.dart';
 import '../state/app_info.dart';
 import '../state/chat_open_timing.dart';
+import '../state/phone_task_log.dart';
 import '../state/connection_state.dart';
 import '../state/settings_state.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
@@ -180,6 +181,9 @@ abstract final class DiagnosticsBundle {
       if (s.appErrors.isNotEmpty) jsonFile('app-errors.json', s.appErrors.map((error) => error.toJson()).toList()),
       // Recent session-open costs: seed (disk), first paint, follow snapshot.
       if (ChatOpenTiming.snapshot().isNotEmpty) jsonFile('chat-timing.json', ChatOpenTiming.snapshot()),
+      // Phone-task lifecycle: who claimed the turn end and what the native side
+      // answered, so "the overlay stayed" can be attributed.
+      if (PhoneTaskLog.snapshot().isNotEmpty) jsonFile('phone-task.json', PhoneTaskLog.snapshot()),
     ];
   }
 

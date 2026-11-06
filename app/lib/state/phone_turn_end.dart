@@ -31,6 +31,7 @@ import 'connection_state.dart';
 import 'hosts_state.dart' show activeHostProvider;
 import 'notify_state.dart' show appForegroundProvider, notifyChannelProvider;
 import 'phone_state.dart';
+import 'phone_task_log.dart';
 
 void _trace(String message) {
   if (!kReleaseMode && const bool.fromEnvironment('DSH_PHONE_TURN_TRACE')) {
@@ -245,6 +246,7 @@ class PhoneTurnEndController extends Notifier<void> {
       _ownerClient = null;
       _ownerGeneration = null;
       _trace('task=${link.taskId} event=begin');
+      PhoneTaskLog.add('begin', {'task': link.taskId, 'host': ref.read(activeHostProvider).kind.name});
       unawaited(_snapshot(link.taskId!));
     } else if (!link.armed) {
       final reading = _reading;
@@ -311,6 +313,7 @@ class PhoneTurnEndController extends Notifier<void> {
           if (s.running) s.sessionId,
       ]);
       _trace('task=$taskId event=snapshot candidates=${link.candidates?.length}');
+      PhoneTaskLog.add('snapshot', {'task': taskId, 'candidates': link.candidates?.length ?? 0});
     } catch (_) {
       _trace('task=$taskId event=snapshot-unavailable');
     } finally {
@@ -361,7 +364,15 @@ class PhoneTurnEndController extends Notifier<void> {
     // A remote Host drives the phone just as well as the local engine; the
     // owner read below uses the active connection, so the gate is "same host",
     // not "local host".
-    if (alert.host != ref.read(activeHostProvider) || alert.key != turnKey || alert.turnEndKind == null) {
+    final activeHost = ref.read(activeHostProvider);
+    PhoneTaskLog.add('alert', {
+      'host': alert.host.kind.name,
+      'sameHost': alert.host == activeHost,
+      'armed': link.armed,
+      'candidates': link.candidates?.length,
+      'kind': alert.turnEndKind,
+    });
+    if (alert.host != activeHost || alert.key != turnKey || alert.turnEndKind == null) {
       return null;
     }
     final scope = ref;
@@ -377,6 +388,7 @@ class PhoneTurnEndController extends Notifier<void> {
     if (link.armed) _trace('task=${link.taskId} event=end kind=${alert.kind.name} candidates=$candidates');
     if (!link.onTurnEnd(alert.sessionId)) {
       if (link.armed) _trace('task=${link.taskId} event=end-ignored candidates=$candidates');
+      PhoneTaskLog.add('claim-miss', {'candidates': candidates, 'session': alert.sessionId});
       return null;
     }
     final taskId = link.taskId!;
@@ -394,6 +406,12 @@ class PhoneTurnEndController extends Notifier<void> {
       _trace(
         'task=$taskId event=finish closed=${result.closed} busy=${result.busy} opened=${result.opened} launched=${result.launched}',
       );
+      PhoneTaskLog.add('finish', {
+        'task': taskId,
+        'closed': result.closed,
+        'busy': result.busy,
+        'current': result.current,
+      });
       if (!scope.mounted ||
           !identical(_lifetime, lifetime) ||
           link.taskId != taskId ||
