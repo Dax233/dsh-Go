@@ -863,10 +863,13 @@ class ChatController extends Notifier<ChatState> {
       // never answers costs the cache, not the chat — and a pending timer would
       // outlive widget tests that use fake time.
       final store = await ref.read(chatTranscriptStoreProvider.future);
+      // The screen can be gone by the time the disk answers: touching the ref
+      // (or the transcript it guards) after that throws and fails the unmount.
+      if (!ref.mounted) return;
       final hostKey = _transcriptHostKey;
       if (hostKey == null || _transcript.events.isNotEmpty) return;
       final entries = await store.read(hostKey, sessionId);
-      if (entries.isEmpty) return;
+      if (!ref.mounted || entries.isEmpty || _transcript.events.isNotEmpty) return;
       for (final entry in entries) {
         final event = parseFollowFrame(sessionId, entry['item']);
         if (entry['snapshot'] is int) {
@@ -879,6 +882,7 @@ class ChatController extends Notifier<ChatState> {
           _transcript.apply(event);
         }
       }
+      if (!ref.mounted) return;
       _openSeeded = true;
       _lastStoredSeq = _transcript.newestSeq ?? -1;
       final opened = _openStartedAt;
