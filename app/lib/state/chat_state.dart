@@ -441,9 +441,12 @@ class ChatController extends Notifier<ChatState> {
   static const TurnWindow _coldTurnWindow = TurnWindow(20, 2);
 
   /// Cache hit: the transcript already holds the history, so the snapshot only
-  /// reconciles the tail and the follow fills the seq gap.
-  static const int _warmWindow = 16;
-  static const TurnWindow _warmTurnWindow = TurnWindow(8, 1);
+  /// has to anchor the log. Measured on a real link: the opening snapshot is
+  /// what costs seconds (5-18 s for a 16-message window), while the disk seed
+  /// takes <100 ms. Ask for one record and let the gap fill pull exactly what
+  /// is missing (it now asks only for the gap, not 500 records).
+  static const int _warmWindow = 1;
+  static const TurnWindow _warmTurnWindow = TurnWindow(1, 1);
 
   late ChatTranscript _transcript;
   String? _transcriptHostKey;
@@ -834,6 +837,7 @@ class ChatController extends Notifier<ChatState> {
   bool _openRecorded = false;
   bool _openSeeded = false;
   int _openSeedMs = 0;
+  int? _openSeedPaintMs;
 
   /// Cold open paints the durable log from disk before opening the follow, so
   /// the conversation shows at once and the follow repairs only the tail
@@ -843,6 +847,7 @@ class ChatController extends Notifier<ChatState> {
     _openRecorded = false;
     _openSeeded = false;
     _openSeedMs = 0;
+    _openSeedPaintMs = null;
     if (_transcript.events.isEmpty && !_seededFromDisk) {
       _seedInFlight ??= _seedThenListen(client, pulse, building);
       return;
@@ -878,6 +883,8 @@ class ChatController extends Notifier<ChatState> {
         if (entries.isNotEmpty) {
           _openSeeded = true;
           _lastStoredSeq = _transcript.newestSeq ?? -1;
+          final started = _openStartedAt;
+          if (started != null) _openSeedPaintMs = DateTime.now().difference(started).inMilliseconds;
           _publish();
         }
       }
@@ -1060,6 +1067,7 @@ class ChatController extends Notifier<ChatState> {
                   sessionId: sessionId,
                   seededFromDisk: _openSeeded,
                   seedMs: _openSeedMs,
+                  seedPaintMs: _openSeedPaintMs,
                   firstPaintMs: DateTime.now().difference(opened).inMilliseconds,
                 );
               }

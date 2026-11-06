@@ -18,6 +18,7 @@ class ChatOpenTiming {
     required bool seededFromDisk,
     required int seedMs,
     required int firstPaintMs,
+    int? seedPaintMs,
     int? snapshotMs,
   }) {
     _recent.addFirst(<String, Object?>{
@@ -26,6 +27,7 @@ class ChatOpenTiming {
       'session': sessionId,
       'seededFromDisk': seededFromDisk,
       'seedMs': seedMs,
+      'seedPaintMs': ?seedPaintMs,
       'firstPaintMs': firstPaintMs,
       'snapshotMs': ?snapshotMs,
     });
