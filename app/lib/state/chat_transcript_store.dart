@@ -60,8 +60,14 @@ class ChatTranscriptStore {
       final out = <Map<String, Object?>>[];
       for (final line in lines) {
         if (line.trim().isEmpty) continue;
-        final decoded = jsonDecode(line);
-        if (decoded is Map<String, Object?>) out.add(decoded);
+        try {
+          final decoded = jsonDecode(line);
+          if (decoded is Map<String, Object?>) out.add(decoded);
+        } catch (_) {
+          // A half-written line (killed mid-append) must cost that line, not
+          // the whole cached log: dropping the file would turn every later
+          // open into a cold start.
+        }
       }
       // Append-only files outgrow the cap; compact on read (the rare path)
       // instead of paying a rewrite on every append.
