@@ -66,6 +66,7 @@ class MuxOptions {
       Duration(seconds: 10),
     ],
     this.autoReconnect = true,
+    this.reopenStagger = Duration.zero,
   });
 
   /// Deadline for the `ready` item after the socket opens (Host default 15 s).
@@ -81,6 +82,12 @@ class MuxOptions {
   /// schedule as the official web client.
   final List<Duration> retryCaps;
   final bool autoReconnect;
+
+  /// Spacing between the stream opens that arrive together right after a
+  /// reconnect. A lost link fails every stream at once and every owner opens
+  /// again immediately; on a slow link that burst is what makes the fresh link
+  /// fail again. Zero keeps the old behaviour (and the tests untouched).
+  final Duration reopenStagger;
 }
 
 class DshMux {
@@ -111,6 +118,11 @@ class DshMux {
   Timer? _retryTimer;
   Timer? _readyTimer;
   Object? _lastError;
+
+  /// Start of the current generation and how many streams have opened since —
+  /// see [MuxOptions.reopenStagger].
+  DateTime? _readyAt;
+  int _opensSinceReady = 0;
 
   /// Consecutive identical HTTP rejections (404/415) that never become a
   /// connection. See [`_connectOnce`] for why they stop the retry loop.
@@ -195,13 +207,44 @@ class DshMux {
     final stream = MuxStream._(this, uuidV4(), endpoint, {'args': args});
     final link = _link;
     if (link != null && _state == DshConnectionState.connected) {
-      _sendOpen(link, stream);
+      final delay = _openDelay();
+      if (delay == Duration.zero) {
+        _sendOpen(link, stream);
+      } else {
+        Timer(delay, () {
+          if (!_closed && identical(link, _link) && _state == DshConnectionState.connected) {
+            _sendOpen(link, stream);
+          } else {
+            _pendingOpens.add(stream);
+            _running = true;
+            _ensureConnecting();
+          }
+        });
+      }
     } else {
       _pendingOpens.add(stream);
       _running = true;
       _ensureConnecting();
     }
     return stream;
+  }
+
+  /// How long this open waits so that a post-reconnect burst is spaced out.
+  /// The first open of a generation goes immediately; later ones within the
+  /// burst window step by [MuxOptions.reopenStagger] (capped at 4 steps).
+  Duration _openDelay() {
+    final stagger = options.reopenStagger;
+    if (stagger == Duration.zero) return Duration.zero;
+    final readyAt = _readyAt;
+    if (readyAt == null) return Duration.zero;
+    if (DateTime.now().difference(readyAt) > const Duration(seconds: 1)) {
+      _opensSinceReady = 0;
+      return Duration.zero;
+    }
+    final index = _opensSinceReady++;
+    if (index == 0) return Duration.zero;
+    final steps = index > 4 ? 4 : index;
+    return stagger * steps;
   }
 
   /// Forget a pending request locally (after this client answered it; the
@@ -383,6 +426,8 @@ class DshMux {
       _readyTimer?.cancel();
       _attempt = 0;
       _everConnected = true;
+      _readyAt = DateTime.now();
+      _opensSinceReady = 0;
       _pendingRequests.clear();
       final generation = MuxGeneration(++_generationCounter, event.clientId, event.home);
       _generation = generation;

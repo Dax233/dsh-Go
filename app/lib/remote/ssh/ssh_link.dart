@@ -48,7 +48,9 @@ Future<DshClient> _defaultConnector({required Uri baseUri, required String token
       // The SSH link carries this mux, so the SSH keepalive is the physical
       // liveness check. dart:io's WebSocket ping timer would close a healthy
       // socket with 1001 whenever a pong is merely late across the tunnel.
-      muxOptions: const MuxOptions(pingInterval: null),
+      // 80 ms between the stream opens that follow a reconnect: five streams
+      // opening at once is what re-breaks a slow link.
+      muxOptions: const MuxOptions(pingInterval: null, reopenStagger: Duration(milliseconds: 80)),
     );
 
 /// Trust-on-first-use check against the pinned fingerprint.
