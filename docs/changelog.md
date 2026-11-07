@@ -2,6 +2,38 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.12 · 2026-11-07
+
+### 中文
+
+- **更新前请注意：这一版的运行时有更新，所以还是下整包。** 内置引擎仍是 DSH 0.2.2-rc.1，变的是我们给它打的补丁。升级后 Linux 环境里只保留 `/root`，用 `apt` 装的软件和放在 `/usr/local`、`/opt` 等目录的文件需要重新装。对话和设置不受影响。
+- **这一版没有在真机上验证过。** 目前在 x86_64 模拟器上用测试模型走过从 1.0.11 升级：运行时完成替换，对话和定时任务都在，`/root` 保留、`/usr/local` 清掉，升级后发消息正常。伙伴小屋只经过自动测试，没在模拟器上打开过。 遇到问题请开 issue 反馈。
+- 伙伴小屋（新）：从「切换主机」面板进入的 Live2D 伙伴页面，可以摸摸她、和她聊天。轻量模式由手机直接调模型，不用启动引擎；完整模式在当前主机上开一个普通会话，能用主机的工具，审批照常。她会记得你写下的事；可以用手机自带的朗读或你自己配置的语音服务说话，也能用你自己的录音克隆音色，录音只发给你选的那个服务。Live2D 运行库和角色模型不随 App 提供，需要自己导入素材包。
+- 悬浮宠物：长按打开半轮盘，新增「截图」，截下当前屏幕带进新对话的草稿，不会自动发送。需要 Android 11 及以上。
+- 图片：点图片全屏查看，双指缩放、双击放大；同一组图片可以左右滑动切换。
+- 英文界面：审批理由、插件市场分类和插件详情不再显示中文；英文的思考内容不再出现多余的翻译按钮。
+- 对话：同一轮里的多段正式回答都会保留，不再被误折叠；上下文用量的估算说明更清楚。
+- 远程：没选工作区时，新对话落到最近用过的工作区，新对话页会显示它；主机上一个工作区都没有时会写明「主机默认目录」。新增 `设置 › 远程主机 › 精简历史`，支持的 DSH Remote 主机可以只传历史工具输出的摘要。SSH 认证途中断线会继续重连，不再当成密钥错误，启动失败时显示详情。连接详情里能看到实际走的路径和 IPv4 / IPv6。
+- 引擎：一个被改名或损坏的会话目录不再让整个引擎起不来，其余对话照常显示；安全模式在数据坏掉时用独立的数据目录启动，原来的对话保持原样。用 OpenAI 兼容协议接 Gemini 不再被 400 拒绝。插件安装、更新和热更新时的并发问题已修复；大量文本截断不再切坏字符，编辑文件时保留原来的 BOM 和行尾。
+- 手机操控：OPPO、realme 等机型上确认卡的按钮点不动、只能等倒计时结束的问题已修复（#608、#632）。确认卡不再按触摸事件的字段猜是不是真手指，改成只拒绝 App 自己发出的点击，助手仍然不能替你点「允许」。这一项没在这些机型的真机上验证过。另外，无障碍服务被系统打断时不再直接停止本次操作；后台屏刚打开时的黑帧不再被报成安全窗口；无障碍授权自动恢复失败时会说明原因；通知上的两个停止按钮改叫「停止手机操控」和「停止引擎」。
+- 设置：重置运行环境的确认框写明，`/root` 里没保留的内容（包括工作区文件、`AGENTS.md` 和插件自己存的数据）也会一起删除。
+- 网页版：原版布局下侧栏按钮不再被 App 的浮钮挡住；顶栏按钮不再独占一排。
+
+### English
+
+- **Before you update: this version changes the runtime, so it's a full download again.** The built-in engine is still DSH 0.2.2-rc.1; what changed are the patches we apply to it. Only `/root` stays in the Linux environment, so software installed with `apt` and files in `/usr/local`, `/opt` and similar places need installing again. Chats and settings are kept.
+- **This version hasn't been verified on a real phone.** So far it has run on an x86_64 emulator with a test model, updating from 1.0.11: the runtime was replaced, chats and scheduled tasks were kept, `/root` stayed and `/usr/local` was cleared, and messages worked after the update. The companion room has only been through automated tests and wasn't opened on the emulator. If you hit a problem, please open an issue.
+- Companion room (new): a Live2D companion page, opened from the host switcher. You can pat her and talk to her. Light mode calls the model straight from the phone with no engine to start; full mode opens an ordinary conversation on the current host, with its tools and its usual approvals. She remembers what you write down for her, can speak with the phone's own text-to-speech or a speech service you configure, and can clone a voice from your own recording, which is sent only to the service you choose. The Live2D runtime and character models don't ship with the app; you import a pack yourself.
+- Floating pet: a long press opens a half wheel with a new Screenshot item that takes the current screen into a new chat's draft, without sending it. Requires Android 11 or later.
+- Images: tap an image to view it full screen, pinch or double-tap to zoom, and swipe between images of the same group.
+- English interface: approval reasons, plugin market categories and plugin details no longer show Chinese, and English reasoning no longer shows a needless Translate button.
+- Chat: every final answer in a turn is kept instead of being folded away by mistake, and the context usage estimate is explained more clearly.
+- Remote: with no workspace selected, a new chat starts in the workspace you used last and the new chat page shows it; a host with no workspace at all says "Host default folder". New `Settings › Remote host › Compact history` lets supporting DSH Remote hosts send only summaries of past tool output. An SSH connection dropped during authentication keeps reconnecting instead of being reported as a key error, and a failed start shows its details. Connection details show the path actually used and IPv4 or IPv6.
+- Engine: one renamed or damaged session folder no longer stops the whole engine from starting, and the other chats still show; safe mode starts on a separate data folder when the data is damaged, leaving the original chats untouched. Gemini through the OpenAI-compatible protocol is no longer rejected with a 400. Concurrency problems when installing, updating and hot-reloading plugins are fixed; many text truncations no longer cut characters apart, and editing a file keeps its BOM and line endings.
+- Phone control: on OPPO, realme and similar phones the confirmation card's buttons no longer ignore taps until the countdown runs out (#608, #632). The card no longer guesses from touch event fields whether a finger is real; it only refuses taps the app itself sends, so the assistant still can't tap Allow for you. This hasn't been verified on those phones. Also, an accessibility service interrupted by the system no longer stops the current action; the black first frame of a just-opened background screen is no longer reported as a secure window; when restoring accessibility access automatically fails, the reason is shown; the notification's two stop buttons are now "Stop phone control" and "Stop engine".
+- Settings: the reset runtime dialog says that anything in `/root` you don't keep, including workspace files, `AGENTS.md` and data plugins store themselves, is deleted too.
+- Web UI: in the original layout the sidebar button is no longer covered by the app's floating button, and the header buttons no longer take a row of their own.
+
 ## 1.0.11 · 2026-11-05
 
 ### 中文

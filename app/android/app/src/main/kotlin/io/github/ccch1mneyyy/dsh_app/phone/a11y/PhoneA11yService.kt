@@ -48,6 +48,9 @@ class PhoneA11yService : AccessibilityService() {
 
     internal fun invalidateOverlayWindowContext() { overlayContext = null }
 
+    /** User-initiated display captures must omit the service's own controls too. */
+    internal fun hideControlOverlayForPetScreenshot(hide: Boolean) { overlay?.hideForCapture(hide) }
+
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             // l10n:keep agent stop reason

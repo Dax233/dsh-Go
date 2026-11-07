@@ -411,6 +411,8 @@ class _ResetDialogState extends State<_ResetDialog> {
             (false, true) => l10n.phoneResetBodyWithUi,
             (false, false) => l10n.phoneResetBodyEverything,
           }),
+          const SizedBox(height: 8),
+          Text(l10n.phoneResetAlsoDeletes),
           const SizedBox(height: 12),
           _KeepOption(
             label: l10n.phoneEngineKeepUiSkills,

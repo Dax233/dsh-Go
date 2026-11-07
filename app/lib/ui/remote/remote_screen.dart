@@ -98,6 +98,18 @@ class RemoteScreen extends ConsumerWidget {
         _ActiveCard(active: active),
         _RelaySection(onUse: (h) => _use(context, ref, h)),
         SettingsSection(
+          title: l10n.remoteTransferSettings,
+          children: [
+            SettingsSwitchTile(
+              key: const ValueKey('remote-compact-history'),
+              spot: Spots.remoteCompactHistory,
+              subtitle: l10n.remoteCompactHistoryHint,
+              value: ref.watch(remoteCompactHistoryProvider),
+              onChanged: (value) => unawaited(ref.read(remoteCompactHistoryProvider.notifier).set(value)),
+            ),
+          ],
+        ),
+        SettingsSection(
           title: l10n.remoteSshHosts,
           footer: Text(l10n.remoteSshRequirements),
           children: [

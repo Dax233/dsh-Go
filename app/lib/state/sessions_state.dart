@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../companion/companion_state.dart';
 import '../runtime/runtime_state.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
@@ -190,6 +191,11 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
       }
     });
     ref.onDispose(_retireArchives);
+    // Which conversation is the companion's is read from preferences after
+    // launch: hide it from the drawer as soon as that's known.
+    ref.listen(companionSessionFilterProvider, (_, _) {
+      if (state.hasValue && !state.isLoading) state = AsyncData(_visible());
+    });
     final seq = ++_loadSeq;
     final host = ref.watch(activeHostProvider);
     if (host != _host) {
@@ -326,13 +332,20 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
 
   List<SessionSummary> _visible() {
     final pendingIds = {for (final pending in _archives) ...pending.ids};
+    // Her conversation lives in 伙伴小屋, not the drawer.
+    final companion = ref.read(companionSessionFilterProvider);
+    final host = ref.read(activeHostProvider);
     return ref
         .read(readListCacheProvider)
         .derive(
           _rows()
               .where(
                 (s) =>
-                    !s.blank && !s.isSubagent && !_archived.contains(s.sessionId) && !pendingIds.contains(s.sessionId),
+                    !s.blank &&
+                    !s.isSubagent &&
+                    !_archived.contains(s.sessionId) &&
+                    !pendingIds.contains(s.sessionId) &&
+                    !companion(host, s.sessionId),
               )
               .toList()
             ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
@@ -556,28 +569,77 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
     }
   }
 
+  /// A send right after connecting can beat the lists the fallback reads. Give
+  /// them a moment; a host that never answers still gets to start the chat.
+  Future<void> _listsForNewChat() async {
+    ProviderSubscription<WorkspacesState>? listening;
+    final registry = Completer<void>();
+    void check(WorkspacesState workspaces) {
+      if (workspaces.status != WorkspacesStatus.loading && !registry.isCompleted) registry.complete();
+    }
+
+    try {
+      check(ref.read(workspacesProvider));
+      if (!registry.isCompleted) listening = ref.listen(workspacesProvider, (_, next) => check(next));
+      await Future.wait([future, registry.future]).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Too slow or failed: nothing to pick from, so the host picks.
+    } finally {
+      listening?.close();
+    }
+  }
+
   /// Creates a session in the workspace the drawer shows (else the default
-  /// directory) and returns its id.
-  Future<String> create() async {
+  /// directory) and returns its id. [autoApprove] false keeps the host's
+  /// permission preset even when 自动批准命令 is on (the companion's).
+  Future<String> create({bool autoApprove = true}) async {
     final conn = ref.read(activeConnectionProvider).value;
     if (conn == null) throw StateError('not connected');
-    // Remote hosts: only the working directory configured for that host, else
-    // the remote DSH's own default.
+    return createForConnection(conn, autoApprove: autoApprove, isCurrent: () => true);
+  }
+
+  /// Creates for a captured connection. The caller retires its intent through
+  /// [isCurrent]; waits and workspace fallback must not start a later write.
+  Future<String> createForConnection(
+    HostConnection conn, {
+    required bool Function() isCurrent,
+    bool autoApprove = true,
+  }) async {
+    final owner = ref;
+    void checkCurrent() {
+      if (!owner.mounted || !isCurrent()) throw const DshClosedException('session creation superseded');
+    }
+
+    checkCurrent();
+    // Remote hosts: the working directory configured for that host, else the
+    // workspace used last (as the official client does), else the remote DSH's
+    // own default.
+    var workspaceId = await workspaceForNewSession(ref);
+    checkCurrent();
+    if (workspaceId == null && _hostPicksNewChatDirectory(conn)) {
+      await _listsForNewChat();
+      checkCurrent();
+      final sameHost = identical(ref.read(activeConnectionProvider).value?.client, conn.client);
+      if (sameHost) workspaceId = _recentForNewChat(conn, ref.read(workspacesProvider), state.value)?.workspaceId;
+    }
     final created = await createSessionInWorkspace(
       conn.client,
-      await workspaceForNewSession(ref),
+      workspaceId,
       cwd: conn.isLocal ? localWorkspaceDir : conn.workingDirectory,
+      checkCurrent: checkCurrent,
     );
+    checkCurrent();
     // Safe mode keeps the default preset: the agent there repairs the engine
     // with a full shell already, and every command should still be asked.
     final safeMode = ref.read(localRuntimeProvider).status.inSafeMode;
-    if (conn.isLocal && !safeMode && ref.read(settingsProvider).autoApproveCommands) {
+    if (autoApprove && conn.isLocal && !safeMode && ref.read(settingsProvider).autoApproveCommands) {
       try {
         await conn.client.setPermissionPreset(created.sessionId, 'danger-full-access');
       } catch (_) {
         // Keep the default preset if the command is unavailable.
       }
     }
+    checkCurrent();
     unawaited(refresh());
     return created.sessionId;
   }
@@ -795,6 +857,33 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
 }
 
 final sessionsProvider = AsyncNotifierProvider<SessionsController, List<SessionSummary>>(SessionsController.new);
+
+/// A remote host with no working directory of its own: without a workspace, a
+/// new conversation would land wherever its `dsh web` happened to start.
+bool _hostPicksNewChatDirectory(HostConnection? conn) => conn != null && !conn.isLocal && conn.workingDirectory == null;
+
+Workspace? _recentForNewChat(HostConnection? conn, WorkspacesState registry, List<SessionSummary>? sessions) {
+  if (!_hostPicksNewChatDirectory(conn) || !registry.ready || sessions == null) return null;
+  return recentWorkspace(registry.workspaces, sessions);
+}
+
+/// Where a new conversation falls back to when the drawer selects no workspace;
+/// null while the lists load, on hosts with a directory of their own, or when
+/// the host has no workspace yet.
+final recentWorkspaceForNewChatProvider = Provider<Workspace?>((ref) {
+  final conn = ref.watch(activeConnectionProvider).value;
+  // Elsewhere the chat screen must not start the lists just to learn this.
+  if (!_hostPicksNewChatDirectory(conn)) return null;
+  return _recentForNewChat(conn, ref.watch(workspacesProvider), ref.watch(sessionsProvider).value);
+});
+
+/// Whether a new conversation will run in the host's own default directory,
+/// because the host has no workspace to fall back to.
+final newChatInHostDefaultProvider = Provider<bool>((ref) {
+  if (!_hostPicksNewChatDirectory(ref.watch(activeConnectionProvider).value)) return false;
+  final registry = ref.watch(workspacesProvider);
+  return registry.ready && registry.workspaces.isEmpty;
+});
 
 /// The title reads of one connection ([SessionsController._readTitles]).
 class _TitleReads {

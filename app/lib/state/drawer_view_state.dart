@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -384,7 +385,7 @@ class DrawerViewController extends Notifier<DrawerView> {
 
   static String _clean(String name) {
     final trimmed = name.trim();
-    return trimmed.length <= maxName ? trimmed : trimmed.substring(0, maxName);
+    return trimmed.characters.take(maxName).toString();
   }
 
   static DrawerFolder _without(DrawerFolder f, Set<String> ids) => f.sessionIds.any(ids.contains)
@@ -467,8 +468,9 @@ enum SessionDay { today, yesterday, thisWeek, earlier }
 /// Calendar grouping in local time; weeks start on Monday.
 SessionDay sessionDayOf(DateTime at, DateTime now) {
   final local = at.toLocal();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(local.year, local.month, local.day);
+  // Compare calendar dates on a fixed-length day axis, including across DST.
+  final today = DateTime.utc(now.year, now.month, now.day);
+  final day = DateTime.utc(local.year, local.month, local.day);
   final diff = today.difference(day).inDays;
   if (diff <= 0) return SessionDay.today;
   if (diff == 1) return SessionDay.yesterday;

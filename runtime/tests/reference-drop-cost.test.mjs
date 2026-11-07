@@ -26,7 +26,7 @@ for (const size of [1, 20, 200, 1000]) {
     assert.equal(data.capturedThroughSeq, size - 1);
     assert.deepEqual((await f.query.readSurface(f.source.id)).events.map(e => e.data.content[0].text), texts);
     t.diagnostic(JSON.stringify({ size, kept, dropped, ...counts }));
-    assert.equal(counts.fullCalls, 2);
+    assert.equal(counts.fullCalls, 1);
     assert.equal(counts.itemCalls, dropped);
   });
 }

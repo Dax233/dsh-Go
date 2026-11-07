@@ -272,7 +272,19 @@ async function loadIn(pkgJson, dir, w) {
     notes.push({ path: '/runtime/inject', code: 'load', severity: 'error', message: w.topInject })
   }
   try {
-    await mod.apply?.(host.ctx, {})
+    let config = {}
+    if (mod.Config) {
+      // Cordis resolves the plugin's own Standard Schema before apply.
+      const result = mod.Config['~standard'].validate(config)
+      if ('then' in result) {
+        // Refuse async validation without leaving its eventual rejection unobserved.
+        Promise.resolve(result).catch(() => {})
+        throw new TypeError('Async config validation is not supported')
+      }
+      if (result.issues) throw new TypeError(`invalid config: ${result.issues.map(issue => issue.message).join('; ')}`)
+      config = result.value
+    }
+    await mod.apply?.(host.ctx, config)
   } catch (error) {
     return { ok: false, error: w.loadFailed(String(error?.message ?? error).split('\n')[0]) }
   }

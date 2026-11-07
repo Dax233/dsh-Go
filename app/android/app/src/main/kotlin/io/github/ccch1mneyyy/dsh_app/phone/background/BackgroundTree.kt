@@ -43,13 +43,16 @@ object BackgroundTree {
     const val LINE_CAP = 60
     const val SCREEN_CAP = 3000
 
-    internal data class WindowSelection(val index: Int, val complete: Boolean)
+    /** Selects the element owner and proposes the order for a full viewport privacy scan.
+     * Selection alone does not establish that any root can be completely read. */
+    internal data class WindowSelection(val index: Int, val scanOrder: List<Int>)
 
     internal fun selectApplicationWindow(packages: List<String?>, target: String): WindowSelection? {
         val index = packages.indexOfFirst { it == target }
         if (index < 0) return null
-        // A viewport image includes other application windows whose nodes we have not scanned.
-        return WindowSelection(index, packages.size == 1)
+        // Preserve the first exact target as the sole element owner. Every other
+        // application root, including one with an unknown package, still needs scanning.
+        return WindowSelection(index, listOf(index) + packages.indices.filter { it != index })
     }
 
     fun isSensitiveLabel(label: String): Boolean = SensitiveWords.confirmHit(label, null) != null

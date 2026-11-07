@@ -28,6 +28,7 @@ import '../artifact_preview.dart' show ArtifactPreviewPage;
 import '../dsh_ui/dsh_ui_blocks.dart' show ViewerPicture;
 import '../render/markdown_image.dart';
 import '../widgets/image_actions.dart';
+import '../widgets/image_gallery.dart';
 import '../widgets/message_actions.dart' show copyMessage;
 import 'media_card.dart';
 import 'media_format.dart';
@@ -44,8 +45,8 @@ abstract final class MediaViewerMetrics {
 
   /// Capsule → 「AI 生成」.
   static const labelGap = 8.0;
-  static const maxScale = 8.0;
-  static const doubleTapScale = 2.5;
+  static const maxScale = ZoomableImage.maxScale;
+  static const doubleTapScale = ZoomableImage.doubleTapScale;
 }
 
 /// Opens a plugin gallery's [pictures] at [index], under [source] (the
@@ -124,18 +125,10 @@ class MediaViewerPage extends ConsumerStatefulWidget {
 }
 
 class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
-  late final PageController _pages = PageController(initialPage: widget.initial);
-  late int _index = widget.initial;
+  late int _index = widget.initial.clamp(0, (widget.pictures?.length ?? _items.length) - 1);
   bool _chrome = true;
-  bool _zoomed = false;
 
   List<MediaItem> get _items => widget.meta?.items ?? const [];
-
-  @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
 
   Future<Uint8List> _bytes() => mediaItemBytes(ref, widget.sessionId, _items[_index]);
 
@@ -179,23 +172,17 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
         body: Stack(
           children: [
             Positioned.fill(
-              child: PageView.builder(
-                controller: _pages,
-                physics: _zoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+              child: ImagePager(
+                initialPage: _index,
                 itemCount: _items.length,
-                onPageChanged: (i) => setState(() {
-                  _index = i;
-                  _zoomed = false;
-                }),
-                itemBuilder: (context, i) => _ZoomPage(
+                tapWhenZoomed: true,
+                onTap: () => setState(() => _chrome = !_chrome),
+                onPageChanged: (i) => setState(() => _index = i),
+                itemBuilder: (context, i) => _PicturePage(
                   key: ValueKey(_items[i].path),
                   sessionId: widget.sessionId,
                   item: _items[i],
                   label: meta.prompt,
-                  onTap: () => setState(() => _chrome = !_chrome),
-                  onZoom: (zoomed) {
-                    if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
-                  },
                 ),
               ),
             ),
@@ -308,24 +295,14 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
         body: Stack(
           children: [
             Positioned.fill(
-              child: PageView.builder(
-                controller: _pages,
-                physics: _zoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+              child: ImagePager(
+                initialPage: _index,
                 itemCount: pictures.length,
-                onPageChanged: (i) => setState(() {
-                  _index = i;
-                  _zoomed = false;
-                }),
-                itemBuilder: (context, i) => _ZoomPage(
-                  key: ValueKey(i),
-                  sessionId: '',
-                  picture: pictures[i],
-                  label: pictures[i].label,
-                  onTap: () => setState(() => _chrome = !_chrome),
-                  onZoom: (zoomed) {
-                    if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
-                  },
-                ),
+                tapWhenZoomed: true,
+                onTap: () => setState(() => _chrome = !_chrome),
+                onPageChanged: (i) => setState(() => _index = i),
+                itemBuilder: (context, i) =>
+                    _PicturePage(key: ValueKey(i), sessionId: '', picture: pictures[i], label: pictures[i].label),
               ),
             ),
             Theme(
@@ -404,17 +381,9 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
   }
 }
 
-/// One picture: pinch to 8×, double-tap to 2.5× and back.
-class _ZoomPage extends ConsumerStatefulWidget {
-  const _ZoomPage({
-    super.key,
-    required this.sessionId,
-    this.item,
-    this.picture,
-    required this.onTap,
-    required this.onZoom,
-    this.label,
-  });
+/// The picture's source; the shared pager owns its zoom and drag gestures.
+class _PicturePage extends ConsumerStatefulWidget {
+  const _PicturePage({super.key, required this.sessionId, this.item, this.picture, this.label});
 
   final String sessionId;
 
@@ -422,16 +391,12 @@ class _ZoomPage extends ConsumerStatefulWidget {
   final MediaItem? item;
   final ViewerPicture? picture;
   final String? label;
-  final VoidCallback onTap;
-  final ValueChanged<bool> onZoom;
 
   @override
-  ConsumerState<_ZoomPage> createState() => _ZoomPageState();
+  ConsumerState<_PicturePage> createState() => _PicturePageState();
 }
 
-class _ZoomPageState extends ConsumerState<_ZoomPage> {
-  final _transform = TransformationController();
-  TapDownDetails? _doubleTap;
+class _PicturePageState extends ConsumerState<_PicturePage> {
   Future<LoadedImage>? _future;
 
   @override
@@ -441,71 +406,41 @@ class _ZoomPageState extends ConsumerState<_ZoomPage> {
       final path = item.isVideo ? item.poster : item.path;
       if (path != null) _future = ref.read(workspaceImageReaderProvider).read(widget.sessionId, path);
     }
-    _transform.addListener(() => widget.onZoom(_transform.value.getMaxScaleOnAxis() > 1.01));
   }
 
   @override
-  void dispose() {
-    _transform.dispose();
-    super.dispose();
-  }
-
-  void _toggleZoom() {
-    if (_transform.value.getMaxScaleOnAxis() > 1.01) {
-      _transform.value = Matrix4.identity();
-      return;
-    }
-    final at = _doubleTap?.localPosition ?? Offset.zero;
-    const s = MediaViewerMetrics.doubleTapScale;
-    _transform.value = Matrix4.identity()
-      ..translateByDouble(-at.dx * (s - 1), -at.dy * (s - 1), 0, 1)
-      ..scaleByDouble(s, s, 1, 1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onDoubleTapDown: (d) => _doubleTap = d,
-      onDoubleTap: _toggleZoom,
-      child: InteractiveViewer(
-        transformationController: _transform,
-        maxScale: MediaViewerMetrics.maxScale,
-        child: Center(
-          child: widget.picture != null
-              ? Image(
-                  image: widget.picture!.image,
+  Widget build(BuildContext context) => Center(
+    child: widget.picture != null
+        ? Image(
+            image: widget.picture!.image,
+            fit: BoxFit.contain,
+            semanticLabel: widget.label,
+            gaplessPlayback: true,
+            errorBuilder: (context, error, stack) =>
+                Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6)),
+          )
+        : FutureBuilder<LoadedImage>(
+            future: _future,
+            builder: (context, snapshot) {
+              final image = snapshot.data;
+              if (image is RasterImage) {
+                return Image(
+                  image: image.provider,
                   fit: BoxFit.contain,
                   semanticLabel: widget.label,
                   gaplessPlayback: true,
-                  errorBuilder: (context, error, stack) =>
-                      Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6)),
-                )
-              : FutureBuilder<LoadedImage>(
-                  future: _future,
-                  builder: (context, snapshot) {
-                    final image = snapshot.data;
-                    if (image is RasterImage) {
-                      return Image(
-                        image: image.provider,
-                        fit: BoxFit.contain,
-                        semanticLabel: widget.label,
-                        gaplessPlayback: true,
-                      );
-                    }
-                    if (snapshot.hasError || (_future == null)) {
-                      return Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6));
-                    }
-                    return const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
-                    );
-                  },
-                ),
-        ),
-      ),
-    );
-  }
+                );
+              }
+              if (snapshot.hasError || (_future == null)) {
+                return Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6));
+              }
+              return const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+              );
+            },
+          ),
+  );
 }
 
 /// The bottom capsule: equal items, icon over a word.

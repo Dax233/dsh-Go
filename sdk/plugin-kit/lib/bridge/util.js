@@ -58,7 +58,7 @@ export function parseText(v) {
   for (const [k, raw] of Object.entries(v)) {
     if (!LOCALE.test(k) || typeof raw !== "string") continue;
     const s = cleanLine(raw);
-    if (s !== "") out[k.toLowerCase().replace("_", "-")] = s;
+    if (s !== "") out[k.toLowerCase().replaceAll("_", "-")] = s;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -67,7 +67,7 @@ export function parseText(v) {
 export function resolveText(text, locale) {
   if (text === undefined || text === null) return undefined;
   if (typeof text === "string") return text;
-  const want = typeof locale === "string" ? locale.toLowerCase().replace("_", "-") : "";
+  const want = typeof locale === "string" ? locale.toLowerCase().replaceAll("_", "-") : "";
   if (want && text[want] !== undefined) return text[want];
   const lang = want.split("-")[0];
   if (lang && text[lang] !== undefined) return text[lang];

@@ -209,7 +209,7 @@ for (const want of ["unknown-field@/dshGo/future", "invalid-field@/dshGo/wants/1
   "invalid-field@/dshGo/contributes/composer.actions/2/id", "invalid-field@/dshGo/contributes/composer.actions/3/effect",
   "missing-field@/dshGo/contributes/message.actions/0/label", "invalid-field@/dshGo/contributes/composer.strip/0/panel",
   "invalid-field@/dshGo/contributes/panels/0/placement/1", "view-file@/dshGo/contributes/panels/1/view", "unknown-surface@/dshGo/contributes/pets",
-  "too-long@/dshGo/title", "no-handler@/dshGo/contributes/composer.actions/1"]) {
+  "too-long@/dshGo/title", "no-handler@/dshGo/contributes/composer.actions/3"]) {
   check(scodes.includes(want), `static issue ${want}`);
 }
 check(JSON.stringify(stat?.contributes["composer.actions"].map((a) => [a.id, a.ready])) === '[["hello",true],["weird",false]]', "static actions: hello ready (effect), weird not ready");

@@ -266,6 +266,41 @@ class RemoteAutoConnectController extends Notifier<bool> {
 
 final remoteAutoConnectProvider = NotifierProvider<RemoteAutoConnectController, bool>(RemoteAutoConnectController.new);
 
+/// Reduces history payloads on supporting Remote Hosts, never live events.
+/// Changes apply to the next client, so an active turn is not interrupted.
+class RemoteCompactHistoryController extends Notifier<bool> {
+  static const prefsKey = 'remote_compact_history';
+  late Future<void> _loaded;
+
+  @override
+  bool build() {
+    _loaded = _load();
+    return false;
+  }
+
+  Future<void> get ready => _loaded;
+
+  Future<void> _load() async {
+    try {
+      final stored = (await SharedPreferences.getInstance()).getBool(prefsKey);
+      if (stored != null && ref.mounted) state = stored;
+    } catch (_) {}
+  }
+
+  Future<void> set(bool value) async {
+    await _loaded;
+    if (!ref.mounted) return;
+    state = value;
+    try {
+      await (await SharedPreferences.getInstance()).setBool(prefsKey, value);
+    } catch (_) {}
+  }
+}
+
+final remoteCompactHistoryProvider = NotifierProvider<RemoteCompactHistoryController, bool>(
+  RemoteCompactHistoryController.new,
+);
+
 /// Which host the chat, session list and new chats use. Persisted.
 class ActiveHostController extends Notifier<HostRef> {
   static const prefsKey = 'active_host';
@@ -386,11 +421,21 @@ final relayServerProvider = NotifierProvider<RelayServerController, String?>(Rel
 /// The relay client (`packages/dsh_remote`) for the chosen server. Tests
 /// override with a fake; [UnavailableRelayBackend] turns the native relay off.
 final relayBackendProvider = Provider<RelayBackend>((ref) {
+  final history = ref.read(remoteCompactHistoryProvider.notifier);
   final backend = DshRemoteRelayBackend(
     secrets: ref.watch(secretStoreProvider),
     serverUrl: ref.watch(relayServerProvider),
     clientVersion: AppInfo.version.split('+').first,
     peerConnector: flutterPeerConnector,
+    loadCompactHistory: () async {
+      await history.ready;
+      return ref.read(remoteCompactHistoryProvider);
+    },
+  );
+  ref.listen<bool>(
+    remoteCompactHistoryProvider,
+    (_, enabled) => backend.compactHistory = enabled,
+    fireImmediately: true,
   );
   // The old default-off preference no longer controls automatic transport selection.
   unawaited(

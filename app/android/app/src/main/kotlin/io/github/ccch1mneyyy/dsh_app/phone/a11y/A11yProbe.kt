@@ -155,8 +155,8 @@ internal class A11yProbe(private val service: PhoneA11yService, private val driv
     /**
      * Shows a confirm card, then injects a tap on 允许一次 through this service's own
      * dispatchGesture — the attack the card must refuse — and reports whether it resolved.
-     * relax=true lifts the InjectGuard / pass-through layers so the event-flag check alone is
-     * observed (does FLAG_IS_ACCESSIBILITY_EVENT reach the view on this Android version?).
+     * relax=true lifts the InjectGuard / pass-through layers: with nothing else checking event
+     * fields (see PromptInputPolicy), the tap then gets through, which shows those layers are the guard.
      */
     private fun injectTest(relax: Boolean): String {
         val result = arrayOfNulls<String>(1)

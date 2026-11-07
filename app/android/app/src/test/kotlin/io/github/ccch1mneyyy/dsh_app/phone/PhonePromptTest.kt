@@ -208,19 +208,19 @@ class PhonePromptTest {
         val call = MainThreadCall { "done" }; call.run(); assertEquals("done", call.await(1))
     }
 
-    @Test fun hardwareStrokeWithAccessibilityFlagStillWorksAfterArming() {
-        assertTrue(PromptInputPolicy.allows(1000, 600, true, false, false, false, true, false))
+    @Test fun aFingerAuthorizesWhateverItsEventFieldsSay() {
+        // #608 (OPPO PJB110) and #296 (realme RMX3706): device -1 and flags 0x800 on a real finger.
+        // The policy no longer reads those fields, so such a touch authorizes once the card is armed.
+        assertTrue(PromptInputPolicy.allows(1000, 600, live = true, injecting = false, obscured = false))
     }
 
-    @Test fun injectedAndObscuredTouchesNeverAuthorize() {
-        assertFalse(PromptInputPolicy.allows(1000, 600, true, true, false, false, false, false))
-        assertFalse(PromptInputPolicy.allows(1000, 600, true, false, true, false, false, true))
-        assertFalse(PromptInputPolicy.allows(1000, 600, true, false, false, true, true, false))
+    @Test fun ourOwnInputAndObscuredTouchesNeverAuthorize() {
+        assertFalse(PromptInputPolicy.allows(1000, 600, live = true, injecting = true, obscured = false))
+        assertFalse(PromptInputPolicy.allows(1000, 600, live = true, injecting = false, obscured = true))
     }
 
-    @Test fun talkBackExceptionDoesNotBypassArmingOrLifetime() {
-        assertTrue(PromptInputPolicy.allows(1000, 600, true, false, false, true, true, true))
-        assertFalse(PromptInputPolicy.allows(500, 600, true, false, false, true, true, true))
-        assertFalse(PromptInputPolicy.allows(1000, 600, false, false, false, true, true, true))
+    @Test fun nothingAuthorizesBeforeArmingOrAfterTheCardEnds() {
+        assertFalse(PromptInputPolicy.allows(500, 600, live = true, injecting = false, obscured = false))
+        assertFalse(PromptInputPolicy.allows(1000, 600, live = false, injecting = false, obscured = false))
     }
 }

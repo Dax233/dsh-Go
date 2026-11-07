@@ -1459,8 +1459,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           : _spoken,
     );
     final narrow = MediaQuery.sizeOf(context).width < WindowClass.mediumMin;
-    // Where a new conversation starts (the drawer's workspace).
-    final workspace = ref.watch(selectedWorkspaceProvider);
+    // Where a new conversation starts (the drawer's workspace, else the one a
+    // remote host falls back to, so the host's start directory is never silent).
+    final newChat = sessionId == null;
+    final workspace =
+        ref.watch(selectedWorkspaceProvider) ?? (newChat ? ref.watch(recentWorkspaceForNewChatProvider) : null);
+    final inHostDefault = newChat && workspace == null && ref.watch(newChatInHostDefaultProvider);
     // A one-shot subagent takes no messages: DSH Web shows it read-only.
     final readOnly =
         sessionId != null &&
@@ -1569,7 +1573,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                               onTap: _pickNewChatFolder,
                                             )
                                           : null,
-                                      workspace: workspace == null ? null : workspaceTitle(workspace),
+                                      workspace: workspace != null
+                                          ? workspaceTitle(workspace)
+                                          : inHostDefault
+                                          ? context.l10n.viewEmptyHostDefaultDirectory
+                                          : null,
                                       onWorkspace: () => showWorkspaceSheet(
                                         context,
                                         onManage: () =>

@@ -158,9 +158,7 @@ internal object PhonePromptUi {
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 rejected = !PromptInputPolicy.allows(SystemClock.elapsedRealtime(), armedAt, p.live, InjectGuard.active(),
-                    event.flags and (MotionEvent.FLAG_WINDOW_IS_OBSCURED or MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0,
-                    event.deviceId <= 0, event.flags and 0x800 != 0 || event.getToolType(0) == MotionEvent.TOOL_TYPE_UNKNOWN,
-                    a11y.isTouchExplorationEnabled)
+                    event.flags and (MotionEvent.FLAG_WINDOW_IS_OBSCURED or MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0)
             }
             if (rejected) {
                 if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) isPressed = false

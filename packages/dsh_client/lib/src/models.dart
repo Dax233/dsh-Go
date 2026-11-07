@@ -241,6 +241,32 @@ class Message {
   /// Concatenated visible text (text parts only).
   String get text => parts.whereType<TextPart>().map((p) => p.text).join();
 
+  /// Explicit final-answer text in the known pi-ai v2 replay format.
+  /// Text blocks are joined for display, so any final block keeps the message.
+  bool get isFinalAnswer {
+    if (role != MessageRole.assistant || source.kind != 'model') return false;
+    final replay = asMap(source.raw['replayState']);
+    final response = asMap(replay?['response']);
+    final blocks = asList(replay?['blocks']);
+    if (response?['kind'] != 'pi-ai' || response?['version'] != 2 || blocks == null || blocks.length != parts.length) {
+      return false;
+    }
+    for (var i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      if (part is! TextPart || part.text.trim().isEmpty) continue;
+      final block = asMap(blocks[i]);
+      if (block?['type'] != 'text') continue;
+      final signature = asString(block?['textSignature']);
+      final metadata = signature == null ? null : asMap(tryDecodeJson(signature));
+      if (metadata?['v'] == 1 &&
+          metadata?['phase'] == 'final_answer' &&
+          (asString(metadata?['id'])?.isNotEmpty ?? false)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   String get reasoning => parts.whereType<ReasoningPart>().map((p) => p.text).join();
 
   List<ToolCallPart> get toolCalls => parts.whereType<ToolCallPart>().toList(growable: false);

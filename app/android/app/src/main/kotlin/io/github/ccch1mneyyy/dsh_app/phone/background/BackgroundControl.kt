@@ -69,6 +69,9 @@ class BackgroundControl private constructor(context: Context) {
 
     // ---- status ------------------------------------------------------------
 
+    /** Last accepted gate facts only: no connection, permission query or fresh self-test. */
+    fun inputProbeDiagnostics(): Map<String, Any?> = InputProbeDiagnostics.snapshot(gate.snapshot)
+
     /** The `background` sub-map of the `dsh/phone` `status` method. */
     fun status(): Map<String, Any?> {
         val reason = readiness()
@@ -261,10 +264,10 @@ class BackgroundControl private constructor(context: Context) {
     /**
      * Has the engine grant the permission over [via] (`shizuku` / `adb`): 不打扰模式's channel when it
      * uses the same starter, else one opened for this and closed after. Blocks (an adb connect can
-     * take seconds); true when the engine says it granted.
+     * take seconds). Retains this attempt before closing any temporary channel.
      */
-    fun grantSecureSettings(via: String, mayStart: () -> Boolean): Boolean {
-        if (!mayStart()) return false
+    fun grantSecureSettings(via: String, mayStart: () -> Boolean): SecureSettingsGrant.Attempt {
+        if (!mayStart()) return SecureSettingsGrant.Attempt.CANCELLED
         val sharedApi = via == SecureSettingsGrant.SHIZUKU || via == SecureSettingsGrant.SUI
         val shared = PrivilegedPathPolicy.sharesGrantChannel(mode, via)
         val ch = when {
@@ -272,13 +275,22 @@ class BackgroundControl private constructor(context: Context) {
             sharedApi -> shizuku.connect(mayStart = mayStart)
             else -> adb.connect(mayStart = mayStart)
         }
-        val request = Bundle().apply {
-            putString(Proto.OP, Proto.OP_GRANT_SECURE_SETTINGS)
-            putInt(Proto.USER, Process.myUid() / PER_USER_RANGE)
+        try {
+            // A connect may return null because the original UI lease was cancelled.
+            if (!mayStart()) return SecureSettingsGrant.Attempt.CANCELLED
+            if (ch == null) return SecureSettingsGrant.Attempt.UNAVAILABLE
+            val request = Bundle().apply {
+                putString(Proto.OP, Proto.OP_GRANT_SECURE_SETTINGS)
+                putInt(Proto.USER, Process.myUid() / PER_USER_RANGE)
+            }
+            return runCatching {
+                val response = ch.execute(request)
+                SecureSettingsGrant.attempt(response.getBoolean(Proto.OK), response.getString(Proto.ERROR))
+            }.getOrDefault(SecureSettingsGrant.Attempt.UNAVAILABLE)
+        } finally {
+            // Shared task channels remain owned by their task; only retire this temporary link.
+            if (!shared) if (sharedApi) shizuku.disconnectIfCurrent(ch) else adb.disconnectIfCurrent(ch)
         }
-        val ok = ch != null && mayStart() && runCatching { ch.execute(request).getBoolean(Proto.OK) }.getOrDefault(false)
-        if (!shared) if (sharedApi) shizuku.disconnectIfCurrent(ch) else adb.disconnectIfCurrent(ch)
-        return ok
     }
 
     fun requestShizukuPermission(then: () -> Unit): Boolean = shizuku.requestPermission(then)

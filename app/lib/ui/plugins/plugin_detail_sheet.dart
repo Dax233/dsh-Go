@@ -150,7 +150,7 @@ class MarketPluginSheet extends ConsumerWidget {
               PluginHero(
                 avatar: PluginAvatar(name: plugin.name, title: title, icon: plugin.icon, size: 64),
                 title: title,
-                subtitle: [?plugin.author, ?entry.categoryTitle].join(' · '),
+                subtitle: [?plugin.author, ?entry.categoryTitleIn(locale)].join(' · '),
                 badges: [
                   ...marketEntryBadges(context, entry),
                   if (status == MarketInstallStatus.updateAvailable)

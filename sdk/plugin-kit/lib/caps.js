@@ -57,7 +57,7 @@ export function localize(capsOrLocale, text) {
   if (typeof text !== 'object' || text === null) return ''
   const tag = (typeof capsOrLocale === 'string' ? capsOrLocale : capsOrLocale?.locale) ?? ''
   const keys = Object.keys(text)
-  const find = (want) => keys.find((k) => k.toLowerCase().replace('_', '-') === want.toLowerCase().replace('_', '-'))
+  const find = (want) => keys.find((k) => k.toLowerCase().replaceAll('_', '-') === want.toLowerCase().replaceAll('_', '-'))
   const lang = tag.split(/[-_]/)[0]
   const hit = (tag && find(tag)) || (lang && find(lang)) || find('en') || find('zh') || keys[0]
   return hit === undefined ? '' : String(text[hit])

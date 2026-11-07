@@ -804,6 +804,10 @@ class FakeRemoteHost {
   /// Independent top-level workspace upload RPCs (plugin 0.6.2).
   Future<Object?> Function(String method, Map<String, Object?> params)? workspaceUpload;
 
+  /// Optional connection-scoped history configuration and its exact requests.
+  Future<Object?> Function(Map<String, Object?> params)? configureHistory;
+  final List<(String, Map<String, Object?>)> historyConfigurations = [];
+
   /// Responses above this many bytes answer RESPONSE_TOO_LARGE on the
   /// direct path (forces the transfer path).
   int? directResponseLimit;
@@ -1071,6 +1075,11 @@ class FakeRemoteHost {
         if (stallDescribe) return;
         if (describeUnsupported) return reject('METHOD_NOT_FOUND', 'Unknown method.');
         respond({'capabilities': capabilities});
+      case 'remote.history.configure':
+        historyConfigurations.add((connection.connectionId, params));
+        final configure = configureHistory;
+        if (configure == null) return reject('METHOD_NOT_FOUND', 'Unknown history configuration method.');
+        respond(await configure(params));
       case 'workspace.upload.open' || 'workspace.upload.chunk' || 'workspace.upload.commit' || 'workspace.upload.abort':
         final upload = workspaceUpload;
         if (upload == null) return reject('FEATURE_NOT_SUPPORTED', 'No workspace upload handler.');

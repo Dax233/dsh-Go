@@ -261,6 +261,8 @@ function placementFor(placement, caps) {
  */
 export function renderPlugin(parsed, caps, live) {
   const issues = [...parsed.issues];
+  // Where an item sits in the manifest: rejected entries before it still count.
+  const itemPtr = (surface, it, ...rest) => ptr("contributes", surface, parsed.rawIndex.get(it.id), ...rest);
   const text = (t, max, path) => {
     const s = resolveText(t, caps.locale);
     if (s === undefined) return undefined;
@@ -292,43 +294,43 @@ export function renderPlugin(parsed, caps, live) {
   };
   if (state === "ok") {
     for (const surface of ACTION_SURFACES) {
-      parsed.items[surface]?.forEach((it, i) => {
+      parsed.items[surface]?.forEach((it) => {
         const handled = it.effect !== undefined || live.handlers.has(it.id);
         const supported = (it.requires ?? []).every((x) => (caps.features ?? []).includes(x));
         const ready = handled && supported;
-        if (!handled) issues.push(issue(ptr("contributes", surface, i), "no-handler", "warn", `${it.id} has no effect and no on("${it.id}") handler`));
+        if (!handled) issues.push(issue(itemPtr(surface, it), "no-handler", "warn", `${it.id} has no effect and no on("${it.id}") handler`));
         (row.contributes[surface] ??= []).push({
           id: it.id,
           ...(it.requires === undefined ? {} : { requires: it.requires }),
-          label: text(it.label, LABEL_LIMIT[surface], ptr("contributes", surface, i, "label")),
+          label: text(it.label, LABEL_LIMIT[surface], itemPtr(surface, it, "label")),
           ...(it.icon === undefined ? {} : { icon: it.icon }),
           ...(it.effect === undefined ? {} : { effect: it.effect }),
           ready,
         });
       });
     }
-    parsed.items["composer.strip"].forEach((it, i) => {
+    parsed.items["composer.strip"].forEach((it) => {
       const liveStrip = live.strips.has(it.id);
       const tappable = it.panel !== undefined || live.handlers.has(it.id);
       const ready = liveStrip || tappable || it.text !== undefined;
-      if (!ready) issues.push(issue(ptr("contributes", "composer.strip", i), "no-handler", "warn", `${it.id} has no text, panel, strip("${it.id}") or on("${it.id}")`));
+      if (!ready) issues.push(issue(itemPtr("composer.strip", it), "no-handler", "warn", `${it.id} has no text, panel, strip("${it.id}") or on("${it.id}")`));
       row.contributes["composer.strip"].push({
         id: it.id,
         ...(it.icon === undefined ? {} : { icon: it.icon }),
-        text: it.text === undefined ? null : text(it.text, LIMITS.textChars.stripText, ptr("contributes", "composer.strip", i, "text")),
+        text: it.text === undefined ? null : text(it.text, LIMITS.textChars.stripText, itemPtr("composer.strip", it, "text")),
         ...(it.panel === undefined ? {} : { panel: it.panel }),
         tappable,
         live: liveStrip,
         ready,
       });
     });
-    parsed.items.panels.forEach((it, i) => {
+    parsed.items.panels.forEach((it) => {
       const reg = live.panels.get(it.id);
       const ready = reg !== undefined || it.viewFile !== undefined;
-      if (!ready) issues.push(issue(ptr("contributes", "panels", i), "no-handler", "warn", `${it.id} has no view file and no panel("${it.id}") registration`));
+      if (!ready) issues.push(issue(itemPtr("panels", it), "no-handler", "warn", `${it.id} has no view file and no panel("${it.id}") registration`));
       row.contributes.panels.push({
         id: it.id,
-        title: text(it.title, LIMITS.textChars.panelTitle, ptr("contributes", "panels", i, "title")),
+        title: text(it.title, LIMITS.textChars.panelTitle, itemPtr("panels", it, "title")),
         ...(it.icon === undefined ? {} : { icon: it.icon }),
         placement: placementFor(it.placement, caps),
         ...(it.presentation === undefined ? {} : { presentation: it.presentation }),
@@ -337,9 +339,9 @@ export function renderPlugin(parsed, caps, live) {
         live: reg?.data === true,
       });
     });
-    parsed.items["turn.note"]?.forEach((it, i) => {
+    parsed.items["turn.note"]?.forEach((it) => {
       const ready = live.notes?.has(it.id) === true;
-      if (!ready) issues.push(issue(ptr("contributes", "turn.note", i), "no-handler", "warn", `${it.id} has no turnNote("${it.id}") registration`));
+      if (!ready) issues.push(issue(itemPtr("turn.note", it), "no-handler", "warn", `${it.id} has no turnNote("${it.id}") registration`));
       (row.contributes["turn.note"] ??= []).push({ id: it.id, ready });
     });
   }
@@ -388,7 +390,7 @@ export function checkManifest(pkgJson, pkgDir, opts = {}) {
   const issues = [...plugin.issues];
   parsed.items.panels.forEach((it) => {
     if (it.viewFile === undefined) return;
-    const at = `/dshGo/contributes/panels/${parsed.items.panels.indexOf(it)}/view`;
+    const at = ptr("contributes", "panels", parsed.rawIndex.get(it.id), "view");
     let view;
     try {
       view = JSON.parse(readFileSync(it.viewFile, "utf8"));

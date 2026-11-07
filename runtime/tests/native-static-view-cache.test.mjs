@@ -143,3 +143,44 @@ test('missing, malformed, oversize and unnormalizable files keep their error pat
   f.write('{"type":"text","text":"RECOVERED"}');
   assert.equal((await f.get()).view.text, 'RECOVERED');
 });
+
+test('static view byte budget includes number normalization, on cold and repeated reads', async t => {
+  const raw = '{"type":"text","text":"Numeric metadata","values":[' + Array(1600).fill('1e20').join(',') + ']}';
+  const rawBytes = Buffer.byteLength(raw), normalizedBytes = Buffer.byteLength(JSON.stringify(JSON.parse(raw)));
+  assert(rawBytes < 32768); assert(normalizedBytes > 32768);
+  const f = await fixture(t, raw);
+  for (let i = 0; i < 2; i++) {
+    const r = await f.get();
+    t.diagnostic(JSON.stringify({ attempt: i, rawBytes, normalizedBytes, status: r.status, stats: r.stats, error: r.error }));
+    assert.equal(r.status, 500, 'static views must obey the normalized JSON byte budget');
+    assert.equal(r.error.code, 'invalid-view');
+  }
+  f.write('{"type":"text","text":"RECOVERED"}');
+  assert.equal((await f.get()).view.text, 'RECOVERED');
+});
+
+test('static view accepts exactly the normalized byte limit', async t => {
+  const base = '{"type":"text","text":"","values":[' + Array(1000).fill('1e20').join(',') + ']}';
+  const padding = 32768 - Buffer.byteLength(JSON.stringify(JSON.parse(base)));
+  assert(padding > 0);
+  const raw = base.replace('"text":""', '"text":"' + 'x'.repeat(padding) + '"');
+  const model = JSON.parse(raw);
+  assert(Buffer.byteLength(raw) < 32768);
+  assert.equal(Buffer.byteLength(JSON.stringify(model)), 32768);
+  const f = await fixture(t, raw);
+  for (let i = 0; i < 2; i++) {
+    const r = await f.get();
+    assert.equal(r.status, 200); assert.equal(r.stats.bytes, 32768); assert.deepEqual(r.view, model);
+  }
+});
+
+test('static scientific numbers under both budgets preserve their JSON values', async t => {
+  const raw = '{"type":"text","text":"Small numeric metadata","values":[1e20,1e-7,1e400,-0]}';
+  const model = JSON.parse(JSON.stringify(JSON.parse(raw)));
+  const bytes = Buffer.byteLength(JSON.stringify(model));
+  assert(Buffer.byteLength(raw) < 32768); assert(bytes < 32768);
+  const f = await fixture(t, raw);
+  for (let i = 0; i < 2; i++) {
+    const r = await f.get(); assert.equal(r.status, 200); assert.equal(r.stats.bytes, bytes); assert.deepEqual(r.view, model);
+  }
+});

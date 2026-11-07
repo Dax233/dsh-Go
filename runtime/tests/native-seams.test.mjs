@@ -246,3 +246,26 @@ test("requires, micro and reports go by the entry that was accepted, not an earl
   assert.ok(found.includes("invalid-field@/dshGo/contributes/composer.tools/3/requires"), found.join());
   assert.ok(found.includes("invalid-field@/dshGo/contributes/composer.actions/1"), found.join());
 });
+
+test("issue paths point at the entry in the manifest, past the rejected ones", () => {
+  const { dir, pkg } = pkgDir("issue-paths", {
+    v: 1,
+    contributes: {
+      // Each list starts with an entry that is rejected, so nothing else sits at index 0.
+      "composer.actions": [{ id: "a" }, { id: "a", label: "this label is far too long for a capsule" }],
+      "composer.strip": [{ id: "!" }, { id: "s" }],
+      "turn.note": [{ id: "!" }, { id: "n" }],
+      panels: [{ id: "p" }, { id: "q", title: "Q" }, { id: "v", title: "V", view: "view.json" }],
+    },
+  });
+  writeFileSync(join(dir, "view.json"), "not json");
+  const found = codes(checkManifest(pkg, dir, { handlers: [] }).issues);
+  for (const at of [
+    "no-handler@/dshGo/contributes/composer.actions/1",
+    "too-long@/dshGo/contributes/composer.actions/1/label",
+    "no-handler@/dshGo/contributes/composer.strip/1",
+    "no-handler@/dshGo/contributes/turn.note/1",
+    "no-handler@/dshGo/contributes/panels/1",
+    "view-file@/dshGo/contributes/panels/2/view",
+  ]) assert.ok(found.includes(at), `${at} in ${found.join()}`);
+});

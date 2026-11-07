@@ -66,7 +66,10 @@ Future<void> openDetails(WidgetTester tester) async {
   await tester.tap(find.byType(ToolRow));
   await tester.pumpAndSettle();
   await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Image widgets exist before their first decoded frame makes them tappable.
+    for (final element in find.byType(Image).evaluate()) {
+      await precacheImage((element.widget as Image).image, element, onError: (_, _) {});
+    }
   });
   await tester.pumpAndSettle();
 }

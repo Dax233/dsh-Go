@@ -378,6 +378,9 @@ class ConnectionDiagnostics {
           if (network.connectDuration case final duration?) 'connectDurationMs': duration.inMilliseconds,
           if (network.roundTripTime case final duration?) 'roundTripTimeMs': duration.inMilliseconds,
           'fallbackReason': ?network.safeFallbackReason,
+          if (network.localIpVersion case final version?) 'localIpVersion': version.name,
+          if (network.remoteIpVersion case final version?) 'remoteIpVersion': version.name,
+          if (network.iceProtocol case final protocol?) 'iceProtocol': protocol.name,
         },
         if (status.error case final error?) ...{'errorKind': error.kind.name, 'retryable': error.retryable},
       });

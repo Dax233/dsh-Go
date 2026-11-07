@@ -428,7 +428,7 @@ describe('home page', () => {
     const ctx = makeEnv();
     for (const [path, type] of [
       ['/assets/features/01-local-engine.webp', 'image/webp'],
-      ['/assets/author/download-qr.png', 'image/png'],
+      ['/assets/author/download-qr-v2.png', 'image/png'],
       ['/assets/dsh-go.svg', 'image/svg+xml'],
       ['/app.js', 'text/javascript'],
       ['/site-config.js', 'text/javascript'],
@@ -461,7 +461,7 @@ describe('home page', () => {
     expect(page).toContain('href="https://dshtui.com/"');
     expect(page).toContain('href="https://github.com/ccch1mneyyy/dsh-TUI"');
     const images = [...site('site-config.js').matchAll(/(?:avatar|qrImage):\s*"([^"]+)"/g)].map((m) => m[1]!);
-    expect(images).toEqual(['assets/dsh-go.svg', 'assets/author/download-qr.png']);
+    expect(images).toEqual(['assets/dsh-go.svg', 'assets/author/download-qr-v2.png']);
     const ctx = makeEnv();
     for (const ref of new Set([...refs, ...images])) {
       expect((await serve(get('/' + ref), ctx.env)).status, ref).toBe(200);

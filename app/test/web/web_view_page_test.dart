@@ -123,7 +123,8 @@ void main() {
 
     test('DSH Web as shipped: a seat in its own header on phones, the bar above', () {
       // Below its own drawer breakpoint the official layout keeps a leading
-      // seat in the header row: the handle takes it, with no bar of its own.
+      // seat in the header row: the handle takes the far left of it, with no
+      // bar of its own.
       expect(_resolve(_phonePortrait, adapt: false).chrome, WebChrome.seat);
       expect(_resolve(_tablet600, adapt: false).chrome, WebChrome.seat);
       // Wider windows have no seat (an icon rail, then the full layout).
@@ -134,16 +135,20 @@ void main() {
       expect(_resolve(_phoneLandscape, dshWeb: false, adapt: false).chrome, WebChrome.bar);
     });
 
-    test("DSH Web as shipped on a phone: the handle takes the page's own seat", () {
+    test("DSH Web as shipped on a phone: the handle takes the far left, the page's own opener moves past it", () {
       final i = _resolve(_phonePortrait, adapt: false);
       // The page starts under the status bar: its drawer layout keeps the
       // leading room (11 down, 12 from the side) for the handle.
       expect((i.chrome, i.rootTop, i.left), (WebChrome.seat, 52, 0));
-      expect(i.layerTop, 52 + WebChromeMetrics.seatTop + WebChromeMetrics.button + 6);
-      // The reserve is widened from the official 48 to the handle's 52.
-      expect(i.script, contains('--dsh-frame-leading-clearance:52.0px'));
-      // The fullscreen right panel's tab strip starts past the handle too.
-      expect(i.script, contains('padding-left:52.0px!important'));
+      expect(i.layerTop, 52 + WebChromeMetrics.seatTop + WebChromeMetrics.seatButton + 6);
+      // The official seat holds DSH Web's own sidebar opener: it moves past
+      // the marker instead of under it (12 → 48), one row.
+      expect(i.script, contains('[data-sidebar-drawer]>[data-shell-leading]{left:48.0px!important}'));
+      // The reserve covers marker, gap, the official opener and the gap after
+      // it: 84 (the official layout's own 48 is 12 + 28 + 8).
+      expect(i.script, contains('--dsh-frame-leading-clearance:84.0px'));
+      // The fullscreen right panel's tab strip starts past them too.
+      expect(i.script, contains('padding-left:84.0px!important'));
       // The official layout stays: no app layout attribute.
       expect(i.script, contains("removeAttribute('data-dsh-app-layout')"));
       expect(i.script, isNot(contains("setAttribute('data-dsh-app-layout'")));
@@ -241,16 +246,30 @@ void main() {
       expect(_platform.controller.insetsScript, contains('left:52.0px'));
     });
 
-    testWidgets('DSH Web as shipped on a phone: the handle sits in the page\'s own seat', (tester) async {
+    testWidgets('DSH Web as shipped on a phone: the handle sits left of the page\'s own opener', (tester) async {
       await _pump(tester, _phonePortrait, phoneLayout: false);
       // Its own drawer layout keeps the leading room; no bar above the page.
       expect(find.byKey(const ValueKey('web-controls-seat')), findsOneWidget);
       expect(find.byKey(const ValueKey('web-controls-bar')), findsNothing);
+      // The marker is the size of the page's own controls in that row (28)
+      // and keeps its measured seat.
       final back = tester.getRect(_button('返回'));
       expect(back.left, WebChromeMetrics.seatLeft);
       expect(back.top, 52 + WebChromeMetrics.seatTop);
-      expect(back.size, const Size.square(WebChromeMetrics.button));
-      expect(_platform.controller.insetsScript, contains('--dsh-frame-leading-clearance:52.0px'));
+      expect(back.size, const Size.square(WebChromeMetrics.seatButton));
+      // The page's own opener, in its own seat, moves past the marker: the
+      // marker never covers it. Both sit in the one header row DSH Web lays
+      // out, and the title starts past both.
+      expect(
+        _platform.controller.insetsScript,
+        contains('[data-sidebar-drawer]>[data-shell-leading]{left:48.0px!important}'),
+      );
+      expect(_platform.controller.insetsScript, contains('--dsh-frame-leading-clearance:84.0px'));
+      expect(
+        back.right,
+        lessThan(WebChromeMetrics.seatLeft + WebChromeMetrics.seatShift),
+        reason: 'the marker leaves the official opener its room',
+      );
     });
 
     testWidgets('tablet: back sits in the band above the sidebar, on the rail column', (tester) async {

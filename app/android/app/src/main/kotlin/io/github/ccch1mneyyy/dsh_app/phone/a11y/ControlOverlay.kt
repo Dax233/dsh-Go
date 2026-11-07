@@ -121,7 +121,8 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     private var pendingHandoff: Pending<HandoffResult>? = null
     @Volatile private var sharedPrompt: PromptPresentation? = null
     private var passThrough = false
-    private var captureHidden = false
+    private val captureVisibility = CaptureVisibility()
+    private val captureHidden: Boolean get() = captureVisibility.hidden
     private var darkBuilt: Boolean? = null
 
     // The form: FoldClock decides, the morphs follow.
@@ -274,28 +275,35 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         if (changed) SystemClock.sleep(80) // input windows update a frame after the layout
     }
 
-    /** Hides the overlay for a full-display screenshot (API 30–33). */
+    /** Paired hides for full-display screenshots; captures may overlap. */
     fun hideForCapture(hide: Boolean) {
-        if (!hide) {
-            // Recovery must still run if the screenshot worker times out or is interrupted.
-            main.post {
-                try { applyCaptureHidden(false) }
-                catch (e: Exception) { Log.w(TAG, "overlay main-thread call failed", e) }
-            }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            // The main-thread pet caller schedules its own delay before it shoots.
+            applyCaptureHidden(hide)
             return
         }
-        val changed = onMain(500) { applyCaptureHidden(true) } == true
-        if (changed) SystemClock.sleep(120)
+        // Both halves run on the main queue in the order they were asked for and are never
+        // cancelled: a release can't overtake its own hide, and recovery still runs if the
+        // screenshot worker times out or is interrupted.
+        val applied = CountDownLatch(1)
+        var settle = false
+        main.post {
+            try { settle = applyCaptureHidden(hide) }
+            catch (e: Exception) { Log.w(TAG, "overlay main-thread call failed", e) }
+            finally { applied.countDown() }
+        }
+        // Blocking agent captures wait for the windows to go; a busy main thread costs only the wait.
+        if (hide && applied.await(500, TimeUnit.MILLISECONDS) && settle) SystemClock.sleep(120)
     }
 
     private fun applyCaptureHidden(hide: Boolean): Boolean {
-        if (captureHidden == hide) return false
-        captureHidden = hide
-        val v = if (hide) View.INVISIBLE else View.VISIBLE
-        syncWindows()
-        confirmCard?.root?.visibility = v
-        handoffCard?.root?.visibility = v
-        return pill != null || confirmCard != null || handoffCard != null
+        if (captureVisibility.update(hide)) {
+            val v = if (captureHidden) View.INVISIBLE else View.VISIBLE
+            syncWindows()
+            confirmCard?.root?.visibility = v
+            handoffCard?.root?.visibility = v
+        }
+        return hide && (pill != null || confirmCard != null || handoffCard != null)
     }
 
     /** Screen off, lock, 停止 elsewhere, service going away: answer everything pending with STOP. */
@@ -876,15 +884,13 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
      *  - not in its first [ARM_MS] (a tap already in flight when the card appeared);
      *  - not while this service is injecting a gesture (InjectGuard);
      *  - not when the touch came through another window on top (tapjacking, FLAG_WINDOW_IS_OBSCURED);
-     *  - not when it looks like an accessibility service's stroke: a virtual device (id ≤ 0) and
-     *    either FLAG_IS_ACCESSIBILITY_EVENT (0x800) or tool type UNKNOWN — unless TalkBack-style
-     *    touch exploration is on, whose double-tap takes that same path;
-     *  - ACTION_CLICK from any accessibility service is refused unless touch exploration is on.
+     *  - ACTION_CLICK from an accessibility service only while touch exploration (TalkBack) is on,
+     *    and never while this service is acting itself.
      * And the Actuator makes the overlay untouchable for every stroke it injects.
-     * Measured on the API 35 emulator (debug probe): our dispatchGesture tap = flags 0x800,
-     * device -1, tool UNKNOWN; a hardware-touchscreen tap = flags 0x800 (!), device 12, tool FINGER;
-     * shell `input tap` = flags 0, device -1, tool FINGER. So 0x800 alone would lock real fingers
-     * out; the device id is what separates them.
+     * Event fields don't decide: on OPPO / realme a real finger arrives with device -1 and flags
+     * 0x800, like our own dispatchGesture tap (#608, #296), so guessing from them locked real users
+     * out. What the card guards against is the assistant, and every input it sends is ours and marked
+     * (PromptInputPolicy has the full rule).
      */
     private inner class GuardedButton(context: Context, private val armedAt: Long) : TextView(context) {
         private var rejected = false
@@ -906,7 +912,8 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         }
 
         override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
-            if ((action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_LONG_CLICK) && !a11y.isTouchExplorationEnabled) {
+            if ((action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
+                (!a11y.isTouchExplorationEnabled || InjectGuard.active() || SystemClock.uptimeMillis() < armedAt)) {
                 lastGuardVerdict = "accessibility-action"
                 Log.i(TAG, "guarded '$text': refused accessibility click")
                 return false
@@ -918,8 +925,6 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             SystemClock.uptimeMillis() < armedAt -> "too-early"
             InjectGuard.active() && !debugIgnoreInjectGuard -> "injecting"
             event.flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED != 0 -> "obscured"
-            event.deviceId <= 0 && (event.flags and FLAG_IS_ACCESSIBILITY_EVENT != 0 || event.getToolType(0) == MotionEvent.TOOL_TYPE_UNKNOWN) &&
-                !a11y.isTouchExplorationEnabled -> "accessibility-injected"
             else -> null
         }
     }
@@ -1307,8 +1312,5 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         /** Going idle is slow and quiet; a touch brings it back at once. */
         private const val DIM_FADE_MS = 400L
         private const val UNDIM_FADE_MS = 120L
-
-        /** MotionEvent.FLAG_IS_ACCESSIBILITY_EVENT (hidden, API 31+). Not decisive alone, see GuardedButton. */
-        private const val FLAG_IS_ACCESSIBILITY_EVENT = 0x800
     }
 }

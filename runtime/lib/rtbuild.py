@@ -806,6 +806,16 @@ def install_ca_bundle(entries, report):
                                 "bundleBytes": len(bundle)}
 
 
+def bridge_shared_rows():
+    """The rows of the bridge bundle's cordis.patch.yml that the local overlay also carries."""
+    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bridge", "dsh-go-bridge", "cordis.patch.yml")
+    with open(source, encoding="utf-8") as patch:
+        rows = patch.read().split("    # --- shared rows ---\n", 1)[1]
+    # Local runtimes load the bridge by path; it is not a profile dependency.
+    return rows.replace("name: dsh-go-bridge/companion/full-context",
+                        "name: %s/lib/companion/full-context.js" % DSH_GO_BRIDGE)
+
+
 def overlay_entries(runtime_info, with_python=False, with_pnpm=False, with_bridge=False):
     """Files dsh-app adds to the rootfs. Kept here so the recipe lives in one place."""
     E = {}
@@ -837,6 +847,7 @@ def overlay_entries(runtime_info, with_python=False, with_pnpm=False, with_bridg
       "export TERM=\"${TERM:-xterm-256color}\"\n"
       "export TMPDIR=\"${TMPDIR:-/tmp}\"\n"
       "export DSH_HOME=\"${DSH_HOME:-/root/.dsh}\"\n"
+      "export XDG_DATA_DIRS=\"${XDG_DATA_DIRS-/usr/local/share:/usr/share:/system}\"\n"
       + ("export pnpm_config_registry=\"${pnpm_config_registry:-%s}\"\n" % NPMMIRROR if with_pnpm else ""))
     f("etc/apt/apt.conf.d/99dsh-app-proot",
       "// proot fakes root; apt's privilege drop to _apt only causes setgroups/permission noise.\n"
@@ -899,6 +910,7 @@ def overlay_entries(runtime_info, with_python=False, with_pnpm=False, with_bridg
                       "- insert:\n"
                       "    - id: dsh-go-bridge\n"
                       "      name: %s/lib/index.js\n" % DSH_GO_BRIDGE)
+            patch += bridge_shared_rows()
         f(DSH_WEB_PATCH.lstrip("/"), patch)
     d("root/.dsh", 0o700)
     d("root/.l2s", 0o700)          # PROOT_L2S_DIR: hard-link backing files (kept with /root on upgrade)
@@ -1315,6 +1327,8 @@ def launch_template():
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "LANG=C.UTF-8", "TERM=xterm-256color", "TMPDIR=/tmp",
         "DSH_HOME=/root/.dsh",
+        # Linux font discovery appends /fonts; Android's fonts are in the bound /system.
+        "XDG_DATA_DIRS=/usr/local/share:/usr/share:/system",
         # pnpm 11 reads its registry from here (not from any npmrc outside $HOME); see DSH_WEB_PATCH
         "pnpm_config_registry=" + NPMMIRROR,
         "UV_USE_IO_URING=0",

@@ -599,7 +599,6 @@ extension FeaturesApi on DshClient {
             order: asInt(preset['order']),
           ),
     ];
-    presets.sort((a, b) => (a.order ?? 1 << 20).compareTo(b.order ?? 1 << 20));
     return presets;
   }
 

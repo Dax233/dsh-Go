@@ -201,7 +201,7 @@ export class CapabilityRuntime {
     if (!reg) { end('no-handler'); return true; }
     const key = JSON.stringify([msg.pkg, msg.id, scope.key, conn.locale]);
     let feed = this.feeds.get(key);
-    if (feed && feed.token !== reg.token) { feed.stop('not-found'); feed = undefined; }
+    if (feed && (!this.alive(feed) || feed.token !== reg.token)) { feed.stop('not-found'); feed = undefined; }
     if (!feed) {
       feed = new MicroFeed(this, key, rec, msg.id, scope.scope, conn.locale, reg);
       this.feeds.set(key, feed);
@@ -227,8 +227,16 @@ class MicroFeed {
       if (typeof cancel === 'function') { if (this.closed) { try { Promise.resolve(cancel()).catch(() => {}); } catch {} } else this.cancel = cancel; }
     }, () => this.stop('error'));
   }
+  // Registration hooks defer their sweep; a producer may settle in an earlier microtask.
+  checkCurrent() {
+    if (this.closed) return false;
+    if (this.runtime.alive(this)
+      && this.runtime.core.registration(this.pkg, 'micro', this.id)?.token === this.token) return true;
+    this.stop(this.runtime.core.health.get(this.pkg)?.degraded ? 'degraded' : 'not-found');
+    return false;
+  }
   emit(value) {
-    if (this.closed) return;
+    if (!this.checkCurrent()) return;
     const data = microModel(value);
     if (!data) { this.runtime.core.violation(this.pkg, 'invalid-micro', 'micro data exceeds the small model budget'); return; }
     this.pending = data;
@@ -239,7 +247,7 @@ class MicroFeed {
   }
   flush() {
     const data = this.pending; this.pending = undefined;
-    if (this.closed || data === undefined || deepEqual(data, this.current)) return;
+    if (!this.checkCurrent() || data === undefined || deepEqual(data, this.current)) return;
     if (this.seq >= Number.MAX_SAFE_INTEGER) { this.stop('limit'); return; }
     this.last = Date.now(); this.current = data; this.seq++;
     for (const sub of this.subs) this.send(sub);

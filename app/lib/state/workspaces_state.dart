@@ -474,6 +474,27 @@ int workspaceConversationCount(Workspace w, Iterable<String> visible) {
   return visible.where(members.contains).length;
 }
 
+/// The workspace used last: the one whose conversation moved most recently,
+/// else the one created last. The official client's `recentWorkspace`.
+Workspace? recentWorkspace(List<Workspace> workspaces, Iterable<SessionSummary> sessions) {
+  final updated = {for (final s in sessions) s.sessionId: s.updatedAt};
+  Workspace? recent;
+  DateTime? recentTime;
+  for (final w in workspaces) {
+    DateTime? latest;
+    for (final id in w.sessionIds) {
+      final at = updated[id];
+      if (at != null && (latest == null || at.isAfter(latest))) latest = at;
+    }
+    latest ??= w.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    if (recentTime == null || latest.isAfter(recentTime)) {
+      recent = w;
+      recentTime = latest;
+    }
+  }
+  return recent;
+}
+
 /// The workspace a new conversation starts in: the drawer's selection,
 /// checked against the host's list once that has arrived.
 Future<String?> workspaceForNewSession(Ref ref) async {
@@ -486,12 +507,19 @@ Future<String?> workspaceForNewSession(Ref ref) async {
 /// Creates a conversation in [workspaceId] when one is selected, else in
 /// [cwd] (null lets the host pick). Falls back to [cwd] if the workspace was
 /// removed in the meantime.
-Future<SessionCreated> createSessionInWorkspace(DshClient client, String? workspaceId, {String? cwd}) async {
+Future<SessionCreated> createSessionInWorkspace(
+  DshClient client,
+  String? workspaceId, {
+  String? cwd,
+  void Function()? checkCurrent,
+}) async {
+  checkCurrent?.call();
   if (workspaceId == null) return client.createSession(cwd: cwd);
   try {
     return await client.createSession(workspaceId: workspaceId);
   } on DshRemoteException catch (e) {
     if (e.code != WorkspaceErrors.notFound) rethrow;
+    checkCurrent?.call();
     return client.createSession(cwd: cwd);
   }
 }

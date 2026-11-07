@@ -201,6 +201,12 @@ class BackgroundDisplay(
             val text = "屏幕 $id · 后台屏 · 受保护页面（支付或密码），已交还用户"
             return ScreenSnapshot(id, text, appLabel, pkg, secure = true)
         }
+        if (response.getBoolean(Proto.FRAME_NOT_READY)) {
+            lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
+            // l10n:keep agent screen protocol
+            val text = "屏幕 $id · 后台屏\n" + Reasons.of("frameNotReady")
+            return ScreenSnapshot(id, text, appLabel, pkg, secure = false, poorTree = true)
+        }
         val elements = buildElements(response, markNew)
         lastElements = elements
         lastScreenId = id

@@ -312,10 +312,17 @@ class MainThreadCall<T>(private val block: () -> T) {
     }
 }
 
-/** Input facts are supplied by Android; policies stay testable without pretending to inject a real touch. */
+/**
+ * Input facts are supplied by Android; policies stay testable without pretending to inject a real touch.
+ *
+ * The card is there so the assistant can't approve its own action, and every way the assistant reaches
+ * the screen is ours: gestures and node actions mark [io.github.ccch1mneyyy.dsh_app.phone.a11y.InjectGuard]
+ * (gestures also make the overlay untouchable), and privileged input lands on our own virtual display.
+ * A real finger on some ROMs (OPPO, realme: #608, #296) arrives with the same device id and flags as a
+ * simulated stroke, so those fields decide nothing here. adb and other apps' accessibility services are
+ * outside this guard; they already control the whole phone.
+ */
 object PromptInputPolicy {
-    fun allows(now: Long, armedAt: Long, live: Boolean, injecting: Boolean, obscured: Boolean,
-               virtualDevice: Boolean, suspiciousStroke: Boolean, touchExploration: Boolean): Boolean =
-        live && now >= armedAt && !injecting && !obscured &&
-            !(virtualDevice && suspiciousStroke && !touchExploration)
+    fun allows(now: Long, armedAt: Long, live: Boolean, injecting: Boolean, obscured: Boolean): Boolean =
+        live && now >= armedAt && !injecting && !obscured
 }

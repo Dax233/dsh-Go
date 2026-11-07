@@ -45,6 +45,8 @@ internal class Actuator(private val service: AccessibilityService, private val o
     fun click(node: AccessibilityNodeInfo, bounds: Box, screen: Box, long: Boolean): Outcome {
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
         fun able(n: AccessibilityNodeInfo) = n.isEnabled && if (long) n.isLongClickable else n.isClickable
+        // A node click is our input too: confirm cards refuse accessibility clicks while it lasts.
+        InjectGuard.mark(0)
         if (able(node) && node.performAction(action)) return Outcome(true, Via.NODE)
         // A text inside a clickable row: a finger there would hit the row.
         val rect = Rect()
