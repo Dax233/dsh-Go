@@ -372,7 +372,7 @@ void main() {
       if (keyboard) tester.view.viewInsets = const FakeViewPadding(bottom: 300 * 2);
       await tester.pumpWidget(
         goldenApp(
-          home: const Scaffold(body: UpdateLaunchCheck(delay: Duration(seconds: 2))),
+          home: const Scaffold(body: UpdateLaunchCheck()),
           brightness: Brightness.light,
           overrides: _overrides(update),
         ),
@@ -380,21 +380,12 @@ void main() {
       return update;
     }
 
-    testWidgets('offers the sheet once the delay has passed', (tester) async {
+    testWidgets('never offers the update sheet on its own (manual only)', (tester) async {
       final update = await mount(tester);
       await tester.pump(const Duration(seconds: 1));
-      expect(update.calls, isEmpty);
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(update.calls, ['autoCheckIfDue']);
-      expect(find.text('发现新版本'), findsOneWidget);
-    });
-
-    testWidgets('does not interrupt typing', (tester) async {
-      final update = await mount(tester, keyboard: true);
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(update.calls, ['autoCheckIfDue']);
+      expect(update.calls, isEmpty, reason: 'the fork runs no automatic check');
       expect(find.text('发现新版本'), findsNothing);
     });
 
