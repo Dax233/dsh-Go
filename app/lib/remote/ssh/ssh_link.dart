@@ -51,6 +51,10 @@ Future<DshClient> _defaultConnector({required Uri baseUri, required String token
       // 80 ms between the stream opens that follow a reconnect: five streams
       // opening at once is what re-breaks a slow link.
       muxOptions: const MuxOptions(pingInterval: null, reopenStagger: Duration(milliseconds: 80)),
+      // A reconnect refills every provider at once; four unary calls in flight
+      // keeps the slow tunnel busy without the pile-up that starves the
+      // keepalive and drops the link straight back.
+      maxConcurrentCalls: 4,
     );
 
 /// Trust-on-first-use check against the pinned fingerprint.

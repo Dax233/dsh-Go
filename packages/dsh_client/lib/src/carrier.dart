@@ -103,12 +103,47 @@ abstract class DshMuxLink {
   Future<void> close(int code, String reason);
 }
 
+/// Counts concurrent unary calls and queues the rest.
+///
+/// A reconnect makes every provider refill at once — the host trace shows 15
+/// unary requests in the same second — and over a slow tunnel that burst is
+/// what pushes the next keepalive past its deadline and drops the link again.
+/// Four in flight keeps the pipe busy without the pile-up.
+class _RpcGate {
+  _RpcGate(this.limit);
+
+  final int limit;
+  int _active = 0;
+  final List<Completer<void>> _waiting = <Completer<void>>[];
+
+  Future<void> enter() {
+    if (_active < limit) {
+      _active++;
+      return Future<void>.value();
+    }
+    final waiter = Completer<void>();
+    _waiting.add(waiter);
+    return waiter.future;
+  }
+
+  void leave() {
+    if (_waiting.isNotEmpty) {
+      _waiting.removeAt(0).complete();
+    } else {
+      _active--;
+    }
+  }
+}
+
 /// The default carrier: unary `POST /api/<endpoint>` and the
 /// `/api/remote.mux` WebSocket of a local (or tunnelled) `dsh web`.
 class DshHttpCarrier extends DshCarrier {
   DshHttpCarrier(this.connection);
 
   final DshConnection connection;
+
+  late final _RpcGate? _gate =
+      connection.maxConcurrentCalls > 0 ? _RpcGate(connection.maxConcurrentCalls) : null;
 
   @override
   String get kind => 'http';
@@ -140,7 +175,17 @@ class DshHttpCarrier extends DshCarrier {
       'payload': {'args': args},
     };
     tracer?.call(DshTraceEntry('out', 'rpc', envelope));
-    final response = await connection.postJson('/api/$endpoint', envelope, timeout: timeout);
+    // Without a gate the call must stay synchronous to this point: an
+    // `await null` inserts a microtask that changes ordering for callers which
+    // depend on the request starting in the current turn.
+    final gate = _gate;
+    if (gate != null) await gate.enter();
+    final DshHttpResponse response;
+    try {
+      response = await connection.postJson('/api/$endpoint', envelope, timeout: timeout);
+    } finally {
+      gate?.leave();
+    }
     if (response.statusCode != 200) {
       tracer?.call(
         DshTraceEntry('in', 'rpc', {'endpoint': endpoint, 'status': response.statusCode, 'body': response.text}),

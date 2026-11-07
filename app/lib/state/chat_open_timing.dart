@@ -20,6 +20,8 @@ class ChatOpenTiming {
     required int firstPaintMs,
     int? seedPaintMs,
     int? snapshotMs,
+    int? events,
+    int? cursor,
   }) {
     _recent.addFirst(<String, Object?>{
       'at': DateTime.now().toUtc().toIso8601String(),
@@ -30,6 +32,11 @@ class ChatOpenTiming {
       'seedPaintMs': ?seedPaintMs,
       'firstPaintMs': firstPaintMs,
       'snapshotMs': ?snapshotMs,
+      // How much history the screen ended up with: a replacement snapshot
+      // drops the cached older events, and a thin number is how "only the last
+      // exchange shows" reaches a bug report.
+      'events': ?events,
+      'cursor': ?cursor,
     });
     while (_recent.length > _max) {
       _recent.removeLast();

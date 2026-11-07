@@ -155,6 +155,7 @@ class DshConnection {
     HttpClient? httpClient,
     this.connectTimeout = const Duration(seconds: 10),
     this.requestTimeout = const Duration(seconds: 120),
+    this.maxConcurrentCalls = 0,
     DshTracer? tracer,
   }) : baseUri = _normalizeBase(baseUri),
        _http = httpClient ?? HttpClient(),
@@ -176,6 +177,12 @@ class DshConnection {
   final String? hostHeader;
   final Duration connectTimeout;
   final Duration requestTimeout;
+
+  /// Unary calls allowed in flight at once; 0 keeps the old unlimited
+  /// behaviour. A reconnect makes every provider refill simultaneously (15
+  /// requests in one second on the host trace), and on a slow tunnel that burst
+  /// delays the keepalive past its deadline.
+  final int maxConcurrentCalls;
   DshTracer? _tracer;
   DshTracer? get tracer => _tracer;
   set tracer(DshTracer? value) {

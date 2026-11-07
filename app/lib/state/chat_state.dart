@@ -433,20 +433,21 @@ class ChatController extends Notifier<ChatState> {
   /// history pages in through [loadOlder] instead of shipping the desktop
   /// 500-message window (~1 MB) over a remote link.
   ///
-  /// 30, not 60: a measured InstaBox link runs at ~59 KB/s, and a long session
-  /// with image/tool payloads makes a 60-message window cost minutes. The disk
-  /// cache makes this a once-per-install path, so the first open can lean
-  /// shorter and page older history on demand.
-  static const int _coldWindow = 12;
-  static const TurnWindow _coldTurnWindow = TurnWindow(8, 2);
+  /// 30, not 60: a measured InstaBox link runs at ~59 KB/s, and a 60-message
+  /// window costs minutes on a session with image/tool payloads. Not lower
+  /// either: when the gap repair has to fall back to a replacement snapshot,
+  /// this window is all the history the screen gets, and 12 looked like "only
+  /// the last exchange".
+  static const int _coldWindow = 30;
+  static const TurnWindow _coldTurnWindow = TurnWindow(20, 2);
 
   /// Cache hit: the transcript already holds the history, so the snapshot only
   /// has to anchor the log. Measured on a real link: the opening snapshot is
   /// what costs seconds (5-18 s for a 16-message window), while the disk seed
   /// takes <100 ms. Ask for one record and let the gap fill pull exactly what
   /// is missing (it now asks only for the gap, not 500 records).
-  static const int _warmWindow = 1;
-  static const TurnWindow _warmTurnWindow = TurnWindow(1, 1);
+  static const int _warmWindow = 6;
+  static const TurnWindow _warmTurnWindow = TurnWindow(3, 1);
 
   late ChatTranscript _transcript;
   String? _transcriptHostKey;
@@ -1061,6 +1062,8 @@ class ChatController extends Notifier<ChatState> {
                   seedMs: _openSeedMs,
                   seedPaintMs: _openSeedPaintMs,
                   firstPaintMs: DateTime.now().difference(opened).inMilliseconds,
+                  events: _transcript.events.length,
+                  cursor: event.cursor,
                 );
               }
               // One publication: no ready state containing the old inbox.

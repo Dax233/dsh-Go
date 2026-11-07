@@ -317,7 +317,18 @@ class ChatTranscript {
         projections = event.projections;
         _inbox = projections.inbox;
         cursor = event.cursor;
-        if (!event.isResync && !keepsOlder) hasMoreHistory = event.hasMore;
+        if (!event.isResync) {
+          if (keepsOlder) {
+            // The held log was kept, so the Host's window says nothing about
+            // the events we already have. But when it reports history before
+            // its own window, the screen must still offer "load older": a
+            // disk-seeded open otherwise shows the last exchange with no way
+            // back (the paging affordance is driven by this flag alone).
+            if (event.hasMore) hasMoreHistory = true;
+          } else {
+            hasMoreHistory = event.hasMore;
+          }
+        }
         _drafts.clear();
         _runningOverride = null;
         for (final e in event.events) {

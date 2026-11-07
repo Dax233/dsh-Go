@@ -229,6 +229,7 @@ class DshClient {
     bool backgroundLists = false,
     bool startMux = true,
     Duration readyTimeout = const Duration(seconds: 20),
+    int maxConcurrentCalls = 0,
   }) async {
     var base = baseUri;
     var launchToken = token;
@@ -239,7 +240,13 @@ class DshClient {
       launchToken ??= parsed.token;
     }
     if (base == null) throw ArgumentError('baseUri or launchUrl is required');
-    final connection = DshConnection(base, hostHeader: hostHeader, cookie: cookie, tracer: tracer);
+    final connection = DshConnection(
+      base,
+      hostHeader: hostHeader,
+      cookie: cookie,
+      tracer: tracer,
+      maxConcurrentCalls: maxConcurrentCalls,
+    );
     final client = DshClient(
       connection,
       muxOptions: muxOptions,
