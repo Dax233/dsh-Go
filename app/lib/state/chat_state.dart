@@ -849,26 +849,24 @@ class ChatController extends Notifier<ChatState> {
     _openSeedMs = 0;
     _openSeedPaintMs = null;
     if (_transcript.events.isEmpty && !_seededFromDisk) {
-      // One attempt per open. The follow starts now: waiting for the disk in
-      // fake-time tests (and behind a hung path provider) would simply never
-      // get there, and the replayed log paints as soon as it lands.
+      // One attempt per open. Synchronous because the FOLLOW must see the
+      // replayed log: a warm follow asks for one record instead of a window.
+      // The store root is primed at startup, so no await is needed (and no
+      // await means no fake-time hang in widget tests).
       _seededFromDisk = true;
-      unawaited(_seedFromDisk());
+      final store = ChatTranscriptStore.defaultStore;
+      if (store != null) _seedSync(store);
     }
     _listenNow(client, pulse, building: building);
   }
 
-  Future<void> _seedFromDisk() async {
+  void _seedSync(ChatTranscriptStore store) {
     final seedStarted = DateTime.now();
     try {
-      final store = await ref.read(chatTranscriptStoreProvider.future);
-      // The screen can be gone by the time the disk answers: touching the ref
-      // (or the transcript it guards) after that throws and fails the unmount.
-      if (!ref.mounted) return;
       final hostKey = _transcriptHostKey;
       if (hostKey == null || _transcript.events.isNotEmpty) return;
-      final entries = await store.read(hostKey, sessionId);
-      if (!ref.mounted || entries.isEmpty || _transcript.events.isNotEmpty) return;
+      final entries = store.readSync(hostKey, sessionId);
+      if (entries.isEmpty || _transcript.events.isNotEmpty) return;
       for (final entry in entries) {
         final event = parseFollowFrame(sessionId, entry['item']);
         if (entry['snapshot'] is int) {
@@ -881,7 +879,6 @@ class ChatController extends Notifier<ChatState> {
           _transcript.apply(event);
         }
       }
-      if (!ref.mounted) return;
       _openSeeded = true;
       _lastStoredSeq = _transcript.newestSeq ?? -1;
       final opened = _openStartedAt;

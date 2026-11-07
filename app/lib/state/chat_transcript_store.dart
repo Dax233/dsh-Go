@@ -17,6 +17,21 @@ import 'package:path_provider/path_provider.dart';
 class ChatTranscriptStore {
   ChatTranscriptStore(this.root, {this.maxEntriesPerSession = 400, this.maxSessions = 8});
 
+  /// The app's shared cache, primed at startup so a cold open can replay it
+  /// **synchronously** before the follow opens. That ordering is the whole
+  /// point: a warm follow asks the Host for one record instead of a window
+  /// (measured: 30 messages = 705 KB ≈ 12 s on a slow tunnel).
+  static ChatTranscriptStore? defaultStore;
+
+  static Future<void> prime() async {
+    try {
+      final base = await getApplicationSupportDirectory();
+      defaultStore = ChatTranscriptStore(Directory('${base.path}/chat_transcripts'));
+    } catch (_) {
+      // No support directory: the cache is simply off for this run.
+    }
+  }
+
   final Directory root;
   final int maxEntriesPerSession;
   final int maxSessions;
@@ -78,6 +93,38 @@ class ChatTranscriptStore {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// [read], synchronously and bounded to the newest [maxLines] entries.
+  /// Called from the chat build before the follow opens, so it must stay cheap:
+  /// 200 lines of a phone-sized transcript is a few hundred KB at most.
+  List<Map<String, Object?>> readSync(String hostKey, String sessionId, {int maxLines = 200}) {
+    try {
+      final file = _fileSync(hostKey, sessionId);
+      if (!file.existsSync()) return const [];
+      final lines = file.readAsLinesSync();
+      final start = lines.length > maxLines ? lines.length - maxLines : 0;
+      final out = <Map<String, Object?>>[];
+      for (var i = start; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.trim().isEmpty) continue;
+        try {
+          final decoded = jsonDecode(line);
+          if (decoded is Map<String, Object?>) out.add(decoded);
+        } catch (_) {
+          // A half-written line costs that line only.
+        }
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  File _fileSync(String hostKey, String sessionId) {
+    final dir = Directory('${root.path}/${_safe(hostKey)}');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return File('${dir.path}/${_safe(sessionId)}.jsonl');
   }
 
   Future<void> _rewrite(File file, List<Map<String, Object?>> entries) async {
