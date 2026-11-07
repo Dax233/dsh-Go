@@ -227,7 +227,13 @@ class WorkspaceDir {
 typedef WorkspaceDirKey = (String sessionId, String rel);
 
 /// Files whose times are looked up per listing (the rest show size only).
-const workspaceTimedFiles = 120;
+/// How many files a directory listing asks a modified-time for.
+///
+/// Each one is a separate unary request: the phone-side trace shows a 6-wide
+/// burst of `workspaceFiles/stat` (one per file, batches of six) immediately
+/// before a WebSocket close, and a 100-file folder spends 100 round trips on a
+/// ~59 KB/s tunnel. Keep it to what the column can show at a glance.
+const workspaceTimedFiles = 40;
 
 /// Lists one directory, then relists whenever the Host says its children
 /// changed (and after every reconnect). Kept for a while after the page
