@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dsh_client/dsh_client.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/link_loss_log.dart';
 import '../link_status.dart';
 import 'instabox_wake.dart';
 import '../../phone/phone_channel.dart';
@@ -679,6 +680,14 @@ class SshHostLink implements HostLink {
   void _lost(HostLinkError reason) {
     if (_closed || _recovering || _status.phase == HostLinkPhase.failed) return;
     if (_status.phase != HostLinkPhase.connected) return;
+    // Record what the client believed before the link is torn down: the host
+    // trace only shows what the Host saw (see the diagnostics bundle).
+    LinkLossLog.add('link', reason.kind.name, fields: {
+      'message': reason.message,
+      'detail': reason.detail,
+      'retryable': reason.retryable,
+      'missedPings': _missedPings,
+    });
     _teardownTransport();
     unawaited(_recover(reason).then((_) {}, onError: (_) {}));
   }

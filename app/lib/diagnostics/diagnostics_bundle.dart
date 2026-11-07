@@ -23,6 +23,7 @@ import '../performance/performance_state.dart';
 import '../runtime/runtime_state.dart';
 import '../state/app_info.dart';
 import '../state/chat_open_timing.dart';
+import '../state/link_loss_log.dart';
 import '../state/phone_task_log.dart';
 import '../state/connection_state.dart';
 import '../state/settings_state.dart';
@@ -184,6 +185,8 @@ abstract final class DiagnosticsBundle {
       // Phone-task lifecycle: who claimed the turn end and what the native side
       // answered, so "the overlay stayed" can be attributed.
       if (PhoneTaskLog.snapshot().isNotEmpty) jsonFile('phone-task.json', PhoneTaskLog.snapshot()),
+      // Why the SSH link was lost, as the client saw it.
+      if (LinkLossLog.snapshot().isNotEmpty) jsonFile('link-loss.json', LinkLossLog.snapshot()),
     ];
   }
 
