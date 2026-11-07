@@ -164,7 +164,10 @@ class PhoneBridgeLink {
   Future<void> _finish() async {
     if (_closed) return;
     _closed = true;
-    for (final socket in _sockets.values) {
+    // destroy() can synchronously deliver onDone -> _drop(), which removes from
+    // this very map: iterate over a copy (this threw "Concurrent modification
+    // during iteration" on every link loss while a bridge was open).
+    for (final socket in List<Socket>.of(_sockets.values)) {
       socket.destroy();
     }
     _sockets.clear();
