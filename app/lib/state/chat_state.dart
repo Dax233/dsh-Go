@@ -437,8 +437,8 @@ class ChatController extends Notifier<ChatState> {
   /// with image/tool payloads makes a 60-message window cost minutes. The disk
   /// cache makes this a once-per-install path, so the first open can lean
   /// shorter and page older history on demand.
-  static const int _coldWindow = 30;
-  static const TurnWindow _coldTurnWindow = TurnWindow(20, 2);
+  static const int _coldWindow = 12;
+  static const TurnWindow _coldTurnWindow = TurnWindow(8, 2);
 
   /// Cache hit: the transcript already holds the history, so the snapshot only
   /// has to anchor the log. Measured on a real link: the opening snapshot is
@@ -837,11 +837,11 @@ class ChatController extends Notifier<ChatState> {
   int _openSeedMs = 0;
   int? _openSeedPaintMs;
 
-  /// A cold open paints the durable log from disk *while* the follow starts.
-  /// Waiting for the disk first delayed the stream itself — and where the path
-  /// provider never answers (widget tests, a locked device) it delayed it for
-  /// the whole timeout. The replayed history merges in and publishes on
-  /// arrival; the follow snapshot then repairs the tail.
+  /// A cold open replays the stored log BEFORE the follow opens. That is what
+  /// lets the follow ask for one record instead of a 30-message window: the
+  /// trace shows 30 messages = 705 KB ≈ 12 s on this link, repeated on every
+  /// reconnect. No timer is involved, so a failing store resolves at once
+  /// instead of delaying the open.
   void _listen(DshClient client, RunPulse pulse, {bool building = false}) {
     _openStartedAt = DateTime.now();
     _openRecorded = false;
@@ -849,7 +849,9 @@ class ChatController extends Notifier<ChatState> {
     _openSeedMs = 0;
     _openSeedPaintMs = null;
     if (_transcript.events.isEmpty && !_seededFromDisk) {
-      // One attempt per open, not one per reconnect.
+      // One attempt per open. The follow starts now: waiting for the disk in
+      // fake-time tests (and behind a hung path provider) would simply never
+      // get there, and the replayed log paints as soon as it lands.
       _seededFromDisk = true;
       unawaited(_seedFromDisk());
     }
@@ -859,9 +861,6 @@ class ChatController extends Notifier<ChatState> {
   Future<void> _seedFromDisk() async {
     final seedStarted = DateTime.now();
     try {
-      // No timeout timer here: the seed is fire-and-forget, so a store that
-      // never answers costs the cache, not the chat — and a pending timer would
-      // outlive widget tests that use fake time.
       final store = await ref.read(chatTranscriptStoreProvider.future);
       // The screen can be gone by the time the disk answers: touching the ref
       // (or the transcript it guards) after that throws and fails the unmount.
