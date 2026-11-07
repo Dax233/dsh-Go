@@ -404,6 +404,11 @@ class SshHostLink implements HostLink {
         if (entry.channel == 'state') {
           unawaited(_bridgeBreadcrumb(traceTransport, 'mux ${entry.data}'));
         }
+        // Carrier/mux state entries carry the WebSocket close code and reason:
+        // the only way to tell a server-side heartbeat kill from a local one.
+        if (entry.direction == 'state') {
+          LinkLossLog.add('carrier', entry.channel, fields: {'data': '${entry.data}'});
+        }
       };
     }
     final DshClient client;
@@ -452,6 +457,7 @@ class SshHostLink implements HostLink {
         _muxDownSince = null;
       } else {
         _muxDownSince ??= DateTime.now();
+        LinkLossLog.add('mux', state.name, fields: {'lastError': '${client.mux.lastError}'});
       }
       if (state == DshConnectionState.unauthorized) {
         _needsRelogin = true;
