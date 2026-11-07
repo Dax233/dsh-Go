@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../phone/phone_channel.dart';
+import '../remote/ssh/local_forward.dart' show LocalForwarder;
 import '../runtime/runtime_bridge.dart';
 import '../performance/performance_state.dart';
 import '../runtime/runtime_state.dart';
@@ -187,6 +188,12 @@ abstract final class DiagnosticsBundle {
       if (PhoneTaskLog.snapshot().isNotEmpty) jsonFile('phone-task.json', PhoneTaskLog.snapshot()),
       // Why the SSH link was lost, as the client saw it.
       if (LinkLossLog.snapshot().isNotEmpty) jsonFile('link-loss.json', LinkLossLog.snapshot()),
+      // Tunnel bytes since launch: compare with the host-side frame sizes to see
+      // whether WebSocket compression is actually doing anything.
+      jsonFile('tunnel.json', {
+        'bytesDown': LocalForwarder.bytesDown,
+        'bytesUp': LocalForwarder.bytesUp,
+      }),
     ];
   }
 

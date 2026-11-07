@@ -16,6 +16,13 @@ typedef TunnelOpener = Future<TunnelChannel> Function();
 class LocalForwarder {
   LocalForwarder._(this._server, this._open);
 
+  /// Bytes actually forwarded since the app started. The engine-side tracer
+  /// records JSON frame sizes before any transport compression, so comparing
+  /// the two is how the effect of WebSocket deflate stays measurable instead of
+  /// assumed.
+  static int bytesDown = 0;
+  static int bytesUp = 0;
+
   final ServerSocket _server;
   final TunnelOpener _open;
   final Set<_Pair> _pairs = {};
@@ -92,7 +99,10 @@ class _Pair {
 
   void start() {
     _up = socket.listen(
-      channel.sink.add,
+      (data) {
+        LocalForwarder.bytesUp += data.length;
+        channel.sink.add(data);
+      },
       onDone: () {
         unawaited(channel.sink.close().catchError((_) {}));
       },
@@ -100,7 +110,10 @@ class _Pair {
       cancelOnError: true,
     );
     _down = channel.stream.listen(
-      socket.add,
+      (data) {
+        LocalForwarder.bytesDown += data.length;
+        socket.add(data);
+      },
       onDone: () async {
         try {
           await socket.flush();
