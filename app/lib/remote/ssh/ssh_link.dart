@@ -160,6 +160,7 @@ class SshHostLink implements HostLink {
   RemoteDshEndpoint? _endpoint;
   DshClient? _client;
   Future<DshClient>? _opening;
+  Future<DshClient>? _connecting;
   Timer? _keepAlive;
   bool _keepAliveTickInFlight = false;
   int _missedPings = 0;
@@ -223,11 +224,19 @@ class SshHostLink implements HostLink {
     return _opening ??= _openFirst().whenComplete(() => _opening = null);
   }
 
+  /// One SSH connect at a time.
+  ///
+  /// `open()` and the recovery loop can both want a connection (a network kick
+  /// while the screen opens, say). Two parallel attempts each build their own
+  /// transport and client, and the later one replaces — then closes — the
+  /// first, which the Host sees as two WebSocket upgrades followed by a close.
+  Future<DshClient> _connectGuarded() => _connecting ??= _connectOnce().whenComplete(() => _connecting = null);
+
   Future<DshClient> _openFirst() async {
     _backoff.reset();
     _emit(const HostLinkStatus(HostLinkPhase.connecting, step: HostLinkStep.connect));
     try {
-      return await _connectOnce();
+      return await _connectGuarded();
     } on HostLinkError catch (e) {
       if (!e.retryable || !retryFirstOpen) {
         _fail(e);
@@ -728,7 +737,7 @@ class SshHostLink implements HostLink {
         await _delay.wait(delay);
         if (_closed) break;
         try {
-          final client = await _connectOnce();
+          final client = await _connectGuarded();
           _backoff.reset();
           return client;
         } on HostLinkError catch (e) {
