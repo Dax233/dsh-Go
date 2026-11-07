@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../state/app_info.dart';
@@ -35,7 +34,10 @@ Uri? usageEndpointFrom(String text) {
 /// pointed at a test endpoint. Debug runs and tests stay out of the numbers
 /// (tests switch it on where they check it).
 abstract final class UsageBuild {
-  static bool active = kReleaseMode || usageEndpointFrom(_endpointOverride) != null;
+  /// Fork: anonymous usage reporting is removed. The ledger, the install id and
+  /// the upload never run; the switch stays false in every build (tests can
+  /// still turn it on where they check the machinery itself).
+  static bool active = false;
 }
 
 /// One POST; a seam so tests never touch the network.
@@ -49,6 +51,13 @@ class IoUsageHttp implements UsageHttp {
 
   @override
   Future<int> post(Uri url, String json, {Duration timeout = const Duration(seconds: 10)}) async {
+    // Fork: usage reporting is removed. Refuse without opening a socket — the
+    // controller reads 404 as "this host collects nothing" and stops.
+    return 404;
+  }
+
+  /// Kept for the record: the original sender, never called in this fork.
+  Future<int> postOriginal(Uri url, String json, {Duration timeout = const Duration(seconds: 10)}) async {
     // A client per send: no connection, cookie or credential outlives it.
     final client = HttpClient()
       ..connectionTimeout = timeout
