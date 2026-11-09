@@ -207,6 +207,8 @@ void _backgroundInputProbe(StringBuffer b, Object? raw) {
   if (gateStage is String || gateError is String) {
     b.writeln('- 上次通道重检：stage=${gateStage ?? '-'} · 结果=${gateError ?? '-'}');
   }
+  final injectPermission = raw['lastInjectPermission'];
+  if (injectPermission is String) b.writeln('- 探针窗口被拒时对端报的权限：$injectPermission');
   final lastProbe = raw['lastProbe'];
   if (lastProbe is Map) {
     final parts = <String>[

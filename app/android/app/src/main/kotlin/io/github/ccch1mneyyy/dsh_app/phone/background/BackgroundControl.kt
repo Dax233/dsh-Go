@@ -201,6 +201,8 @@ class BackgroundControl private constructor(context: Context) {
     /** Where the last explicit channel retest stopped, and the sentence it returned. */
     @Volatile private var lastGateStage: String? = null
     @Volatile private var lastGateError: String? = null
+    /** Permission token the peer named when its probe window was denied, if any. */
+    @Volatile private var lastInjectPermission: String? = null
 
     init { recovery.execute { resourceJournal.load(); notifyChanged() } }
 
@@ -444,6 +446,7 @@ class BackgroundControl private constructor(context: Context) {
                 "needsRetest" to gate.needsRetest,
                 "lastGateStage" to lastGateStage,
                 "lastGateError" to lastGateError,
+                "lastInjectPermission" to lastInjectPermission,
             ) +
             (lastProbeReply?.let { mapOf("lastProbe" to it) } ?: emptyMap())
 
@@ -1258,6 +1261,7 @@ class BackgroundControl private constructor(context: Context) {
                 val reply = OwnerScopeProtocol.execute(peer, call.io.owner, request) {
                     check(gate.admit(probe) { call.io.checkDispatch() })
                 }
+                lastInjectPermission = reply.getString("injectPermission")
                 when (val result = gate.updateStrict(probe, call.io.owner, reply.get(Proto.OWNER),
                     reply.get(Proto.SELF_CHECK_PROBE_VERSION), reply.get(Proto.OK),
                     reply.get(Proto.SELF_CHECK_DISPLAY_READY), reply.get(Proto.INJECT_OK),
