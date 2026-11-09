@@ -121,7 +121,7 @@ internal class BackgroundInputProbe(private val context: Context, private val di
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT,
-            ).apply { setTitle("dsh-probe"); animation = null }
+            ).apply { setTitle("dsh-probe") }
             val view = build(windowContext)
             probe.entered(InputProbeDiagnostics.Stage.PRESENTATION_CONFIGURE)
             manager.addView(view, params)
