@@ -1201,6 +1201,8 @@ class BackgroundControl private constructor(context: Context) {
         var reason: String? = null
         var released = false
         var published = false
+        // Set when only the probe's own window was refused by the platform.
+        var restrictedDetail: String? = null
         try {
             call.io.call {
                 if (!gate.current(probe)) { reason = AppStrings.get(app, R.string.background_selection_cancelled); return@call }
@@ -1270,7 +1272,23 @@ class BackgroundControl private constructor(context: Context) {
                     reply.get(Proto.SELF_CHECK_PROBE_VERSION), reply.get(Proto.OK),
                     reply.get(Proto.SELF_CHECK_DISPLAY_READY), reply.get(Proto.INJECT_OK),
                     reply.get(Proto.ERROR), reply.get(Proto.INJECT_ERROR), reply.get(Proto.ERROR_DETAIL))) {
-                    is BackgroundGateState.Update.Accepted -> { accepted = result; reason = probeReason(result.receipt) }
+                    is BackgroundGateState.Update.Accepted -> {
+                        accepted = result
+                        val observation = result.receipt.observation
+                        // Android 16 refuses a window context to the UserService, so
+                        // the probe cannot build its own window. That is a limit of the
+                        // check, not proof that injection fails: a real task injects
+                        // through its own path. Accept with the input fact unknown,
+                        // which is what builds before the strict probe did anyway.
+                        if (result.receipt.injectOk != true && observation != null &&
+                            (observation.stage == InputProbeDiagnostics.Stage.PRESENTATION_CREATE ||
+                                observation.stage == InputProbeDiagnostics.Stage.PRESENTATION_CONFIGURE) &&
+                            (observation.exceptionType == "SecurityException" ||
+                                observation.exceptionType == "IllegalStateException")) {
+                            restrictedDetail = observation.encode()
+                        }
+                        reason = probeReason(result.receipt)
+                    }
                     BackgroundGateState.Update.Cancelled -> reason = AppStrings.get(app, R.string.background_selection_cancelled)
                     BackgroundGateState.Update.Busy -> reason = AppStrings.get(app, R.string.background_input_probe_busy)
                     BackgroundGateState.Update.Invalid -> reason = failed(R.string.background_no_response, peer)
@@ -1299,6 +1317,12 @@ class BackgroundControl private constructor(context: Context) {
         if (accepted != null && !published) {
             lastGateStage = "publish"; lastGateError = AppStrings.get(app, R.string.background_selection_cancelled)
             return lastGateError
+        }
+        val restricted = restrictedDetail
+        if (restricted != null && gate.acceptRestricted(probe, restricted)) {
+            lastGateStage = "restricted"; lastGateError = null
+            notifyChanged()
+            return null
         }
         val result = if (accepted != null) reason else reason ?: AppStrings.get(app, R.string.background_no_response)
         lastGateStage = if (accepted != null && published) "done" else (lastGateStage ?: "unknown")
