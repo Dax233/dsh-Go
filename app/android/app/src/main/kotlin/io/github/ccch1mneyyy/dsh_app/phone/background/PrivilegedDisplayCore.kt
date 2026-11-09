@@ -156,7 +156,16 @@ class PrivilegedDisplayCore internal constructor(
                 response.putInt(Proto.AFTER_LOCAL_VISUAL, 1)
                 response.putInt(Proto.REPLAY_NAVIGATION, 1)
                 // A real successful full query is required; finding the reflective method is insufficient.
-                if (runCatching { rootTasksEmpty(Display.DEFAULT_DISPLAY) }.isSuccess) {
+                val releaseQuery = runCatching { rootTasksEmpty(Display.DEFAULT_DISPLAY) }
+                if (releaseQuery.isFailure) {
+                    // The strict receipt is withheld; say why so an agent-facing
+                    // error and the diagnostics bundle can tell an OS change from
+                    // a missing permission.
+                    response.putString("releaseQueryError", releaseQuery.exceptionOrNull()?.let {
+                        it.javaClass.simpleName + ": " + it.message
+                    })
+                }
+                if (releaseQuery.isSuccess) {
                     response.putInt(Proto.RELEASE_RECEIPT, 1)
                     response.putInt(Proto.SELF_CHECK_PROBE_VERSION, 1)
                     if (Build.VERSION.SDK_INT >= 34 && runCatching {
