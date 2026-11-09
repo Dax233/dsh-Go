@@ -200,6 +200,30 @@ void _backgroundInputProbe(StringBuffer b, Object? raw) {
   if (connectionFailure is bool) {
     b.writeln('- 保留连接失败事实：$connectionFailure（不表示当前连接状态）');
   }
+  final needsRetest = raw['needsRetest'];
+  if (needsRetest is bool) b.writeln('- 通道等待重新检查：$needsRetest');
+  final gateStage = raw['lastGateStage'];
+  final gateError = raw['lastGateError'];
+  if (gateStage is String || gateError is String) {
+    b.writeln('- 上次通道重检：stage=${gateStage ?? '-'} · 结果=${gateError ?? '-'}');
+  }
+  final lastProbe = raw['lastProbe'];
+  if (lastProbe is Map) {
+    final parts = <String>[
+      'ok=${lastProbe['ok']}',
+      'scope=${lastProbe['scope']}',
+      'selfCheck=${lastProbe['selfCheck']}',
+      'release=${lastProbe['release']}',
+      'birth=${lastProbe['birth']}',
+      'alive=${lastProbe['alive']}',
+      if (lastProbe['birthSource'] != null) 'birthSource=${lastProbe['birthSource']}',
+      if (lastProbe['birthError'] != null) 'birthError=${lastProbe['birthError']}',
+      if (lastProbe['birthDetail'] != null) 'birthDetail=${lastProbe['birthDetail']}',
+      if (lastProbe['releaseQuery'] != null) 'releaseQuery=${lastProbe['releaseQuery']}',
+      if (lastProbe['peer'] != null) 'peer=${lastProbe['peer']}',
+    ];
+    b.writeln('- 最近一次严格探针回执：${parts.join(' · ')}');
+  }
   if (raw['observed'] != true || result != 'failure') return;
   const stages = {
     'precondition', 'ui_dispatch', 'presentation_create', 'presentation_configure',

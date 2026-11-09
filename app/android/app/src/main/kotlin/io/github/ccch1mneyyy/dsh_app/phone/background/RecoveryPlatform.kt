@@ -29,6 +29,15 @@ internal class RecoveryPlatform {
         }.getOrNull()
         var nsSource = "ns"
         if (ns == null) {
+            // init's namespace entry is the same inode for every process of this
+            // namespace, so it keeps the cross-process meaning when the self
+            // entry is not stat-able.
+            ns = runCatching { Os.stat("/proc/1/ns/pid") }.onFailure {
+                lastBirthError = (lastBirthError ?: "") + " init:" + it.javaClass.simpleName
+            }.getOrNull()
+            if (ns != null && ns.st_ino > 0) nsSource = "init"
+        }
+        if (ns == null) {
             ns = runCatching { Os.stat("/proc/self") }.onFailure {
                 lastBirthError = (lastBirthError ?: "") + " self:" + it.javaClass.simpleName
             }.getOrNull()

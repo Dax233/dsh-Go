@@ -198,6 +198,10 @@ class BackgroundControl private constructor(context: Context) {
     /** What the last gate probe's peer actually answered, for diagnostics only. */
     @Volatile private var lastProbeReply: Map<String, Any?>? = null
 
+    /** Where the last explicit channel retest stopped, and the sentence it returned. */
+    @Volatile private var lastGateStage: String? = null
+    @Volatile private var lastGateError: String? = null
+
     init { recovery.execute { resourceJournal.load(); notifyChanged() } }
 
     /** Memory-only, shared by real MCP admission and new physical resource entry points. */
@@ -436,7 +440,11 @@ class BackgroundControl private constructor(context: Context) {
     /** Last accepted gate facts only: no connection, permission query or fresh self-test. */
     fun inputProbeDiagnostics(): Map<String, Any?> =
         InputProbeDiagnostics.snapshot(gate.snapshot) +
-            mapOf("needsRetest" to gate.needsRetest) +
+            mapOf(
+                "needsRetest" to gate.needsRetest,
+                "lastGateStage" to lastGateStage,
+                "lastGateError" to lastGateError,
+            ) +
             (lastProbeReply?.let { mapOf("lastProbe" to it) } ?: emptyMap())
 
     /** The `background` sub-map of the `dsh/phone` `status` method. */
@@ -1141,6 +1149,7 @@ class BackgroundControl private constructor(context: Context) {
 
     /** Settings owns one outer transport use. The original resource survives a cancelled UI. */
     private fun runGateProbe(selection: PrivilegedKeepState.Ticket, mayStart: () -> Boolean): String? {
+        lastGateStage = "start"; lastGateError = null
         val starterReason = when (mode) {
             "shizuku", "sui" -> shizuku.reason()
             "root" -> rootReason()
@@ -1224,16 +1233,20 @@ class BackgroundControl private constructor(context: Context) {
                     reason = failed(R.string.background_gate_peer_unsupported, peer)
                     return@call
                 }
+                lastGateStage = "capability"
                 val birth = BackgroundRecoveryProtocol.birth(cap::get)
                 if (birth == null) { reason = failed(R.string.background_gate_peer_unsupported, peer); return@call }
                 if (!call.resource.begin(birth)) { reason = AppStrings.get(app, R.string.background_resource_recovery_pending); return@call }
+                lastGateStage = "begin"
                 val allocation = OwnerScopeProtocol.first(call.io, peer,
                     BackgroundRecoveryProtocol.allocate(call.io.owner, "probe", null)) { commit -> gate.admit(probe, commit) }
+                lastGateStage = "allocation"
                 val actualId = BackgroundRecoveryProtocol.allocationId(allocation::get)
                 if (actualId == null || !call.resource.allocated(actualId) { gate.current(probe) && !call.io.previewClosed() }) {
                     reason = AppStrings.get(app, R.string.background_resource_recovery_pending)
                     return@call
                 }
+                lastGateStage = "allocated"
                 val request = Bundle().apply {
                     putString(Proto.OP, Proto.OP_SELF_CHECK_PROBE)
                     putString(Proto.OWNER, call.io.owner)
@@ -1241,6 +1254,7 @@ class BackgroundControl private constructor(context: Context) {
                     putInt(Proto.RELEASE_RECEIPT, 1)
                 }
                 if (!gate.current(probe)) { reason = AppStrings.get(app, R.string.background_selection_cancelled); return@call }
+                lastGateStage = "selfCheck"
                 val reply = OwnerScopeProtocol.execute(peer, call.io.owner, request) {
                     check(gate.admit(probe) { call.io.checkDispatch() })
                 }
@@ -1270,9 +1284,18 @@ class BackgroundControl private constructor(context: Context) {
                 }
             }
         }
-        if (!released) return AppStrings.get(app, R.string.background_gate_cleanup_pending)
-        if (accepted != null && !published) return AppStrings.get(app, R.string.background_selection_cancelled)
-        return if (accepted != null) reason else reason ?: AppStrings.get(app, R.string.background_no_response)
+        if (!released) {
+            lastGateStage = "cleanup"; lastGateError = AppStrings.get(app, R.string.background_gate_cleanup_pending)
+            return lastGateError
+        }
+        if (accepted != null && !published) {
+            lastGateStage = "publish"; lastGateError = AppStrings.get(app, R.string.background_selection_cancelled)
+            return lastGateError
+        }
+        val result = if (accepted != null) reason else reason ?: AppStrings.get(app, R.string.background_no_response)
+        lastGateStage = if (accepted != null && published) "done" else (lastGateStage ?: "unknown")
+        lastGateError = result
+        return result
     }
 
     /** Retry retains the exact handle. A dead pin only permits strict original-scope recovery. */
