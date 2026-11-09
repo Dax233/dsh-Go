@@ -17,7 +17,13 @@ internal class RecoveryPlatform {
 
     fun birth(peer: String): ResourceRecovery.Birth {
         val boot = bootId() ?: throw ResourceRecovery.Failure("recoveryUnavailable")
-        val ns = Os.stat("/proc/self/ns/pid")
+        // The pid-namespace inode identifies this process instance; /proc/self is
+        // the same identity from a path no app domain is denied. Only a denied
+        // namespace read falls back, and both the probe and a later check run in
+        // this same process, so the values stay consistent.
+        val ns = runCatching { Os.stat("/proc/self/ns/pid") }.onFailure {
+            lastBirthError = (lastBirthError ?: "") + " ns:" + it.javaClass.simpleName
+        }.getOrNull() ?: Os.stat("/proc/self")
         val pid = Process.myPid(); val uid = Process.myUid()
         if (pid <= 0 || uid < 0 || ns.st_ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
         return ResourceRecovery.Birth(peer, boot, pid, uid, ns.st_dev, ns.st_ino)
