@@ -26,7 +26,7 @@ const _barHeight = 44.0;
 
 /// Deep water behind her words and the input: reply text has to stay readable
 /// over a white apron and a bright midday sky alike.
-GlassStyle _deepGlass(BuildContext context) =>
+GlassStyle companionDeepGlass(BuildContext context) =>
     DshSurfaces.of(context)
         .glass(GlassTier.sheet)
         .copyWith(fill: const Color(0xC40E2740), fallbackFill: const Color(0xF20E2740), blurSigma: 22, saturation: 1.3);
@@ -171,11 +171,14 @@ class _Rise extends StatelessWidget {
 /// What she says. Long replies scroll inside, newest at the bottom, and fade out
 /// at the top edge instead of being cut.
 class CompanionSpeech extends StatelessWidget {
-  const CompanionSpeech({super.key, this.text, this.thinking = false, this.error = false});
+  const CompanionSpeech({super.key, this.text, this.thinking = false, this.error = false, this.onPullBack});
 
   final String? text;
   final bool thinking;
   final bool error;
+
+  /// Pulling down past the top of what she just said: read further back.
+  final VoidCallback? onPullBack;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +191,7 @@ class CompanionSpeech extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: GlassSurface(
           tier: GlassTier.card,
-          style: _deepGlass(context),
+          style: companionDeepGlass(context),
           borderRadius: BorderRadius.circular(20),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
           child: SizedBox(height: 14, width: 34, child: TypingIndicator(color: theme.colorScheme.onSurfaceVariant)),
@@ -203,7 +206,7 @@ class CompanionSpeech extends StatelessWidget {
           width: double.infinity,
           child: GlassSurface(
             tier: GlassTier.card,
-            style: _deepGlass(context),
+            style: companionDeepGlass(context),
             borderRadius: BorderRadius.circular(22),
             padding: const EdgeInsets.fromLTRB(18, 13, 18, 14),
             child: ConstrainedBox(
@@ -216,15 +219,22 @@ class CompanionSpeech extends StatelessWidget {
                   stops: [0, 0.1, 1],
                   colors: [Color(0x00FFFFFF), Color(0xFFFFFFFF), Color(0xFFFFFFFF)],
                 ).createShader(rect),
-                child: SingleChildScrollView(
-                  reverse: true,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      words,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        height: 1.5,
-                        color: error ? theme.colorScheme.error : theme.colorScheme.onSurface,
+                child: _PullBack(
+                  onPull: onPullBack,
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    // Even a short line can be pulled on.
+                    physics: onPullBack == null
+                        ? null
+                        : const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        words,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          height: 1.5,
+                          color: error ? theme.colorScheme.error : theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
@@ -237,6 +247,52 @@ class CompanionSpeech extends StatelessWidget {
     }
     return _Rise(child: bubble);
   }
+}
+
+/// A finger dragging past the oldest end of a reversed scroll view, far enough
+/// to mean it: [onPull], once per drag.
+class _PullBack extends StatefulWidget {
+  const _PullBack({required this.onPull, required this.child});
+
+  final VoidCallback? onPull;
+  final Widget child;
+
+  @override
+  State<_PullBack> createState() => _PullBackState();
+}
+
+class _PullBackState extends State<_PullBack> {
+  static const _far = 48.0;
+  double _pulled = 0;
+  bool _fired = false;
+
+  bool _onNotification(ScrollNotification notification) {
+    final pull = widget.onPull;
+    if (pull == null) return false;
+    switch (notification) {
+      case ScrollStartNotification():
+        _pulled = 0;
+        _fired = false;
+      // In a reversed view the oldest end is the far end: past it is positive.
+      case OverscrollNotification(:final overscroll, :final dragDetails?):
+        // Down past the edge adds; any way back takes it off again.
+        final dy = dragDetails.delta.dy;
+        _pulled = math.max(0.0, _pulled + (dy > 0 && overscroll > 0 ? overscroll : -dy.abs()));
+        if (!_fired && _pulled > _far) {
+          _fired = true;
+          pull();
+        }
+      case ScrollUpdateNotification(:final dragDetails?) when dragDetails.delta.dy < 0:
+        _pulled = math.max(0.0, _pulled + dragDetails.delta.dy);
+      default:
+        break;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollNotification>(onNotification: _onNotification, child: widget.child);
 }
 
 /// What the person just said, until she starts answering.
@@ -296,7 +352,7 @@ class CompanionPill extends StatelessWidget {
     final theme = Theme.of(context);
     final pill = GlassSurface(
       tier: GlassTier.pill,
-      style: _deepGlass(context),
+      style: companionDeepGlass(context),
       stadium: true,
       padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
       child: Row(
@@ -374,6 +430,7 @@ class CompanionInvite extends StatelessWidget {
     required this.onDecline,
     this.remaining,
     this.total = const Duration(seconds: 8),
+    this.mark,
   });
 
   /// The invitation shown, or null for none.
@@ -387,6 +444,9 @@ class CompanionInvite extends StatelessWidget {
   /// Until it goes by itself; null while it is held.
   final Duration? remaining;
   final Duration total;
+
+  /// What the offer is about, at a glance; her cushion by default.
+  final Widget? mark;
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +463,7 @@ class CompanionInvite extends StatelessWidget {
               explicitChildNodes: true,
               child: GlassSurface(
                 tier: GlassTier.card,
-                style: _deepGlass(context),
+                style: companionDeepGlass(context),
                 borderRadius: BorderRadius.circular(22),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -414,9 +474,9 @@ class CompanionInvite extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 3),
-                            child: ExcludeSemantics(child: CompanionCushionMark()),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: ExcludeSemantics(child: mark ?? const CompanionCushionMark()),
                           ),
                           const SizedBox(width: 11),
                           Expanded(child: Text(text, style: theme.textTheme.bodyLarge?.copyWith(height: 1.45))),
@@ -612,7 +672,7 @@ class CompanionComposer extends StatelessWidget {
 
     return GlassSurface(
       tier: GlassTier.chrome,
-      style: _deepGlass(context),
+      style: companionDeepGlass(context),
       borderRadius: BorderRadius.circular(_keySize / 2 + _keyInset),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, _keyInset, _keyInset, _keyInset),

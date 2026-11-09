@@ -17,6 +17,7 @@ import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'web_back.dart';
 import 'web_file_chooser.dart';
+import 'web_handle.dart';
 import 'web_navigation.dart';
 import 'web_target.dart';
 import 'web_view_guard.dart';
@@ -85,7 +86,8 @@ class WebViewPage extends StatefulWidget {
   final DshWebTarget? openTarget;
 
   /// Takes the back button's seat (网页模式: the native handle), at the
-  /// size of the button it replaces.
+  /// size of the button it replaces. A page without one seats the app's mark
+  /// as its way back instead (the marker in DSH Web's leading seat).
   final Widget Function(double size)? leading;
 
   /// The page is the app's home (网页模式): back leaves the app once the page
@@ -666,6 +668,7 @@ class _WebViewPageState extends State<WebViewPage> {
     _progress = 0;
     _error = null;
     _appliedInsets = null;
+    _sidebarOpen = false;
     unawaited(_setUp(controller));
   }
 
@@ -694,6 +697,7 @@ class _WebViewPageState extends State<WebViewPage> {
               if (widget._adapt) unawaited(_injectPhoneLayout());
               if (widget.dshWeb) unawaited(_injectBackBridge());
               if (widget.dshWeb) unawaited(_injectOpenBridge());
+              if (widget.dshWeb) unawaited(_injectSidebarBridge());
               if (widget.dshWeb && widget.onSession != null) {
                 unawaited(_injectStateBridge());
               }
@@ -722,6 +726,9 @@ class _WebViewPageState extends State<WebViewPage> {
           controller.addJavaScriptChannel('DshAppCompose', onMessageReceived: (m) => widget.link?._composed(m.message)),
         if (widget.dshWeb && widget.onSession != null)
           controller.addJavaScriptChannel('DshAppState', onMessageReceived: _onState),
+        // Whether DSH Web's own sidebar drawer covers the page (the seat
+        // marker steps aside while it does).
+        if (widget.dshWeb) controller.addJavaScriptChannel('DshAppSidebar', onMessageReceived: _onSidebar),
       ].map((f) => f.catchError((_) {})),
     );
     if (!mounted || controller != _controller) return;
@@ -778,6 +785,10 @@ class _WebViewPageState extends State<WebViewPage> {
   /// Whether [WebViewPage.openTarget] was handed to the page already.
   bool _targetSent = false;
 
+  /// Whether DSH Web's own sidebar drawer is up (the seat marker steps aside
+  /// while it is): reported by `assets/web/dsh_web_sidebar.js`.
+  bool _sidebarOpen = false;
+
   /// Runs on every load: a session hop reloads the page and the bridge
   /// picks the rest of the target up from there. A load that failed
   /// finished on the WebView's own error page: the target and the
@@ -813,6 +824,26 @@ class _WebViewPageState extends State<WebViewPage> {
     } catch (_) {
       // Error page without a DOM: the next load injects again.
     }
+  }
+
+  /// DSH Web's own sidebar drawer, open or folded
+  /// (`assets/web/dsh_web_sidebar.js`).
+  static Future<String> _sidebarBridge() =>
+      _source('sidebar', () => rootBundle.loadString('assets/web/dsh_web_sidebar.js', cache: false));
+
+  Future<void> _injectSidebarBridge() async {
+    try {
+      await _controller.runJavaScript(await _sidebarBridge());
+    } catch (_) {
+      // Error page without a DOM: the next load injects again.
+    }
+  }
+
+  /// The page's sidebar drawer went up or down: the marker in its header row
+  /// steps aside for it, so it never covers the sidebar's own brand and rows.
+  void _onSidebar(JavaScriptMessage message) {
+    final open = message.message == 'open';
+    if (open != _sidebarOpen && mounted) setState(() => _sidebarOpen = open);
   }
 
   /// Session tracking (`assets/web/dsh_web_state.js`).
@@ -1130,11 +1161,23 @@ class _WebViewPageState extends State<WebViewPage> {
   /// bar of its own. The page's own opener in the seat moves one gap past the
   /// marker (see the seat CSS in [WebPageInsets.script]), so both stay in the
   /// row DSH Web lays out.
+  ///
+  /// Its sidebar, opened, slides over that row: the marker steps aside for it
+  /// (fades out, and lets touches through to the sidebar's mask) instead of
+  /// covering the sidebar's brand and rows.
   Widget _seatControls(EdgeInsets padding) => Positioned(
     key: const ValueKey('web-controls-seat'),
     left: padding.left + WebChromeMetrics.seatLeft,
     top: padding.top + WebChromeMetrics.seatTop,
-    child: BackdropGroup(child: _leading(WebChromeMetrics.seatButton)),
+    child: IgnorePointer(
+      ignoring: _sidebarOpen,
+      child: AnimatedOpacity(
+        opacity: _sidebarOpen ? 0 : 1,
+        duration: AppMotion.of(context, AppMotion.standard),
+        curve: AppMotion.std,
+        child: BackdropGroup(child: _leading(WebChromeMetrics.seatButton, mark: true)),
+      ),
+    ),
   );
 
   /// Adapted DSH Web below [dshWebDesktopWidth]: only the two buttons, left-
@@ -1179,17 +1222,24 @@ class _WebViewPageState extends State<WebViewPage> {
   );
 
   /// The back button, or what [WebViewPage.leading] seats there instead.
-  Widget _leading(double size) =>
+  ///
+  /// [mark]: in DSH Web's own header row, where the page keeps a seat for the
+  /// app's marker (the official layout, phone widths), the way back is the
+  /// app's mark itself — the same round key as the 网页模式 handle, at the
+  /// size of the page's own chrome there.
+  Widget _leading(double size, {bool mark = false}) =>
       widget.leading?.call(size) ??
-      GlassIconButton(
-        icon: AppIcons.back,
-        tooltip: context.l10n.commonBack,
-        // The app's own chrome takes the whole 22; a marker the size of the
-        // page's own controls shrinks the glyph with it.
-        size: size,
-        iconSize: math.min(22, size * 0.6),
-        onPressed: _back,
-      );
+      (mark
+          ? WebMarkButton(size: size, tooltip: context.l10n.commonBack, label: context.l10n.commonBack, onTap: _back)
+          : GlassIconButton(
+              icon: AppIcons.back,
+              tooltip: context.l10n.commonBack,
+              // The app's own chrome takes the whole 22; a marker the size of
+              // the page's own controls shrinks the glyph with it.
+              size: size,
+              iconSize: math.min(22, size * 0.6),
+              onPressed: _back,
+            ));
 
   Widget _bar(BuildContext context, EdgeInsets padding) {
     final theme = Theme.of(context);

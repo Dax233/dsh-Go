@@ -1,6 +1,6 @@
 # dsh-go 使用说明 · User guide
 
-> dsh-go 1.0.12
+> dsh-go 1.0.14
 
 ## 中文
 

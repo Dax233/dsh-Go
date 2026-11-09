@@ -51,6 +51,7 @@ class MainActivity : FlutterActivity() {
             engine.plugins.add(ShortcutsPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.diagnostics.DiagnosticsPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.media.MediaPlugin())
+            engine.plugins.add(io.github.ccch1mneyyy.dsh_app.media.MediaVideoPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.icons.LauncherIconPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.theme.DynamicColorPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.performance.PerformancePlugin())

@@ -96,6 +96,11 @@ class RuntimeInstaller(
         }
         onProgress(total, total)
 
+        val groupNames = appendAndroidGroupNames(staging,
+            runCatching { File("/proc/self/task/${android.os.Process.myTid()}/status").readText() }.getOrNull())
+        onLog("[dsh-app] install group names: " +
+            (groupNames.skipped?.let { "skipped ($it)" } ?: "added ${groupNames.added}"))
+
         timed("activate") {
             activateRootfs(baseDir, manifest.runtimeVersion, keepDir, dropKept,
                 sync = { timed("sync") { sync() } })
@@ -263,9 +268,12 @@ internal fun settleReset(retired: File, keep: File, dropFailed: Boolean = false)
     if (!retired.present()) return
     val list = File(retired, KEEP_LIST)
     val listed = readKeepList(list)
-    val rootfs = File(retired, "rootfs")
+    // activateRootfs keeps the authoritative home here until its move back succeeds.
+    // A reset during that interrupted upgrade must not keep the fresh rootfs skeleton.
+    val carry = File(retired, "home.carry")
+    val home = if (carry.exists()) carry else File(retired, "rootfs/root")
     for (rel in listed.orEmpty()) {
-        val from = File(rootfs, rel)
+        val from = File(home, rel.removePrefix("root/"))
         val to = File(keep, rel)
         if (!from.present() || to.present()) continue
         to.parentFile?.mkdirs()

@@ -166,6 +166,25 @@ for (const profile of ['ark-video', 'ali-video', 'silicon-video']) {
   });
 }
 
+for (const [name, secret] of [
+  ['quote', 'MOCK_ONLY_SECRET_"_QUOTE'],
+  ['backslash', 'MOCK_ONLY_SECRET_\\_SLASH'],
+]) {
+  test(`media engine rejects ${name}-escaped credential in prompt before submission`, async t => {
+    const f = await fixture(t, 'openai-gpt-image');
+    const req = request('openai-gpt-image', { prompt: 'draw ' + secret });
+    f.context.resolveCredential = async () => secret;
+    f.context.admission = await admitGeneration(req, f.context);
+    await assert.rejects(generateMedia(req, f.context), { code: 'credential' });
+    assert.equal(f.wires.length, 0);
+    const ledger = await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot();
+    assert.equal(ledger.requests.length, 1);
+    assert.equal(ledger.requests[0].state, 'released');
+    assert.deepEqual(await readdir(join(f.workspace, 'generated', f.context.admission.outputDate)), []);
+    assert.deepEqual(await readdir(join(f.context.hostStateDir, 'works', f.context.admission.outputDate)), []);
+  });
+}
+
 test('escaped oversized metadata is rejected before any provider POST', async t => {
   const f = await fixture(t, 'openai-gpt-image');
   await assert.rejects(generateMedia(request('openai-gpt-image', { prompt: '\t'.repeat(4000) + 'x' }), f.context), { code: 'metadata' });

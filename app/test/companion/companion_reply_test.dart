@@ -66,6 +66,25 @@ void main() {
     });
   });
 
+  group('companionSaidText', () {
+    final aside = companionAside(now: DateTime(2026, 11, 8, 13, 20), notes: const ['对方刚才摸了摸你的头'])!;
+
+    test('what the person typed, without what the page put in front', () {
+      expect(companionSaidText('$aside\n今天好累'), '今天好累');
+      expect(
+        companionSaidText(
+          ['（你现在的名字是「小鲸」，是对方给你起的。自称时用这个名字。）', '（对方给你改了设定。从现在起按下面这份来：\n多说点话）', aside, '第一行\n第二行'].join('\n'),
+        ),
+        '第一行\n第二行',
+      );
+    });
+
+    test('a message without an aside is all theirs, brackets and all', () {
+      expect(companionSaidText('〔笑〕早上好'), '〔笑〕早上好');
+      expect(companionSaidText('（小声）在吗'), '（小声）在吗');
+    });
+  });
+
   group('companionGreeting', () {
     final evening = DateTime(2026, 11, 6, 21);
 
@@ -90,5 +109,11 @@ void main() {
     test('a long time away is news, whatever the hour', () {
       expect(companionGreeting(evening, evening.subtract(const Duration(days: 4))), CompanionGreeting.longAbsence);
     });
+  });
+
+  test('a note with a line break keeps the aside on one line', () {
+    final aside = companionAside(now: DateTime(2026, 11, 8, 9, 0), notes: const ['「整理\n照片」那边跑完了'])!;
+    expect(aside, isNot(contains('\n')));
+    expect(companionSaidText('$aside\n在吗'), '在吗');
   });
 }

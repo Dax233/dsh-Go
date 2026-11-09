@@ -133,6 +133,108 @@ void main() {
     await expectLater(store.install(path), problem(CompanionPackProblem.notAPack));
   });
 
+  test('a model as it comes: its folder zipped, beside the installed runtime', () async {
+    await store.install(zip({..._runtime(), ..._character()}));
+    await store.install(
+      zip({
+        '大肥鱼/大肥鱼.model3.json': utf8.encode('{}'),
+        '大肥鱼/大肥鱼.moc3': [1, 2, 3],
+        '大肥鱼/大肥鱼.4096/texture_00.png': [4, 5],
+        '大肥鱼/Animation/挥手.motion3.json': utf8.encode('{}'),
+        // The editor's files and the archiver's own are left behind.
+        '大肥鱼/大肥鱼.cmo3': [6],
+        '大肥鱼/notes.psd': [7],
+        '大肥鱼/.DS_Store': [8],
+        '__MACOSX/大肥鱼/._大肥鱼.moc3': [9],
+      }),
+    );
+    final pack = store.pack.path;
+    expect((await store.character()).name, '大肥鱼');
+    final character = jsonDecode(File('$pack/character/character.json').readAsStringSync()) as Map;
+    expect(character['model'], '大肥鱼.model3.json');
+    expect(File('$pack/character/大肥鱼.4096/texture_00.png').existsSync(), isTrue);
+    expect(File('$pack/character/Animation/挥手.motion3.json').existsSync(), isTrue);
+    expect(File('$pack/character/大肥鱼.cmo3').existsSync(), isFalse);
+    expect(File('$pack/character/notes.psd').existsSync(), isFalse);
+    expect(Directory('$pack/character/__MACOSX').existsSync(), isFalse);
+    expect(File('$pack/$_core').readAsStringSync(), 'core');
+    final index = (jsonDecode(File('$pack/character/index.json').readAsStringSync()) as List).cast<String>();
+    expect(index, containsAll(['大肥鱼.model3.json', 'Animation/挥手.motion3.json', 'character.json']));
+  });
+
+  test('a bare model with no folder, or in folders of its own', () async {
+    await store.install(zip({..._runtime(), ..._character()}));
+    await store.install(
+      zip({
+        'm.model3.json': utf8.encode('{}'),
+        'm.moc3': [1],
+      }),
+    );
+    expect((await store.character()).name, 'm');
+    await store.install(
+      zip({
+        'a/x.model3.json': utf8.encode('{}'),
+        'b/x.moc3': [1],
+      }),
+    );
+    final character = jsonDecode(File('${store.pack.path}/character/character.json').readAsStringSync()) as Map;
+    expect(character['model'], 'a/x.model3.json');
+    // Whatever case the exporter wrote the suffix in.
+    await store.install(
+      zip({
+        'M.MODEL3.JSON': utf8.encode('{}'),
+        'M.MOC3': [1],
+      }),
+    );
+    expect((await store.character()).name, 'M');
+  });
+
+  test('a bare model gets the same checks', () async {
+    await store.install(zip({..._runtime(), ..._character()}));
+    await expectLater(
+      store.install(
+        zip({
+          'm.moc3': [1],
+          'readme.txt': [2],
+        }),
+      ),
+      problem(CompanionPackProblem.noModel),
+    );
+    await expectLater(
+      store.install(
+        zip({
+          'm.model3.json': utf8.encode('{}'),
+          '../evil.png': [1],
+        }),
+      ),
+      problem(CompanionPackProblem.unsafePath),
+    );
+    expect(File('${root.path}/evil.png').existsSync(), isFalse);
+    // Scripts never land, even left behind quietly.
+    await store.install(zip({'m.model3.json': utf8.encode('{}'), 'run.js': utf8.encode('x')}));
+    expect(File('${store.pack.path}/character/run.js').existsSync(), isFalse);
+  });
+
+  test('a Cubism 2 model is told apart from a zip with no model', () async {
+    await store.install(zip({..._runtime(), ..._character()}));
+    await expectLater(
+      store.install(
+        zip({
+          'old/model.json': utf8.encode('{}'),
+          'old/old.moc': [1, 2],
+        }),
+      ),
+      problem(CompanionPackProblem.legacyModel),
+    );
+  });
+
+  test('a bare model needs a runtime first', () async {
+    await expectLater(
+      store.install(zip({'m.model3.json': utf8.encode('{}')})),
+      problem(CompanionPackProblem.noRuntime),
+    );
+  });
+
   test('remove', () async {
     await store.install(zip({..._runtime(), ..._character()}));
     await store.remove();

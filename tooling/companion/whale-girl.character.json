@@ -3,9 +3,9 @@
   "id": "whale-girl",
   "name": "鲸鱼娘",
   "model": "newfish.model3.json",
-  "author": "",
-  "license": "",
-  "source": "",
+  "author": "Mao绒绒家园",
+  "license": "经作者授权随 DSH Go 分发",
+  "source": "哔哩哔哩",
   "framing": { "zoom": 0.86, "y": 0.06 },
   "tail": [
     "Param_Angle_Rotation_2_ArtMesh367",

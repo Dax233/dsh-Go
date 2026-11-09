@@ -58,20 +58,31 @@ const _actions = {
 
 enum CompanionMarkKind { emotion, action }
 
+/// Whether [name] is already one of her own marks, which a model's own move of
+/// the same name can't take over.
+bool companionMarkKnown(CompanionMarkKind kind, String name) {
+  final known = kind == CompanionMarkKind.emotion ? _emotions : _actions;
+  return known.containsKey(name) || known.containsKey(name.toLowerCase());
+}
+
 @immutable
 class CompanionMark {
-  const CompanionMark(this.kind, this.name);
+  const CompanionMark(this.kind, this.name, {this.native = false});
 
   final CompanionMarkKind kind;
 
   /// The stage's name for it.
   final String name;
 
-  @override
-  bool operator ==(Object other) => other is CompanionMark && other.kind == kind && other.name == name;
+  /// One of the model's own expressions or motions, by its raw name.
+  final bool native;
 
   @override
-  int get hashCode => Object.hash(kind, name);
+  bool operator ==(Object other) =>
+      other is CompanionMark && other.kind == kind && other.name == name && other.native == native;
+
+  @override
+  int get hashCode => Object.hash(kind, name, native);
 
   @override
   String toString() => '${kind.name}:$name';
@@ -88,26 +99,55 @@ class CompanionReply {
   final List<CompanionMark> marks;
 }
 
-final _mark = RegExp(r'[\[【]\s*(表情|动作|emotion|action)\s*[:：]\s*([^\]】\n]{1,16}?)\s*[\]】]', caseSensitive: false);
+final _mark = RegExp(r'[\[【]\s*(表情|动作|emotion|action)\s*[:：]\s*([^\]】\n]{1,40}?)\s*[\]】]', caseSensitive: false);
+
+/// Whether a label can be written in a mark at all.
+bool companionMarkLabelFits(String label) {
+  final trimmed = label.trim();
+  return trimmed.isNotEmpty && trimmed == label && label.length <= 40 && !label.contains(RegExp(r'[\]】\n]'));
+}
+
+/// [name] in a model's own labels: exactly, else ignoring case.
+String? _own(Map<String, String> labels, String name) {
+  final exact = labels[name];
+  if (exact != null) return exact;
+  final lower = name.toLowerCase();
+  for (final MapEntry(:key, :value) in labels.entries) {
+    if (key.toLowerCase() == lower) return value;
+  }
+  return null;
+}
 
 /// A mark still arriving at the end of the stream: held back so it never flashes.
 final _partialMark = RegExp(
-  r'[\[【](?:\s*(?:表|表情|动|动作|e|em|emo|emot|emoti|emotio|emotion|a|ac|act|acti|actio|action)?\s*(?:[:：][^\]】\n]{0,16})?)?$',
+  r'[\[【](?:\s*(?:表|表情|动|动作|e|em|emo|emot|emoti|emotio|emotion|a|ac|act|acti|actio|action)?\s*(?:[:：][^\]】\n]{0,40})?)?$',
   caseSensitive: false,
 );
 
 /// Reads [text]. While [streaming], a trailing partial mark is held back.
-CompanionReply parseCompanionReply(String text, {bool streaming = false}) {
+/// [emotions] and [actions] map the labels of the model's own expressions and
+/// motions to their raw names (companion_moves.dart); hers come first, since
+/// they carry her pose as well as a face.
+CompanionReply parseCompanionReply(
+  String text, {
+  bool streaming = false,
+  Map<String, String> emotions = const {},
+  Map<String, String> actions = const {},
+}) {
   final marks = <CompanionMark>[];
   var words = text.replaceAllMapped(_mark, (m) {
     final kind = m[1]!.toLowerCase();
     final name = m[2]!;
     if (kind == '表情' || kind == 'emotion') {
-      final emotion = _emotions[name] ?? _emotions[name.toLowerCase()];
-      if (emotion != null) marks.add(CompanionMark(CompanionMarkKind.emotion, emotion));
+      final hers = _emotions[name] ?? _emotions[name.toLowerCase()];
+      final own = hers == null ? _own(emotions, name) : null;
+      if (hers != null) marks.add(CompanionMark(CompanionMarkKind.emotion, hers));
+      if (own != null) marks.add(CompanionMark(CompanionMarkKind.emotion, own, native: true));
     } else {
-      final action = _actions[name] ?? _actions[name.toLowerCase()];
-      if (action != null) marks.add(CompanionMark(CompanionMarkKind.action, action));
+      final hers = _actions[name] ?? _actions[name.toLowerCase()];
+      final own = hers == null ? _own(actions, name) : null;
+      if (hers != null) marks.add(CompanionMark(CompanionMarkKind.action, hers));
+      if (own != null) marks.add(CompanionMark(CompanionMarkKind.action, own, native: true));
     }
     return '';
   });
@@ -122,12 +162,26 @@ String? companionAside({DateTime? now, List<String> notes = const []}) {
     if (now != null)
       '${now.month}月${now.day}日 ${_weekday[now.weekday - 1]} '
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-    ...notes,
+    for (final note in notes) note.replaceAll(RegExp(r'\s*\n\s*'), ' '),
   ];
   return parts.isEmpty ? null : '〔${parts.join('，')}〕';
 }
 
 const _weekday = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+/// The aside line [companionAside] writes: it always starts with the date.
+final _asideLine = RegExp(r'^〔\d{1,2}月\d{1,2}日 周[一二三四五六日] \d{2}:\d{2}[^\n]*〕$');
+
+/// What the person actually typed, out of a message the page sent: whatever
+/// the page put in front of it (the persona, its changes, her name, moves) all
+/// comes before the aside, and the aside comes last. A message with no aside
+/// is already only theirs.
+String companionSaidText(String sent) {
+  final lines = sent.split('\n');
+  final aside = lines.indexWhere(_asideLine.hasMatch);
+  if (aside < 0) return sent;
+  return lines.skip(aside + 1).join('\n').trim();
+}
 
 /// How to greet someone coming back, from the clock and how long they were
 /// away. Never reproachful: absence is news to her, not a debt.

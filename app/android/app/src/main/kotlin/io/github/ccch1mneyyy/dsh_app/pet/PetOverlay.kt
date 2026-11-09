@@ -255,6 +255,29 @@ internal object PetOverlay {
         evaluate()
     }
 
+    /**
+     * A brought pet's files changed (imported again, removed): what was read of [id] is stale even
+     * though its id and size are not. Read it again if it is the one out. If it isn't (不显示,
+     * another pet), what is kept or still loading of it goes, so choosing it again reads it fresh.
+     */
+    fun reloadPack(id: String) {
+        if (!initialized) return
+        failedIds -= id
+        val out = machine.last?.takeIf { it.packId == id }
+        if (out != null) return ensurePack(id, out.size, reload = true)
+        if (loadingKey?.startsWith("$id@") == true) {
+            loadRequest++
+            loadingKey = null
+        }
+        if (loadedKey?.startsWith("$id@") != true) return
+        loaded?.release()
+        loaded = null
+        loadedKey = null
+        stateKey = null
+        if (petView != null) removeWindows()
+        evaluate()
+    }
+
     fun setEnabled(on: Boolean): Map<String, Any?> {
         if (!on) capture.invalidate()
         machine.enabled = on
@@ -455,9 +478,10 @@ internal object PetOverlay {
 
     private fun packKey(p: PetPush?): String? = p?.packId?.let { "$it@${p.size}" }
 
-    private fun ensurePack(id: String, size: String) {
+    /** Loads [id] at [size] unless it is loaded, loading or broken; [reload]: from disk again regardless. */
+    private fun ensurePack(id: String, size: String, reload: Boolean = false) {
         val key = "$id@$size"
-        if (key == loadedKey || key == loadingKey || id in failedIds) return
+        if (!reload && (key == loadedKey || key == loadingKey || id in failedIds)) return
         loadingKey = key
         val request = ++loadRequest
         val density = app.resources.displayMetrics.density
@@ -474,6 +498,14 @@ internal object PetOverlay {
                 if (l == null) {
                     Log.w(TAG, "pet pack $id not found")
                     failedIds += id
+                    // Read again (reloadPack) and gone or broken now: the old picture doesn't stay.
+                    if (loadedKey == key) {
+                        loaded?.release()
+                        loaded = null
+                        loadedKey = null
+                        stateKey = null
+                        if (petView != null) removeWindows()
+                    }
                 } else {
                     loaded?.release()
                     loaded = l
@@ -1893,7 +1925,9 @@ internal object PetOverlay {
             callDart("voiceFallback", mapOf("text" to askDraft)) { raw ->
                 if (listener !== owner || generation != voiceHandoff) return@callDart
                 val text = (raw as? Map<*, *>)?.get("text") as? String ?: return@callDart
-                askDraft = text.take(AskBarView.MAX_TEXT)
+                val limit = AskBarView.MAX_TEXT
+                val cut = if (text.length > limit && text[limit - 1].isHighSurrogate() && text[limit].isLowSurrogate()) limit - 1 else limit
+                askDraft = text.take(cut)
                 prefs.edit().putString("ask_draft", askDraft).apply()
                 returnAsk = true
                 activity.moveTaskToBack(true)

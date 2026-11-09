@@ -47,6 +47,6 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# 伙伴小屋: the pack carried inside local builds (companion_pack.dart). Its
-# model's terms aren't settled, so it stays out of the repository.
+# 伙伴小屋: the pack carried inside release builds (companion_pack.dart). It stays
+# out of the repository; the release machine copies it in (docs/design/companion.md §3).
 /assets/companion/*.zip

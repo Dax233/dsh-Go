@@ -66,6 +66,9 @@ enum CompanionPackProblem {
   runtimeMismatch,
   noRuntime,
   noModel,
+
+  /// A Cubism 2 model (`.moc` and `model.json`): the runtime only reads moc3.
+  legacyModel,
   storage,
 }
 
@@ -167,18 +170,44 @@ Future<void> _install((String, String, String) args) async {
       throw const CompanionPackException(CompanionPackProblem.notAPack);
     }
 
-    final files = archive.files.where((f) => f.isFile).toList();
+    // What an archiver adds on its own (macOS's resource forks, Finder's notes).
+    bool junk(String name) => name.startsWith('__MACOSX/') || name.split('/').last == '.DS_Store';
+    final files = archive.files.where((f) => f.isFile && !junk(f.name)).toList();
     if (files.isEmpty) throw const CompanionPackException(CompanionPackProblem.notAPack);
     if (files.length > _maxFiles) throw const CompanionPackException(CompanionPackProblem.tooLarge);
-    var declared = 0;
-    for (final file in files) {
-      final name = file.name;
-      if (!isSafePackPath(name) || (!name.startsWith('runtime/') && !name.startsWith('character/'))) {
-        throw CompanionPackException(CompanionPackProblem.unsafePath, name);
+
+    // A pack (runtime/ and character/), or a model as it comes: its folder
+    // zipped, model3.json and all, which goes under character/ beside the
+    // installed runtime. What the stage can't use in a bare model (the
+    // editor's .cmo3, a .psd) is left behind rather than refused.
+    final pack = files.any((f) => f.name.startsWith('runtime/') || f.name.startsWith('character/'));
+    final targets = <(ArchiveFile, String)>[];
+    if (pack) {
+      for (final file in files) {
+        targets.add((file, file.name));
       }
-      if (file.isSymbolicLink) throw CompanionPackException(CompanionPackProblem.forbiddenFile, name);
+    } else {
+      if (!files.any((f) => f.name.toLowerCase().endsWith('.model3.json'))) {
+        final legacy = files.any((f) => f.name.toLowerCase().endsWith('.moc'));
+        throw CompanionPackException(legacy ? CompanionPackProblem.legacyModel : CompanionPackProblem.noModel);
+      }
+      final tops = {for (final f in files) f.name.split('/').first};
+      final strip = tops.length == 1 && files.every((f) => f.name.contains('/')) ? '${tops.single}/' : '';
+      for (final file in files) {
+        final name = file.name.substring(strip.length);
+        if (!_dataExtensions.contains(_extension(name))) continue;
+        targets.add((file, 'character/$name'));
+      }
+    }
+
+    var declared = 0;
+    for (final (file, name) in targets) {
+      if (!isSafePackPath(name) || (!name.startsWith('runtime/') && !name.startsWith('character/'))) {
+        throw CompanionPackException(CompanionPackProblem.unsafePath, file.name);
+      }
+      if (file.isSymbolicLink) throw CompanionPackException(CompanionPackProblem.forbiddenFile, file.name);
       if (name.startsWith('character/') && !_dataExtensions.contains(_extension(name))) {
-        throw CompanionPackException(CompanionPackProblem.forbiddenFile, name);
+        throw CompanionPackException(CompanionPackProblem.forbiddenFile, file.name);
       }
       declared += file.size;
       if (declared > _maxBytes) throw const CompanionPackException(CompanionPackProblem.tooLarge);
@@ -187,8 +216,8 @@ Future<void> _install((String, String, String) args) async {
     final runtimeHashes = <String, String>{};
     final characterFiles = <String>[];
     var written = 0;
-    for (final file in files) {
-      final target = File('${staging.path}/${file.name}');
+    for (final (file, name) in targets) {
+      final target = File('${staging.path}/$name');
       await target.parent.create(recursive: true);
       final output = OutputFileStream(target.path);
       try {
@@ -201,10 +230,10 @@ Future<void> _install((String, String, String) args) async {
       // A header can lie about the size; what landed on disk can't.
       written += await target.length();
       if (written > _maxBytes) throw const CompanionPackException(CompanionPackProblem.tooLarge);
-      if (file.name.startsWith('runtime/')) {
-        runtimeHashes[file.name] = (await sha256.bind(target.openRead()).first).toString();
+      if (name.startsWith('runtime/')) {
+        runtimeHashes[name] = (await sha256.bind(target.openRead()).first).toString();
       } else {
-        characterFiles.add(file.name.substring('character/'.length));
+        characterFiles.add(name.substring('character/'.length));
       }
     }
 
@@ -217,8 +246,18 @@ Future<void> _install((String, String, String) args) async {
       if (!await current.exists()) throw const CompanionPackException(CompanionPackProblem.noRuntime);
       await _copy(current, Directory('${staging.path}/runtime'));
     }
-    if (!characterFiles.any((f) => f.endsWith('.model3.json'))) {
+    if (!characterFiles.any((f) => f.toLowerCase().endsWith('.model3.json'))) {
       throw const CompanionPackException(CompanionPackProblem.noModel);
+    }
+    // A bare model has no character.json: its model3.json (the shallowest)
+    // and a name from it; the rest the person sets in the app.
+    if (!characterFiles.contains('character.json')) {
+      final model = characterFiles.where((f) => f.toLowerCase().endsWith('.model3.json')).toList()
+        ..sort((a, b) => '/'.allMatches(a).length.compareTo('/'.allMatches(b).length));
+      final name = model.first.split('/').last.replaceFirst(RegExp(r'\.model3\.json$', caseSensitive: false), '');
+      await File('${staging.path}/character/character.json')
+          .writeAsString(jsonEncode({'schema': 1, 'name': name, 'model': model.first}));
+      characterFiles.add('character.json');
     }
     await File('${staging.path}/character/index.json').writeAsString(jsonEncode(characterFiles));
 

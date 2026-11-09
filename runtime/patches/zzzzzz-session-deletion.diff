@@ -154,7 +154,7 @@
 +		if (agent === void 0) return;
 +		if (agent.session.header.origin === "subagent" || (agent.session.header.delegationDepth ?? 0) > 0)
 +			throw Object.assign(new Error("related agent"), { code: "session-related" });
-+		if (agent.phase?.kind !== "idle" || agent.inbox.hasPending)
++		if (agent.phase?.kind !== "idle")
 +			throw Object.assign(new Error("active agent"), { code: "session-active" });
 +		if (typeof agent.dshGoDispose !== "function") throw Object.assign(new Error("writer held"), { code: "writer-held" });
 +		agent.dshGoDeleting = true;

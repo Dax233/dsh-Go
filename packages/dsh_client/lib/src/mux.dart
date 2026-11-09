@@ -33,6 +33,7 @@ import 'dart:math';
 
 import 'carrier.dart';
 import 'connection.dart';
+import 'companion_signals.dart';
 import 'errors.dart';
 import 'json.dart';
 import 'models.dart';
@@ -51,6 +52,26 @@ class MuxGeneration {
   /// Must accompany `$events/result` replies sent during this generation.
   final String clientId;
   final String home;
+}
+
+/// Metadata-only receipt captured before asynchronous event delivery. It does
+/// not retain event content, approval arguments, titles or messages.
+final class MuxEventProvenance {
+  MuxEventProvenance._(this.mux, this.generation)
+    : observedAt = DateTime.now().toUtc(),
+      receivedMonotonicMs = companionMonotonicMs();
+  final DshMux mux;
+  final MuxGeneration generation;
+  final DateTime observedAt;
+  final int receivedMonotonicMs;
+  int get ageMs => companionMonotonicMs() - receivedMonotonicMs;
+  bool get current => identical(mux.generation, generation);
+}
+
+final class MuxEventReceipt {
+  MuxEventReceipt._(this.event, this.provenance);
+  final HostEvent event;
+  final MuxEventProvenance provenance;
 }
 
 class MuxOptions {
@@ -98,6 +119,8 @@ class DshMux {
 
   final StreamController<DshConnectionState> _states = StreamController.broadcast();
   final StreamController<HostEvent> _hostEvents = StreamController.broadcast();
+  final StreamController<MuxEventReceipt> _hostReceipts = StreamController.broadcast();
+  final Expando<MuxEventProvenance> _provenance = Expando();
   final StreamController<MuxGeneration> _generations = StreamController.broadcast();
   final Map<String, MuxStream> _streams = {};
   final Set<MuxStream> _pendingOpens = {};
@@ -134,6 +157,18 @@ class DshMux {
 
   /// Parsed `$events` items after `ready` (broadcast; not replayed).
   Stream<HostEvent> get hostEvents => _hostEvents.stream;
+  Stream<MuxEventReceipt> get hostEventReceipts => _hostReceipts.stream;
+  MuxEventProvenance? provenanceFor(HostEvent event) => _provenance[event];
+
+  void _publishHostEvent(HostEvent event) {
+    final current = generation;
+    if (current != null) {
+      final proof = MuxEventProvenance._(this, current);
+      _provenance[event] = proof;
+      if (!_hostReceipts.isClosed) _hostReceipts.add(MuxEventReceipt._(event, proof));
+    }
+    if (!_hostEvents.isClosed) _hostEvents.add(event);
+  }
 
   /// Fires on every new ready generation: reopen your logical streams.
   Stream<MuxGeneration> get generations => _generations.stream;
@@ -251,7 +286,7 @@ class DshMux {
   /// Host only sends `cancel` to the *other* clients).
   void resolvePendingRequest(String eventId) {
     _pendingRequests.remove(eventId);
-    if (!_hostEvents.isClosed) _hostEvents.add(HostRequestCancelledEvent(eventId));
+    _publishHostEvent(HostRequestCancelledEvent(eventId));
   }
 
   Future<void> close() async {
@@ -275,9 +310,12 @@ class DshMux {
     _generation = null;
     if (link != null) await link.close(1000, 'client closed');
     _setState(DshConnectionState.closed);
-    await _states.close();
-    await _hostEvents.close();
-    await _generations.close();
+    // Closing broadcasts stops new events immediately. Their done delivery is
+    // owned by listeners, and a paused listener must not hold transport teardown.
+    unawaited(_states.close());
+    unawaited(_hostEvents.close());
+    unawaited(_hostReceipts.close());
+    unawaited(_generations.close());
   }
 
   // ---------------------------------------------------------------------------
@@ -442,7 +480,7 @@ class DshMux {
         if (!stream.isClosed) _sendOpen(link, stream);
       }
       if (!_generations.isClosed) _generations.add(generation);
-      if (!_hostEvents.isClosed) _hostEvents.add(event);
+      _publishHostEvent(event);
       return;
     }
     switch (event) {
@@ -457,7 +495,7 @@ class DshMux {
       default:
         break;
     }
-    if (!_hostEvents.isClosed) _hostEvents.add(event);
+    _publishHostEvent(event);
   }
 
   void _protocolFailure(DshMuxLink link, String reason) {

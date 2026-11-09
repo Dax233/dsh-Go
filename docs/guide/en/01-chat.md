@@ -34,7 +34,7 @@ When the current host has the image and video plugin, the plus panel has a **Cre
 
 Add reference images from the plus panel as usual. For video, the first image is the **First** frame and the second the **Last** frame.
 
-Created images appear in the chat with a line that says **AI-generated**, the model and the aspect, plus an estimated cost when the price is reliable. Tap an image to view it full screen and swipe through the batch. Under the images you can save to Photos, share or **Regenerate**; More has **Edit**, **Copy prompt** and **Details**. When a description doesn't pass content review, tap **Revise** on the card to get it back in the composer. Videos open in another app for now.
+Created images appear in the chat with a line that says **AI-generated**, the model and the aspect, plus an estimated cost when the price is reliable. Tap an image to view it full screen and swipe through the batch. Under the images you can save to Photos, share or **Regenerate**; More has **Edit**, **Copy prompt** and **Details**. When a description doesn't pass content review, tap **Revise** on the card to get it back in the composer. If an image fails to load, **Reload image** reads the file again without generating again or incurring generation charges. Tap a video for in-App playback, pause and seeking; opening in another app remains available if playback fails. Images and videos can both be saved to the gallery. Local videos without a poster get a first-frame preview; remote videos download only when you open them, never just for scrolling previews.
 
 If the host doesn't have the plugin yet, **Create** offers **Install on this host**. Services and API keys are set under Capabilities in [Settings](10-settings.md).
 

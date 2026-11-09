@@ -12,6 +12,8 @@ import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/ui/chat/widgets/approval_card.dart';
+import 'package:dsh_app/ui/companion/companion_ask.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
@@ -412,6 +414,124 @@ void main() {
     }
   });
 
+  testWidgets('an approval waits for the command it is about before it can be allowed', (tester) async {
+    final room = _Room(temporary);
+    await room.open(tester);
+    try {
+      final wire = _Wire(room)
+        ..beginTurn()
+        ..start('early-approval');
+      wire.text('我看一下。');
+      await flush(tester);
+      // The approval arrives before its tool call has reached the transcript.
+      room.client.events.add(
+        HostEvent.fromFrame({
+          'type': 'waterfall',
+          'event': 'approval/request',
+          'eventId': 'approval-early',
+          'agentId': _session,
+          'request': {'toolName': 'bash', 'callId': 'call-early'},
+        }),
+      );
+      await flush(tester);
+      expect(room.state.openApproval?.eventId, 'approval-early');
+      expect(find.byType(ApprovalCard), findsNothing);
+      // Its command comes in: now there is something to allow.
+      wire.endText();
+      const call = {'type': 'tool-call', 'id': 'call-early', 'name': 'bash', 'arguments': '{"command":"ls"}'};
+      wire.chunk({'type': 'block-start', 'index': 1, 'blockType': 'tool-call'});
+      wire.chunk({
+        'type': 'tool-call-delta',
+        'index': 1,
+        'id': 'call-early',
+        'name': 'bash',
+        'argumentsDelta': '{"command":"ls"}',
+      });
+      wire.chunk({'type': 'block-end', 'index': 1, 'block': call});
+      wire.finish('tool-calls');
+      wire.settle('assistant/message', text: '我看一下。', extraParts: [call]);
+      wire.log('tool/call', {
+        'turn': 1,
+        'step': 1,
+        'callId': 'call-early',
+        'name': 'bash',
+        'arguments': '{"command":"ls"}',
+      });
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ApprovalCard), findsOneWidget);
+      expect(find.textContaining('ls'), findsWidgets);
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('an approval waits while its arguments are still arriving', (tester) async {
+    final room = _Room(temporary);
+    await room.open(tester);
+    try {
+      final wire = _Wire(room)
+        ..beginTurn()
+        ..start('streaming-args');
+      wire.text('我看一下。');
+      wire.endText();
+      wire.chunk({'type': 'block-start', 'index': 1, 'blockType': 'tool-call'});
+      wire.chunk({
+        'type': 'tool-call-delta',
+        'index': 1,
+        'id': 'call-streaming',
+        'name': 'bash',
+        'argumentsDelta': '{"command":"rm -',
+      });
+      await flush(tester);
+      room.client.events.add(
+        HostEvent.fromFrame({
+          'type': 'waterfall',
+          'event': 'approval/request',
+          'eventId': 'approval-streaming',
+          'agentId': _session,
+          'request': {'toolName': 'bash', 'callId': 'call-streaming'},
+        }),
+      );
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 600));
+      // Its call is there, its command half written: nothing to allow yet.
+      expect(room.state.items.whereType<ToolChatItem>().single.status, ToolStatus.streaming);
+      expect(find.byType(ApprovalCard), findsNothing);
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('an approval whose call never shows up is shown after a short wait, as the main chat does', (
+    tester,
+  ) async {
+    final room = _Room(temporary);
+    await room.open(tester);
+    try {
+      _Wire(room)
+        ..beginTurn()
+        ..start('lonely-approval');
+      await flush(tester);
+      room.client.events.add(
+        HostEvent.fromFrame({
+          'type': 'waterfall',
+          'event': 'approval/request',
+          'eventId': 'approval-lonely',
+          'agentId': _session,
+          'request': {'toolName': 'web_fetch', 'callId': 'call-elsewhere', 'reason': '要打开一个网页'},
+        }),
+      );
+      await flush(tester);
+      expect(find.byType(ApprovalCard), findsNothing);
+      await tester.pump(CompanionAsk.detailWait);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ApprovalCard), findsOneWidget);
+    } finally {
+      await room.close(tester);
+    }
+  });
+
   testWidgets('positive control: two assistant messages with tool and attention keep one accumulated reply', (
     tester,
   ) async {
@@ -454,8 +574,8 @@ void main() {
       );
       await flush(tester);
       expect(room.state.openApproval?.eventId, 'approval-positive');
-      final label = L10n.of(tester.element(find.byType(CompanionPage))).companionNeedsAttention;
-      expect(find.widgetWithText(CompanionPill, label), findsOneWidget);
+      // Answered right here in the room, on her glass: no trip to the main chat.
+      expect(find.byType(ApprovalCard), findsOneWidget);
       expect(room.speech(tester), '我看一下。');
       room.client.events.add(HostEvent.fromFrame({'type': 'cancel', 'eventId': 'approval-positive'}));
       wire.log('tool/result', {
@@ -486,10 +606,13 @@ void main() {
       expect(room.state.items.whereType<AssistantChatItem>().map((item) => item.text), [first, second]);
       expect(room.state.items.whereType<ToolChatItem>(), hasLength(1));
       expect(room.state.openApproval, isNull);
-      expect(find.widgetWithText(CompanionPill, label), findsNothing);
+      // The card sinks away (its exit animation), then it is gone.
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ApprovalCard), findsNothing);
       expect(room.speech(tester), '我看一下。\n查好了。');
-      expect(room.emotionNames, ['happy']);
-      expect(room.commands.where((c) => c.$1 == 'action').map((c) => c.$2['name']), ['nod']);
+      // She looks up once when the approval comes in, then nods at her answer.
+      expect(room.emotionNames, ['surprised', 'happy']);
+      expect(room.commands.where((c) => c.$1 == 'action').map((c) => c.$2['name']), ['lookUp', 'nod']);
       debugPrint(
         '[C439 POSITIVE] same user, two assistant messages, tool projection and attention enter/exit: OK; no actual tool executed',
       );

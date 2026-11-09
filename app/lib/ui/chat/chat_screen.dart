@@ -23,16 +23,19 @@ import '../../state/chat_state.dart';
 import '../../state/commands_state.dart';
 import '../../state/compose_inbox.dart';
 import '../../state/composer_insert.dart';
+import '../../state/phone_skill_use.dart';
 import '../../state/composer_quote.dart';
 import '../../state/connection_state.dart';
 import '../../state/draft_store.dart';
 import '../../state/drawer_view_state.dart';
 import '../../state/engine_control.dart';
 import '../../state/engine_settings_state.dart' show engineSettingsProvider;
-import '../../state/hosts_state.dart' show HostKind, activeHostProvider;
+import '../../state/features_state.dart' show agentPresetsProvider, permissionStateProvider;
+import '../../state/hosts_state.dart' show HostKind, HostRef, activeHostProvider;
 import '../../state/media_generation.dart';
 import '../../state/mention_state.dart';
 import '../../state/models_state.dart';
+import '../../state/new_chat_modes.dart';
 import '../../state/session_search.dart' show folderLabel;
 import '../../state/safe_mode_state.dart';
 import '../../state/session_modes.dart';
@@ -79,7 +82,7 @@ import 'composer_toast.dart';
 import 'dock/chat_dock.dart';
 import 'dock/dock_stack.dart';
 import 'empty_state.dart';
-import 'empty_actions.dart';
+import 'new_chat_options.dart';
 import 'media/generate_mode.dart';
 import 'media/generate_sheet.dart';
 import 'media/media_card.dart' show MediaCardActions, mediaItemBytes;
@@ -195,6 +198,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   /// Only this creation may own the composer's busy state.
   Object? _creating;
 
+  /// Only one apply of a session's owed new-chat setup at a time.
+  Object? _applyingSetup;
+
   /// A page/client change retires an intent even when its draft key returns.
   Object _draftScope = Object();
 
@@ -209,6 +215,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
 
   /// The open conversation's id, or `new`.
   late String _draftKey;
+
+  PreparedPhoneSkill? _preparedPhoneSkill;
+  PreparedPhoneSkill? _sendingPhoneSkill;
+  bool get _phoneSkillSending => _sendingPhoneSkill != null;
+
+  void _dropPreparedPhoneSkill() {
+    final prepared = _preparedPhoneSkill;
+    _preparedPhoneSkill = null;
+    // If send is waiting, its final source predicate will reject. If it already
+    // dispatched, only its own completion can report what was accepted.
+    if (prepared != null && !identical(prepared, _sendingPhoneSkill)) unawaited(prepared.discard());
+  }
+
+  bool _phoneSkillCurrent(PreparedPhoneSkill prepared) => mounted &&
+      identical(_preparedPhoneSkill, prepared) &&
+      prepared.origin.current(ProviderScope.containerOf(context, listen: false));
+
+  Future<void> _sendPhoneSkill() async {
+    final prepared = _preparedPhoneSkill;
+    if (prepared == null || _phoneSkillSending) return;
+    if (!_phoneSkillCurrent(prepared)) {
+      setState(_dropPreparedPhoneSkill);
+      _composerToast(appL10n.phoneSkillReplaySourceChanged);
+      return;
+    }
+    setState(() => _sendingPhoneSkill = prepared);
+    final chat = ref.read(chatProvider(prepared.origin.sessionId).notifier);
+    bool ok = false;
+    try {
+      // No ordinary input, quote or attachments are consumed. Queue rather than
+      // steer an existing turn; the final predicate runs beside client.prompt.
+      ok = await chat.send(prepared.text, mode: SendMode.queue,
+        deliveryAllowed: () => _phoneSkillCurrent(prepared));
+    } finally {
+      if (!ok) unawaited(prepared.discard());
+      if (mounted) {
+        final showReceipt = _phoneSkillCurrent(prepared);
+        setState(() {
+          if (identical(_preparedPhoneSkill, prepared)) _preparedPhoneSkill = null;
+          if (identical(_sendingPhoneSkill, prepared)) _sendingPhoneSkill = null;
+        });
+        if (showReceipt) _composerToast(ok ? appL10n.phoneSkillReplayQueued : appL10n.phoneSkillReplaySendUncertain);
+      }
+    }
+  }
 
   void _saveDraft() => _draftStore.save(_draftKey, _input.text, _drafts);
 
@@ -227,6 +278,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   void _switchDraft(String? sessionId) {
     final key = sessionId ?? 'new';
     if (key == _draftKey) return;
+    _dropPreparedPhoneSkill();
     _draftScope = Object();
     _creating = null;
     _syncWait = null;
@@ -274,10 +326,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     _voice.addListener(_reportVoice);
     _draftKey = ref.read(currentSessionProvider) ?? 'new';
     _draftStore = ref.read(draftStoreProvider.notifier);
+    // Start reading what earlier sessions still owe before the first send.
+    ref.read(owedSetupsProvider.notifier);
     _showDraft(ref.read(draftStoreProvider).drafts[_draftKey]);
     _input.addListener(_saveDraft);
     ref.listenManual(currentSessionProvider, (_, next) => _switchDraft(next));
     ref.listenManual(activeConnectionProvider.select((c) => c.value?.client), (_, _) {
+      _dropPreparedPhoneSkill();
       _draftScope = Object();
       if (_creating != null || _syncWait != null) {
         setState(() {
@@ -325,6 +380,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   void _takeComposerInsert() {
     final insert = ref.read(composerInsertProvider.notifier).take();
     if (insert == null || !mounted) return;
+    if (insert.phoneSkill case final prepared?) {
+      if (!prepared.origin.current(ProviderScope.containerOf(context, listen: false)) ||
+          insert.sessionId != prepared.origin.sessionId) {
+        unawaited(prepared.discard());
+        _composerToast(appL10n.phoneSkillReplaySourceChanged);
+        return;
+      }
+      setState(() { _dropPreparedPhoneSkill(); _preparedPhoneSkill = prepared; });
+      return;
+    }
     if (ref.read(currentSessionProvider) != insert.sessionId) {
       ref.read(currentSessionProvider.notifier).select(insert.sessionId);
     }
@@ -372,6 +437,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _dropPreparedPhoneSkill();
     WidgetsBinding.instance.removeObserver(this);
     _endInteraction?.call();
     _endInteraction = null;
@@ -398,8 +464,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   Future<String?> _ensureSession({required bool Function() isCurrent}) async {
     if (!isCurrent()) return null;
     final current = ref.read(currentSessionProvider);
-    if (current != null) return current;
+    if (current != null) {
+      // A session made on the new-chat screen may still owe its picks (a
+      // failed apply, kept across screens and restarts): settle them first.
+      // (The saved ones are read when this screen starts, long before a send.)
+      final host = ref.read(activeHostProvider);
+      final owed = ref.read(owedSetupsProvider.notifier).of(host, current);
+      if (owed != null && !await _applyOwedSetup(host, current, owed, isCurrent)) return null;
+      return current;
+    }
     if (_creating != null) return null;
+    final host = ref.read(activeHostProvider);
     final pendingFolder = ref.read(pendingSessionFolderProvider);
     final attempt = Object();
     bool ownsCreation() => identical(_creating, attempt) && isCurrent();
@@ -431,7 +506,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
             );
         if (!ownsCreation() || ref.read(pendingSessionFolderProvider) != pendingFolder) return null;
       }
-      final pendingModel = ref.read(pendingModelProvider);
+      final pendingModes = ref.read(pendingNewChatModesProvider);
+      // What the chips show is what the session gets: a pick the Host no
+      // longer offers falls back to the default, a hidden Host default to
+      // the offered one.
+      final setup = OwedSetup(
+        preset: newChatPresetToApply(ref.read(agentPresetsProvider).value, pendingModes.preset),
+        permission: newChatPermissionToApply(ref.read(permissionStateProvider(null)).value, pendingModes.permission),
+        model: ref.read(pendingModelProvider),
+      );
       _draftKey = sessionId;
       _saveDraft();
       if (!ownsCreation() || _draftKey != sessionId) return null;
@@ -441,16 +524,69 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       ref.read(generateModeProvider.notifier).move('new', sessionId);
       if (!ownsCreation() || _draftKey != sessionId) return null;
       _draftStore.clear('new');
-      if (pendingModel != null) {
+      if (!setup.isEmpty) {
         if (!ownsCreation()) return null;
+        // The picks move to the session: owed until the Host confirms each.
+        ref.read(pendingNewChatModesProvider.notifier).clear();
         ref.read(pendingModelProvider.notifier).select(null);
+        ref.read(owedSetupsProvider.notifier).put(host, sessionId, setup);
         if (!ownsCreation()) return null;
-        if (!await ref.read(chatProvider(sessionId).notifier).setModel(pendingModel)) return null;
+        if (!await _applyOwedSetup(host, sessionId, setup, ownsCreation)) return null;
       }
       if (!ownsCreation() || _draftKey != sessionId || ref.read(currentSessionProvider) != sessionId) return null;
       return sessionId;
     } finally {
       if (mounted && identical(_creating, attempt)) setState(() => _creating = null);
+    }
+  }
+
+  /// Applies what [sessionId] still owes from the new-chat screen before its
+  /// first prompt: the preset first (it may bring its own defaults), then the
+  /// permission and model picks on top. Each pick stays owed (owedSetupsProvider,
+  /// across screens and restarts) until the Host confirms it, and is retried
+  /// on the next send: the message must not go out under a setup the person
+  /// did not choose.
+  Future<bool> _applyOwedSetup(HostRef host, String sessionId, OwedSetup owed, bool Function() isCurrent) async {
+    if (_applyingSetup != null) return false;
+    final client = ref.read(activeConnectionProvider).value?.client;
+    if (client == null) return false;
+    // What the Host confirms is recorded even if this screen goes meanwhile.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final setups = ref.read(owedSetupsProvider.notifier);
+    final attempt = Object();
+    _applyingSetup = attempt;
+    bool current() => identical(_applyingSetup, attempt) && mounted && isCurrent();
+    try {
+      if (owed.preset case final preset?) {
+        await client.selectAgentPreset(sessionId, preset);
+        setups.settled(host, sessionId, preset: preset);
+        if (!current()) return false;
+      }
+      if (owed.permission case final permission?) {
+        final CommandResult result;
+        try {
+          result = await client.setPermissionPreset(sessionId, permission);
+        } finally {
+          container.invalidate(permissionStateProvider(sessionId));
+        }
+        if (!result.success) throw DshRemoteException('permission', result.text ?? permission);
+        setups.settled(host, sessionId, permission: permission);
+        if (!current()) return false;
+      }
+      if (owed.model case final model?) {
+        // setModel says itself what went wrong.
+        if (!await ref.read(chatProvider(sessionId).notifier).setModel(model)) return false;
+        setups.settled(host, sessionId, model: model);
+        if (!current()) return false;
+      }
+      return true;
+    } catch (e) {
+      // The session exists by now, so the new-chat error slot is gone: say it
+      // where the person is looking. The message stays in the composer.
+      if (current()) _toast(chatErrorText(e, action: appL10n.viewNewChatModesFailed));
+      return false;
+    } finally {
+      if (identical(_applyingSetup, attempt)) _applyingSetup = null;
     }
   }
 
@@ -1310,6 +1446,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       if (sessionId == null) {
         ref.read(pendingModelProvider.notifier).select(selection);
       } else {
+        // A newer pick replaces a model still owed from the new-chat screen.
+        ref.read(owedSetupsProvider.notifier).dropModel(ref.read(activeHostProvider), sessionId);
         ref.read(chatProvider(sessionId).notifier).setModel(selection);
       }
     };
@@ -1563,16 +1701,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                           ? _reconnect
                                           : null,
                                       onSuggestion: _onSuggestion,
-                                      folderPicker: hasFolders
-                                          ? QuietChip(
-                                              icon: AppIcons.folder,
-                                              label: newFolder == null
-                                                  ? context.l10n.shellFolders
-                                                  : context.l10n.shellFolderLabel(newFolder.name),
-                                              trailing: AppIcons.expand,
-                                              onTap: _pickNewChatFolder,
-                                            )
-                                          : null,
+                                      options: NewChatOptions(
+                                        folderLabel: !hasFolders
+                                            ? null
+                                            : newFolder == null
+                                            ? context.l10n.shellFolders
+                                            : context.l10n.shellFolderLabel(newFolder.name),
+                                        onFolder: hasFolders ? _pickNewChatFolder : null,
+                                      ),
                                       workspace: workspace != null
                                           ? workspaceTitle(workspace)
                                           : inHostDefault
@@ -1659,9 +1795,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                         onTitleTap: sessionId == null
                             ? null
                             : () => SessionDetailPage.open(context, sessionId, toggle: true),
-                        // A phone has no room for it: the model is shown and picked at the
-                        // composer's foot while typing.
-                        trailing: narrow
+                        // A phone's conversation has no room for it beside its title: the
+                        // model is shown and picked at the composer's foot while typing.
+                        // A new chat's title is only 「新对话」, so the model takes the
+                        // header's right like on a wide window — picked before typing,
+                        // once there is an engine to send to.
+                        trailing: narrow && (sessionId != null || !connected)
                             ? null
                             : ModelChip(
                                 selection: sessionId == null ? pendingModel : chat?.model,
@@ -1867,6 +2006,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                       strip: false,
                                     ),
                                   ),
+                                if (_preparedPhoneSkill case final prepared?)
+                                  Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(l10n.phoneSkillReplayReview),
+                                      SelectableText(prepared.text),
+                                      Row(children: [
+                                        TextButton(onPressed: _phoneSkillSending ? null : () => setState(_dropPreparedPhoneSkill),
+                                          child: Text(l10n.commonClose)),
+                                        FilledButton(onPressed: _phoneSkillSending || readOnly || !connected ? null : _sendPhoneSkill,
+                                          child: Text(l10n.phoneSkillReplayQueue)),
+                                      ]),
+                                    ],
+                                  ))),
                                 if (readOnly)
                                   const ReadOnlyBar()
                                 else

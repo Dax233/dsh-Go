@@ -3,6 +3,7 @@
 // unless an app negotiated a feature and a plugin declared it. The bridge never touches a
 // microphone, never proxies a URL and never executes what a capability callback returns.
 import { randomBytes } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { AUDIO_TYPES, CAP_EVENTS, CAP_LIMITS as L, KEY, TERMINAL_EVENTS, microModel } from './capabilities.js';
 import { ID, PKG } from './limits.js';
 import { call, deepEqual, normalizeScope, withTimeout } from './util.js';
@@ -104,7 +105,7 @@ export class CapabilityRuntime {
     // Speech edges: at most 10 a second (burst 4). Terminal events are bounded by the roles a
     // lease holds (three at most), so they are never dropped for pacing: a lost one would leak it.
     if (!terminal) {
-      const now = Date.now();
+      const now = performance.now();
       e.tokens = Math.min(L.eventBurst, (e.tokens ?? L.eventBurst) + ((now - (e.tokenAt ?? now)) / 1000) * L.eventsPerSecond);
       e.tokenAt = now;
       if (e.tokens < 1) return;
@@ -216,7 +217,7 @@ export class CapabilityRuntime {
 class MicroFeed {
   constructor(runtime, key, rec, id, scope, locale, reg) {
     Object.assign(this, { runtime, key, pkg: rec.pkg, uid: rec.uid, stamp: rec.stamp, id, scope, locale, reg, token: reg.token });
-    this.subs = new Set(); this.seq = 0; this.epoch = randomBytes(8).toString('hex'); this.last = 0;
+    this.subs = new Set(); this.seq = 0; this.epoch = randomBytes(8).toString('hex'); this.last = undefined;
   }
   attach(sub) {
     this.subs.add(sub);
@@ -241,7 +242,8 @@ class MicroFeed {
     if (!data) { this.runtime.core.violation(this.pkg, 'invalid-micro', 'micro data exceeds the small model budget'); return; }
     this.pending = data;
     if (this.timer) return;
-    const wait = Math.max(0, this.last + L.microMs - Date.now());
+    const wait = this.last === undefined ? 0
+      : Math.max(0, Math.ceil(this.last + L.microMs - performance.now()));
     if (wait === 0) this.flush();
     else { this.timer = setTimeout(() => { this.timer = undefined; this.flush(); }, wait); this.timer.unref?.(); }
   }
@@ -249,7 +251,7 @@ class MicroFeed {
     const data = this.pending; this.pending = undefined;
     if (!this.checkCurrent() || data === undefined || deepEqual(data, this.current)) return;
     if (this.seq >= Number.MAX_SAFE_INTEGER) { this.stop('limit'); return; }
-    this.last = Date.now(); this.current = data; this.seq++;
+    this.last = performance.now(); this.current = data; this.seq++;
     for (const sub of this.subs) this.send(sub);
   }
   send(sub) { sub.conn.send({ t: 'micro.data', sub: sub.id, rev: `${this.epoch}.${this.seq}`, data: this.current }); }

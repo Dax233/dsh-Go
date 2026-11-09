@@ -32,6 +32,7 @@ import '../widgets/image_gallery.dart';
 import '../widgets/message_actions.dart' show copyMessage;
 import 'media_card.dart';
 import 'media_format.dart';
+import 'media_image_feedback.dart';
 
 /// The viewer's measured geometry; `test/media/media_card_test.dart` (viewer).
 abstract final class MediaViewerMetrics {
@@ -81,7 +82,9 @@ Future<void> openMediaViewer(
   required String sessionId,
   required MediaMeta meta,
   int index = 0,
+  CachedImageReader? reader,
 }) {
+  reader ??= ProviderScope.containerOf(context, listen: false).read(workspaceImageReaderProvider);
   final actions = MediaCardActions.maybeOf(context);
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
@@ -89,7 +92,7 @@ Future<void> openMediaViewer(
       reverseTransitionDuration: AppMotion.of(context, AppMotion.quick),
       pageBuilder: (context, animation, _) => FadeTransition(
         opacity: animation,
-        child: MediaViewerPage(sessionId: sessionId, meta: meta, initial: index, onEdit: actions?.edit),
+        child: MediaViewerPage(sessionId: sessionId, meta: meta, initial: index, onEdit: actions?.edit, reader: reader),
       ),
     ),
   );
@@ -102,6 +105,7 @@ class MediaViewerPage extends ConsumerStatefulWidget {
     required MediaMeta this.meta,
     this.initial = 0,
     this.onEdit,
+    this.reader,
   }) : pictures = null,
        source = null;
 
@@ -109,9 +113,11 @@ class MediaViewerPage extends ConsumerStatefulWidget {
   const MediaViewerPage.pictures({super.key, required List<ViewerPicture> this.pictures, this.initial = 0, this.source})
     : sessionId = '',
       meta = null,
+      reader = null,
       onEdit = null;
 
   final String sessionId;
+  final CachedImageReader? reader;
   final MediaMeta? meta;
   final List<ViewerPicture>? pictures;
 
@@ -127,10 +133,13 @@ class MediaViewerPage extends ConsumerStatefulWidget {
 class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
   late int _index = widget.initial.clamp(0, (widget.pictures?.length ?? _items.length) - 1);
   bool _chrome = true;
+  // Keep all pages and reloads on the Host that opened this viewer.
+  late final CachedImageReader _sourceReader =
+      widget.reader ?? ref.read<CachedImageReader>(workspaceImageReaderProvider);
 
   List<MediaItem> get _items => widget.meta?.items ?? const [];
 
-  Future<Uint8List> _bytes() => mediaItemBytes(ref, widget.sessionId, _items[_index]);
+  Future<Uint8List> _bytes() => mediaItemBytes(ref, widget.sessionId, _items[_index], reader: _sourceReader);
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +189,7 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
                 onPageChanged: (i) => setState(() => _index = i),
                 itemBuilder: (context, i) => _PicturePage(
                   key: ValueKey(_items[i].path),
+                  reader: _sourceReader,
                   sessionId: widget.sessionId,
                   item: _items[i],
                   label: meta.prompt,
@@ -301,8 +311,13 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
                 tapWhenZoomed: true,
                 onTap: () => setState(() => _chrome = !_chrome),
                 onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (context, i) =>
-                    _PicturePage(key: ValueKey(i), sessionId: '', picture: pictures[i], label: pictures[i].label),
+                itemBuilder: (context, i) => _PicturePage(
+                  key: ValueKey(i),
+                  sessionId: '',
+                  reader: null,
+                  picture: pictures[i],
+                  label: pictures[i].label,
+                ),
               ),
             ),
             Theme(
@@ -383,9 +398,10 @@ class _MediaViewerPageState extends ConsumerState<MediaViewerPage> {
 
 /// The picture's source; the shared pager owns its zoom and drag gestures.
 class _PicturePage extends ConsumerStatefulWidget {
-  const _PicturePage({super.key, required this.sessionId, this.item, this.picture, this.label});
+  const _PicturePage({super.key, required this.sessionId, required this.reader, this.item, this.picture, this.label});
 
   final String sessionId;
+  final CachedImageReader? reader;
 
   /// A conversation's file, or [picture].
   final MediaItem? item;
@@ -398,49 +414,79 @@ class _PicturePage extends ConsumerStatefulWidget {
 
 class _PicturePageState extends ConsumerState<_PicturePage> {
   Future<LoadedImage>? _future;
+  CachedImageReader? _reader;
+  (String, String?)? _source;
+  ImageProvider? _displayProvider;
+  int _attempt = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.item case final item?) {
-      final path = item.isVideo ? item.poster : item.path;
-      if (path != null) _future = ref.read(workspaceImageReaderProvider).read(widget.sessionId, path);
-    }
+  void _resolve(CachedImageReader? reader) {
+    final item = widget.item;
+    final path = item == null
+        ? null
+        : item.isVideo
+        ? item.poster
+        : item.path;
+    final source = (widget.sessionId, path);
+    if (identical(_reader, reader) && _source == source) return;
+    _reader = reader;
+    _source = source;
+    _displayProvider = null;
+    _future = path == null || reader == null ? null : reader.read(widget.sessionId, path);
+  }
+
+  Future<void> _retry() async {
+    final reader = _reader;
+    final source = _source;
+    await _displayProvider?.evict();
+    if (!mounted || reader != _reader || source != _source) return;
+    if (source case (final sessionId, final path?)) reader?.forget(sessionId, path);
+    setState(() {
+      _attempt += 1;
+      _source = null;
+      _future = null;
+    });
+  }
+
+  Widget _bitmap(ImageProvider provider) {
+    _displayProvider = provider;
+    return Image(
+      key: ValueKey((_reader, _source, _attempt)),
+      image: provider,
+      fit: BoxFit.contain,
+      semanticLabel: widget.label,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, sync) => sync || frame != null
+          ? child
+          : Stack(fit: StackFit.expand, children: [const MediaImageFeedback(dark: true), child]),
+      errorBuilder: (context, error, stack) =>
+          MediaImageFeedback(error: imageErrorText(error), onRetry: _retry, dark: true),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: widget.picture != null
-        ? Image(
-            image: widget.picture!.image,
-            fit: BoxFit.contain,
-            semanticLabel: widget.label,
-            gaplessPlayback: true,
-            errorBuilder: (context, error, stack) =>
-                Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6)),
-          )
-        : FutureBuilder<LoadedImage>(
-            future: _future,
-            builder: (context, snapshot) {
-              final image = snapshot.data;
-              if (image is RasterImage) {
-                return Image(
-                  image: image.provider,
-                  fit: BoxFit.contain,
-                  semanticLabel: widget.label,
-                  gaplessPlayback: true,
-                );
-              }
-              if (snapshot.hasError || (_future == null)) {
-                return Icon(AppIcons.imageBroken, size: 28, color: Colors.white.withValues(alpha: 0.6));
-              }
-              return const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
-              );
-            },
-          ),
-  );
+  Widget build(BuildContext context) {
+    _resolve(widget.reader);
+    final picture = widget.picture;
+    return Center(
+      child: picture != null
+          ? _bitmap(picture.image)
+          : FutureBuilder<LoadedImage>(
+              key: ValueKey((_reader, _source, _attempt)),
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.data case RasterImage(:final provider)) return _bitmap(provider);
+                if (snapshot.hasError || _future == null) {
+                  return MediaImageFeedback(
+                    error: snapshot.hasError ? imageErrorText(snapshot.error!) : context.l10n.chatImageReadFailed,
+                    onRetry: _future == null ? null : _retry,
+                    dark: true,
+                  );
+                }
+                return const MediaImageFeedback(dark: true);
+              },
+            ),
+    );
+  }
 }
 
 /// The bottom capsule: equal items, icon over a word.

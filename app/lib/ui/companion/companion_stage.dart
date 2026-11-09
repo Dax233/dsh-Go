@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../companion/companion_adapt.dart';
+import '../../companion/companion_moves.dart';
 import '../../companion/companion_pack.dart';
 import '../../companion/companion_server.dart';
 import '../plugins/islands/island_platform.dart';
@@ -48,9 +50,18 @@ class CompanionStageEvents {
     required this.onMood,
     required this.onObject,
     required this.onActivity,
+    this.onModel,
+    this.onProbe,
   });
 
   final VoidCallback onReady;
+
+  /// What the model is (stage.js `probeReport`), when it loads and whenever
+  /// an adapter is worn or taken off (companion_adapt.dart).
+  final ValueChanged<CompanionProbe>? onProbe;
+
+  /// What the model brings of its own, as it finishes loading (before [onReady]).
+  final ValueChanged<CompanionModelInfo>? onModel;
   final ValueChanged<String> onFailed;
   final void Function(String zone, String kind) onTouch;
   final VoidCallback onWake;
@@ -165,7 +176,12 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
         widget.controller._ready = true;
         _appliedPause = null;
         _syncVisibility();
+        // What the model is first: its moves are kept by its fingerprint.
+        if (CompanionProbe.fromJson(message['probe']) case final probe?) events.onProbe?.call(probe);
+        events.onModel?.call(CompanionModelInfo.fromMessage(message));
         events.onReady();
+      case 'adapted':
+        if (CompanionProbe.fromJson(message['probe']) case final probe?) events.onProbe?.call(probe);
       case 'error':
         _fail('${message['message']}');
       case 'touch':

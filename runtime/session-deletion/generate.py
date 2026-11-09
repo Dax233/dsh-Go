@@ -78,7 +78,7 @@ def transforms():
 \t\tif (agent === void 0) return;
 \t\tif (agent.session.header.origin === "subagent" || (agent.session.header.delegationDepth ?? 0) > 0)
 \t\t\tthrow Object.assign(new Error("related agent"), { code: "session-related" });
-\t\tif (agent.phase?.kind !== "idle" || agent.inbox.hasPending)
+\t\tif (agent.phase?.kind !== "idle")
 \t\t\tthrow Object.assign(new Error("active agent"), { code: "session-active" });
 \t\tif (typeof agent.dshGoDispose !== "function") throw Object.assign(new Error("writer held"), { code: "writer-held" });
 \t\tagent.dshGoDeleting = true;

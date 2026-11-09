@@ -23,6 +23,18 @@
   const MAX_TEXTURE = Number(query.get('maxTexture')) || 4096;
   const REDUCED = query.get('reduceMotion') === '1';
   const DPR_CAP = 2;
+  // Clip masks: the renderer packs them into textures of four channels, at
+  // most 36 different masks in one texture, 32 each when there are several.
+  // A model that needs more (a detailed one: 49 for 大肥鱼 4096) gets more
+  // textures, and past MASK_TEXTURES_MAX each mask drawn as it's needed.
+  const MASKS_IN_ONE = 36;
+  const MASKS_PER_TEXTURE = 32;
+  const MASK_TEXTURES_MAX = 4;
+  // Each mask gets a share of its texture: 256 (the framework's) blurs the
+  // edges of small clipped parts on a detailed model.
+  const MASK_SIZE = Number(query.get('maskSize')) || 1024;
+  // The pack's own files beyond what model3.json lists, at most this many of each kind.
+  const EXTRA_FILES_MAX = 64;
   const SLEEP_AFTER_MS = 3 * 60 * 1000;
 
   const canvas = document.getElementById('stage');
@@ -152,14 +164,83 @@
     legs: { emotion: 'confused', hold: 1500, action: 'tilt' },
   };
 
+  // ── Fitting any model (docs/design/companion-adapt.md) ──────────────────
+
+  /** The parameters her life moves, each with the range it writes in. */
+  const STANDARD = {
+    ParamAngleX: [-30, 30],
+    ParamAngleY: [-30, 30],
+    ParamAngleZ: [-30, 30],
+    ParamBodyAngleX: [-10, 10],
+    ParamBodyAngleY: [-10, 10],
+    ParamBodyAngleZ: [-10, 10],
+    ParamBreath: [0, 1],
+    ParamEyeLOpen: [0, 1],
+    ParamEyeROpen: [0, 1],
+    ParamEyeBallX: [-1, 1],
+    ParamEyeBallY: [-1, 1],
+    ParamEyeSmile: [0, 1],
+    ParamMouthOpenY: [0, 1],
+    ParamMouthForm: [-1, 1],
+    ParamBrowLY: [-1, 1],
+    ParamBrowRY: [-1, 1],
+    ParamBrowLAngle: [-1, 1],
+    ParamBrowRAngle: [-1, 1],
+  };
+
+  /**
+   * Other names models give the same thing, beyond case and underscores
+   * (`squashId` already makes Cubism 2's PARAM_ANGLE_X ParamAngleX). Each entry
+   * is a set of parameters driven together.
+   */
+  const SYNONYMS = {
+    ParamEyeSmile: [['ParamEyeLSmile', 'ParamEyeRSmile'], ['ParamEyeLSmile']],
+    ParamMouthOpenY: [['ParamMouthOpen'], ['ParamMouthA'], ['ParamA']],
+    ParamBreath: [['ParamBreathe']],
+    ParamEyeBallX: [['ParamEyeX'], ['ParamEyeBallLX', 'ParamEyeBallRX']],
+    ParamEyeBallY: [['ParamEyeY'], ['ParamEyeBallLY', 'ParamEyeBallRY']],
+    ParamBrowLY: [['ParamBrowY']],
+    ParamBrowRY: [['ParamBrowY']],
+  };
+
+  const squashId = (id) => id.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  /** A framework id handle's text (a string, or a csmString in older builds). */
+  const idText = (handle) => {
+    const s = handle?.getString?.();
+    return typeof s === 'string' ? s : (s?.s ?? '');
+  };
+
+  /** Hit area names → her touch zones. */
+  const HIT_KINDS = [
+    [/face|顔|脸|臉|cheek|mouth|口|眼/i, 'face'],
+    [/head|頭|头|hair|髪|发/i, 'head'],
+    [/tail|尾/i, 'tail'],
+    [/leg|foot|feet|足|脚|腿/i, 'legs'],
+    [/body|体|身|chest|bust|胸|torso|腹|belly|arm|hand|手/i, 'body'],
+  ];
+
   // ── Live2D model ────────────────────────────────────────────────────────
 
   class StageModel extends Fw.CubismUserModel {
     constructor() {
       super();
       this.expressions = new Map();
+      // The model's own motions (model3.json), by group, numbered when a group has several.
+      this.motions = new Map();
       this.ids = new Map();
       this.tailIds = [];
+      // Her standard parameter → the model's own, fitted to its range:
+      // { ids, scale, offset }. Rules first (fitParams), the adapter over them.
+      this.alias = new Map();
+      this.ruleAlias = new Map();
+      this.missing = [];
+      this.hitAreas = [];
+      this.hitZones = [];
+      this.textureSizes = [];
+      this.display = null;
+      this.mocFile = '';
+      this.mocVersion = 0;
     }
 
     id(name) {
@@ -172,11 +253,135 @@
     }
 
     set(name, value, weight = 1) {
-      this._model.setParameterValueById(this.id(name), value, weight);
+      const link = this.alias.get(name);
+      if (!link) return this._model.setParameterValueById(this.id(name), value, weight);
+      for (const id of link.ids) this._model.setParameterValueById(this.id(id), value * link.scale + link.offset, weight);
     }
 
     add(name, value) {
-      this._model.addParameterValueById(this.id(name), value);
+      const link = this.alias.get(name);
+      if (!link) return this._model.addParameterValueById(this.id(name), value);
+      for (const id of link.ids) this._model.addParameterValueById(this.id(id), value * link.scale);
+    }
+
+    /** Whether the model has a parameter by this exact id. */
+    has(id) {
+      return typeof id === 'string' && this._model.getParameterIndex(this.id(id)) < this._model.getParameterCount();
+    }
+
+    /** A parameter's [min, max, default], by id. */
+    range(id) {
+      const raw = this._model.getModel().parameters;
+      const i = raw.ids.indexOf(id);
+      return i < 0 ? null : [raw.minimumValues[i], raw.maximumValues[i], raw.defaultValues[i]];
+    }
+
+    /**
+     * The rules: each of her standard parameters found in the model however
+     * it's spelled, by a synonym, or by the model's own blink and lip-sync
+     * groups; a range far from hers is fitted. What's left is `missing`.
+     */
+    fitParams(setting) {
+      const raw = this._model.getModel().parameters;
+      const bySquash = new Map();
+      for (const id of raw.ids) if (!bySquash.has(squashId(id))) bySquash.set(squashId(id), id);
+      const group = (count, at) => Array.from({ length: count }, (_, i) => idText(at(i))).filter((id) => this.has(id));
+      const blink = group(setting.getEyeBlinkParameterCount(), (i) => setting.getEyeBlinkParameterId(i));
+      const lip = group(setting.getLipSyncParameterCount(), (i) => setting.getLipSyncParameterId(i));
+      const link = (name, ids) => {
+        const [low, high] = STANDARD[name];
+        const [min, max] = this.range(ids[0]);
+        const ratio = (max - min) / (high - low);
+        // Close enough is left alone (an eye that opens to 2 is still an eye at
+        // 1, a body that turns 30 still turns at 10); only an order off is fitted.
+        const apart = max <= low || min >= high;
+        const fit = ratio > 0 && (ratio < 0.2 || ratio > 5 || apart);
+        if (!fit && ids.length === 1 && ids[0] === name) return;
+        this.alias.set(name, { ids, scale: fit ? ratio : 1, offset: fit ? min - low * ratio : 0 });
+      };
+      this.missing = [];
+      for (const name of Object.keys(STANDARD)) {
+        const own = bySquash.get(squashId(name));
+        const synonym = (SYNONYMS[name] ?? [])
+          .map((set) => set.map((other) => bySquash.get(squashId(other))))
+          .find((set) => set.every(Boolean));
+        if (own) link(name, [own]);
+        else if (synonym) link(name, synonym);
+        else if (name === 'ParamEyeLOpen' && blink.length) link(name, [blink[0]]);
+        else if (name === 'ParamEyeROpen' && blink.length) link(name, [blink[1] ?? blink[0]]);
+        else if (name === 'ParamMouthOpenY' && lip.length) link(name, [lip[0]]);
+        else this.missing.push(name);
+      }
+      this.ruleAlias = new Map(this.alias);
+    }
+
+    /** The model's hit areas as her touch zones, smallest first (they win). */
+    findHitZones(setting) {
+      const zones = [];
+      this.hitAreas = [];
+      for (let i = 0; i < setting.getHitAreasCount(); i++) {
+        const handle = setting.getHitAreaId(i);
+        const name = setting.getHitAreaName(i) ?? '';
+        this.hitAreas.push({ id: idText(handle), name });
+        const kind = HIT_KINDS.find(([pattern]) => pattern.test(`${name} ${idText(handle)}`))?.[1];
+        const index = this._model.getDrawableIndex(handle);
+        if (!kind || index < 0 || index >= this._model.getDrawableCount()) continue;
+        const v = this._model.getDrawableVertices(index);
+        let left = Infinity;
+        let right = -Infinity;
+        let top = -Infinity;
+        let bottom = Infinity;
+        for (let k = 0; k + 1 < v.length; k += 2) {
+          const x = this._modelMatrix.transformX(v[k]);
+          const y = this._modelMatrix.transformY(v[k + 1]);
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+          top = Math.max(top, y);
+          bottom = Math.min(bottom, y);
+        }
+        if (!(right > left && top > bottom)) continue;
+        zones.push({
+          id: kind,
+          from: clamp((1 - top) / 2, 0, 1),
+          to: clamp((1 - bottom) / 2, 0, 1),
+          xFrom: left,
+          xTo: right,
+          area: (right - left) * (top - bottom),
+        });
+      }
+      zones.sort((a, b) => a.area - b.area);
+      this.hitZones = zones.map(({ area, ...zone }) => zone);
+    }
+
+    /**
+     * character.json, then the adapter (adapter.json) over it: which of the
+     * model's parameters stand for hers, the tail, the resting pose.
+     */
+    adapt(config, extra) {
+      this.alias = new Map(this.ruleAlias);
+      const fromRules = new Set(this.missing);
+      for (const [name, link] of Object.entries(extra?.params ?? {})) {
+        if (!STANDARD[name] || !link) continue;
+        const ids = (Array.isArray(link.id) ? link.id : [link.id]).filter((id) => this.has(id));
+        if (!ids.length) continue;
+        const scale = Number.isFinite(link.scale) && link.scale !== 0 ? link.scale : 1;
+        const offset = Number.isFinite(link.offset) ? link.offset : 0;
+        this.alias.set(name, { ids, scale, offset });
+        fromRules.delete(name);
+      }
+      this.missingNow = [...fromRules];
+      const tail = Array.isArray(extra?.tail) && extra.tail.length ? extra.tail : config.tail;
+      this.tailIds = Array.isArray(tail) ? tail.filter((id) => this.has(id)) : [];
+      // The resting pose from scratch, so an adapter taken back leaves nothing behind.
+      const core = this._model;
+      const raw = core.getModel().parameters;
+      for (let i = 0; i < raw.count; i++) core.setParameterValueByIndex(i, raw.defaultValues[i]);
+      for (const pose of [config.pose, extra?.pose]) {
+        for (const [id, value] of Object.entries(pose ?? {})) {
+          if (Number.isFinite(value) && this.has(id)) core.setParameterValueById(this.id(id), value);
+        }
+      }
+      core.saveParameters();
     }
 
     get core() {
@@ -195,24 +400,116 @@
       const settingBytes = await fetchBytes(new URL(encodePath(file), CHARACTER).href);
       const setting = new Fw.CubismModelSettingJson(settingBytes, settingBytes.byteLength);
 
-      this.loadModel(await bytes(setting.getModelFileName()), true);
+      // A model exported by a newer Cubism than the runtime knows can't load
+      // at all: say which, rather than a bare failure.
+      this.mocFile = decodeURIComponent(new URL(encodePath(setting.getModelFileName()), home).href.slice(CHARACTER.length));
+      const moc = await bytes(setting.getModelFileName());
+      const head = new Uint8Array(moc, 0, Math.min(5, moc.byteLength));
+      if (String.fromCharCode(...head.slice(0, 4)) !== 'MOC3') throw new Error('moc');
+      this.mocVersion = head[4];
+      const latest = window.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() ?? 0;
+      if (latest && this.mocVersion > latest) throw new Error(`moc-version ${this.mocVersion}/${latest}`);
+      this.loadModel(moc, true);
       if (!this._model) throw new Error('moc');
+      // What the editor calls each parameter (cdi3), for the adapter's eyes.
+      try {
+        const display = JSON.parse(new TextDecoder().decode(settingBytes)).FileReferences?.DisplayInfo;
+        if (typeof display === 'string') this.display = JSON.parse(new TextDecoder().decode(await bytes(display)));
+      } catch {
+        this.display = null;
+      }
       // The model matrix already fits the canvas to y −1…1, centred.
 
+      // Models made for other apps often carry expressions and motions their
+      // model3.json doesn't list (the other app wires them up itself): the
+      // pack's own .exp3/.motion3 files are offered all the same, by file name.
+      const listed = new Set();
+      const own = (name) => listed.add(new URL(encodePath(name), home).href);
+      for (let i = 0; i < setting.getExpressionCount(); i++) own(setting.getExpressionFileName(i));
+      for (let g = 0; g < setting.getMotionGroupCount(); g++) {
+        const group = setting.getMotionGroupName(g);
+        for (let i = 0; i < setting.getMotionCount(group); i++) own(setting.getMotionFileName(group, i));
+      }
+      const files = await packIndex();
+      const extra = (ending) =>
+        files
+          .filter((f) => f.toLowerCase().endsWith(ending) && !listed.has(new URL(encodePath(f), CHARACTER).href))
+          .slice(0, EXTRA_FILES_MAX)
+          .map((f) => ({ url: new URL(encodePath(f), CHARACTER).href, name: f.split('/').pop().slice(0, -ending.length) }));
+
       const expressions = [];
-      for (let i = 0; i < setting.getExpressionCount(); i++) {
+      const addExpression = (name, load) =>
         expressions.push(
-          bytes(setting.getExpressionFileName(i)).then((buffer) => {
-            const motion = this.loadExpression(buffer, buffer.byteLength, setting.getExpressionName(i));
-            if (motion) {
-              motion.setFadeInTime(0.25);
-              motion.setFadeOutTime(0.4);
-              this.expressions.set(setting.getExpressionName(i), motion);
-            }
-          }),
+          load
+            .then((buffer) => {
+              if (this.expressions.has(name)) return;
+              const motion = this.loadExpression(buffer, buffer.byteLength, name);
+              if (motion) {
+                motion.setFadeInTime(0.25);
+                motion.setFadeOutTime(0.4);
+                this.expressions.set(name, motion);
+              }
+            })
+            .catch(() => {}),
         );
+      for (let i = 0; i < setting.getExpressionCount(); i++) {
+        addExpression(setting.getExpressionName(i), bytes(setting.getExpressionFileName(i)));
       }
       await Promise.all(expressions);
+      for (const { url, name } of extra('.exp3.json')) addExpression(name, fetchBytes(url));
+      await Promise.all(expressions);
+
+      // Its own motions, for the AI and the person to call by name. One that
+      // won't load is left out, not fatal.
+      const motions = [];
+      // The parameters its motions' blink and lip-sync curves move (the
+      // framework needs both lists, even empty, to update a motion at all).
+      const effectIds = (count, at) => {
+        const ids = [];
+        for (let i = 0; i < count; i++) ids.push(at(i));
+        return ids;
+      };
+      const blinkIds = effectIds(setting.getEyeBlinkParameterCount(), (i) => setting.getEyeBlinkParameterId(i));
+      const lipIds = effectIds(setting.getLipSyncParameterCount(), (i) => setting.getLipSyncParameterId(i));
+      for (let g = 0; g < setting.getMotionGroupCount(); g++) {
+        const group = setting.getMotionGroupName(g);
+        const count = setting.getMotionCount(group);
+        for (let i = 0; i < count; i++) {
+          const name = count > 1 ? `${group}_${i + 1}` : group;
+          motions.push(
+            bytes(setting.getMotionFileName(group, i))
+              .then((buffer) => {
+                const motion = this.loadMotion(buffer, buffer.byteLength, name);
+                if (!motion) return;
+                motion.setEffectIds(blinkIds, lipIds);
+                // The model's own fades when it gives them, else soft ones.
+                const fadeIn = setting.getMotionFadeInTimeValue(group, i);
+                const fadeOut = setting.getMotionFadeOutTimeValue(group, i);
+                motion.setFadeInTime(fadeIn >= 0 ? fadeIn : 0.35);
+                motion.setFadeOutTime(fadeOut >= 0 ? fadeOut : 0.45);
+                this.motions.set(name, motion);
+              })
+              .catch(() => {}),
+          );
+        }
+      }
+      await Promise.all(motions);
+      for (const { url, name } of extra('.motion3.json')) {
+        if (this.motions.has(name)) continue;
+        motions.push(
+          fetchBytes(url)
+            .then((buffer) => {
+              const motion = this.loadMotion(buffer, buffer.byteLength, name);
+              if (!motion) return;
+              motion.setEffectIds(blinkIds, lipIds);
+              motion.setFadeInTime(0.35);
+              motion.setFadeOutTime(0.45);
+              this.motions.set(name, motion);
+            })
+            .catch(() => {}),
+        );
+      }
+      await Promise.all(motions);
       // Relaxing a face is fading to an expression with nothing in it.
       const empty = new TextEncoder().encode('{"Type":"Live2D Expression","Parameters":[]}').buffer;
       this.neutral = this.loadExpression(empty, empty.byteLength, 'neutral');
@@ -227,20 +524,28 @@
         this.loadPose(buffer, buffer.byteLength);
       }
 
-      this.createRenderer(canvas.width, canvas.height);
+      const masks = clipSets(this._model);
+      const textures = masks > MASKS_IN_ONE ? Math.ceil(masks / MASKS_PER_TEXTURE) : 1;
+      this.createRenderer(canvas.width, canvas.height, Math.min(textures, MASK_TEXTURES_MAX));
       const renderer = this.getRenderer();
+      if (textures > MASK_TEXTURES_MAX) renderer.useHighPrecisionMask(true);
+      else if (this._model.isUsingMasking()) renderer.setClippingMaskBufferSize(MASK_SIZE);
+      this.masks = { sets: masks, textures: Math.min(textures, MASK_TEXTURES_MAX), precise: renderer.isUsingHighPrecisionMask() };
       renderer.startUp(gl);
       renderer.loadShaders(SHADERS);
       renderer.setIsPremultipliedAlpha(true);
       for (let i = 0; i < setting.getTextureCount(); i++) {
-        renderer.bindTexture(i, await loadTexture(gl, new URL(encodePath(setting.getTextureFileName(i)), home).href));
+        renderer.bindTexture(
+          i,
+          await loadTexture(gl, new URL(encodePath(setting.getTextureFileName(i)), home).href, this.textureSizes),
+        );
       }
 
-      // getParameterIndex makes up an index for a name the model doesn't have.
-      const real = (name) => this._model.getParameterIndex(this.id(name)) < this._model.getParameterCount();
-      this.tailIds = Array.isArray(config.tail) ? config.tail.filter((v) => typeof v === 'string' && real(v)) : [];
-      for (const [name, value] of Object.entries(config.pose ?? {})) this.set(name, value);
-      this._model.saveParameters();
+      this.fitParams(setting);
+      // Vertices are only real after an update.
+      this._model.update();
+      this.findHitZones(setting);
+      this.adapt(config, null);
     }
 
     /** One frame. [animate] writes everything that isn't saved between frames. */
@@ -249,6 +554,9 @@
       core.loadParameters();
       core.saveParameters();
       animate.before(this, dt);
+      // One of its own motions, while it plays, takes over from the pose she
+      // keeps herself; expressions and physics still come after.
+      if (!this._motionManager.isFinished()) this._motionManager.updateMotion(core, dt);
       this._expressionManager.updateMotion(core, dt);
       this._physics?.evaluate(core, dt);
       this._pose?.updateParameters(core, dt);
@@ -293,9 +601,52 @@
       const motion = name ? this.expressions.get(name) : this.neutral;
       if (motion) this._expressionManager.startMotion(motion, false);
     }
+
+    /** Plays one of its own motions once; false when it has none by that name. */
+    playMotion(name) {
+      const motion = this.motions.get(name);
+      if (!motion) return false;
+      this._motionManager.startMotionPriority(motion, false, 2);
+      return true;
+    }
+
+    get moving() {
+      return !this._motionManager.isFinished();
+    }
+
+    /** Its own motions stopped where they are. */
+    stopMotions() {
+      this._motionManager.stopAllMotions();
+    }
   }
 
   const encodePath = (path) => path.split('/').map(encodeURIComponent).join('/');
+
+  /**
+   * How many different clip masks a model needs: drawables clipped by the same
+   * set of drawables share one, in any order (as the framework's clipping
+   * manager groups them).
+   */
+  function clipSets(core) {
+    const counts = core.getDrawableMaskCounts();
+    const masks = core.getDrawableMasks();
+    const sets = new Set();
+    for (let i = 0; i < core.getDrawableCount(); i++) {
+      if (counts[i] <= 0) continue;
+      sets.add([...masks[i]].slice(0, counts[i]).sort((a, b) => a - b).join(','));
+    }
+    return sets.size;
+  }
+
+  /** The character's files, as the app listed them when it unpacked the pack. */
+  let packFiles = null;
+  function packIndex() {
+    packFiles ??= fetch(`${CHARACTER}index.json`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((files) => (Array.isArray(files) ? files.filter((f) => typeof f === 'string') : []))
+      .catch(() => []);
+    return packFiles;
+  }
 
   async function fetchBytes(url) {
     const response = await fetch(url);
@@ -306,16 +657,16 @@
   /** The configured model file, else the first `*.model3.json` the app lists. */
   async function resolveModelFile(config) {
     if (typeof config.model === 'string') return config.model;
-    const response = await fetch(`${CHARACTER}index.json`);
-    const files = response.ok ? await response.json() : [];
-    const found = files.find((f) => f.endsWith('.model3.json'));
+    const files = await packIndex();
+    const found = files.find((f) => f.toLowerCase().endsWith('.model3.json'));
     if (!found) throw new Error('model3');
     return found;
   }
 
-  async function loadTexture(gl, url) {
+  async function loadTexture(gl, url, sizes) {
     const blob = await (await fetch(url)).blob();
     const size = await createImageBitmap(blob);
+    sizes?.push([size.width, size.height]);
     const limit = Math.min(MAX_TEXTURE, gl.getParameter(gl.MAX_TEXTURE_SIZE));
     const scale = Math.min(1, limit / Math.max(size.width, size.height));
     const width = Math.round(size.width * scale);
@@ -391,18 +742,113 @@
 
   let character = {};
   let emotions = DEFAULT_EMOTIONS;
+  // adapter.json beside character.json: what the person's AI worked out for
+  // this model (companion_adapt.dart checks it before it's written).
+  let adapter = null;
+  let zonesFrom = 'default';
+  let defaultZoom = null;
+
+  async function loadAdapter() {
+    try {
+      const response = await fetch(`${CHARACTER}adapter.json`, { cache: 'no-store' });
+      const json = response.ok ? await response.json() : null;
+      return json && typeof json === 'object' && !Array.isArray(json) ? json : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** character.json, the rules' findings, then the adapter: the latest word wins. */
+  function applyCharacter() {
+    emotions = mergeEmotions({ ...(character.emotions ?? {}), ...(adapter?.emotions ?? {}) });
+    actions = { ...ACTIONS, ...(character.actions ?? {}), ...(adapter?.actions ?? {}) };
+    if (Array.isArray(adapter?.zones) && adapter.zones.length) {
+      zones = adapter.zones;
+      zonesFrom = 'adapter';
+    } else if (Array.isArray(character.zones) && character.zones.length) {
+      zones = character.zones;
+      zonesFrom = 'character';
+    } else if (model?.hitZones.length) {
+      zones = model.hitZones;
+      zonesFrom = 'hitAreas';
+    } else {
+      // Hers end in a tail; a model without one has legs there.
+      zones = model && !model.tailIds.length ? DEFAULT_ZONES.map((z) => (z.id === 'tail' ? { ...z, id: 'legs' } : z)) : DEFAULT_ZONES;
+      zonesFrom = 'default';
+    }
+    defaultZoom ??= camera.zoom;
+    camera.zoom = Number(adapter?.framing?.zoom) || Number(character.framing?.zoom) || defaultZoom;
+    camera.y = Number(adapter?.framing?.y ?? character.framing?.y) || 0;
+  }
+
+  /** What the model is, for the app's check and the person's AI (companion_adapt.dart). */
+  function probeReport() {
+    const raw = model.core.getModel();
+    const display = model.display ?? {};
+    const groupName = new Map((display.ParameterGroups ?? []).map((g) => [g.Id, g.Name]));
+    const info = new Map((display.Parameters ?? []).map((p) => [p.Id, p]));
+    const partName = new Map((display.Parts ?? []).map((p) => [p.Id, p.Name]));
+    const params = [];
+    for (let i = 0; i < Math.min(raw.parameters.count, 800); i++) {
+      const id = raw.parameters.ids[i];
+      params.push({
+        id,
+        name: info.get(id)?.Name ?? null,
+        group: groupName.get(info.get(id)?.GroupId) ?? null,
+        // These are contract facts, not display labels. Rounding can collapse
+        // a valid small native range and lose an existing affine calibration.
+        min: raw.parameters.minimumValues[i],
+        max: raw.parameters.maximumValues[i],
+        def: raw.parameters.defaultValues[i],
+      });
+    }
+    return {
+      moc: model.mocFile,
+      mocVersion: model.mocVersion,
+      parameterCount: raw.parameters.count,
+      drawables: raw.drawables.count,
+      masks: model.masks,
+      textures: model.textureSizes,
+      params,
+      parts: Array.from({ length: Math.min(raw.parts.count, 300) }, (_, i) => ({
+        id: raw.parts.ids[i],
+        name: partName.get(raw.parts.ids[i]) ?? null,
+      })),
+      expressions: [...model.expressions.keys()],
+      motions: [...model.motions.keys()],
+      hitAreas: model.hitAreas,
+      // linked describes the CURRENT adapter too. It does not prove that an
+      // alias survives adapt(), which starts afresh from ruleAlias.
+      linked: Object.fromEntries([...model.alias].map(([name, link]) => [name, link.ids])),
+      ruleAliasVersion: 1,
+      ruleAliases: Object.fromEntries([...model.ruleAlias].map(([name, link]) => [name, {
+        ids: [...link.ids], scale: link.scale, offset: link.offset,
+      }])),
+      missing: model.missingNow ?? model.missing,
+      zones,
+      zonesFrom,
+      emotionsFrom: character.emotions ? 'character' : 'default',
+      tail: model.tailIds,
+      adapter: adapter !== null,
+      name: character.name ?? null,
+    };
+  }
   let zones = DEFAULT_ZONES;
   let transientEpoch = 0;
 
-  function setEmotion(name, hold = EMOTION_HOLD) {
-    const def = emotions[name];
+  function setEmotion(name, hold = EMOTION_HOLD, native = false) {
+    const own = native && model?.expressions.has(name);
+    // Not one she knows: one of the model's own expressions, by its name.
+    const def = own ? { expression: name } : (emotions[name] ?? (model?.expressions.has(name) ? { expression: name } : null));
     if (!def) return;
-    const changed = life.emotion !== name;
-    life.emotion = name;
-    life.emotionUntil = name === 'calm' ? 0 : performance.now() + hold;
+    // The model's own never borrows the face of a feeling of hers with the same name.
+    const key = own ? `model:${name}` : name;
+    const changed = life.emotion !== key;
+    life.emotion = key;
+    life.emotionUntil = key === 'calm' ? 0 : performance.now() + hold;
     life.gazeHold = def.gaze ?? null;
     model?.startExpression(def.expression ?? null);
-    if (changed && model) emotionMark(name);
+    if (changed && model && !own) emotionMark(name);
   }
 
   /** A few notes, one after another, while she hums. */
@@ -453,6 +899,11 @@
     const action = actions[name];
     if (!action) return;
     if (REDUCED) return;
+    // The adapter can make one of hers a motion of the model's own.
+    if (typeof action.motion === 'string') {
+      if (!model?.playMotion(action.motion) && action.tracks) life.actions.set(name, { action, start: performance.now() });
+      return;
+    }
     life.actions.set(name, { action, start: performance.now() });
   }
 
@@ -1212,11 +1663,17 @@
       touched();
       setMood(mood);
     },
-    emotion: ({ name, hold }) => setEmotion(name, hold),
-    action: ({ name }) => {
+    emotion: ({ name, hold, native }) => setEmotion(name, hold, native === true),
+    action: ({ name, native }) => {
+      if (native === true) {
+        if (!REDUCED) model?.playMotion(name);
+        return;
+      }
       if (name === 'hop') hop();
       else if (name === 'tail') life.tailKick = 1;
-      else playAction(name);
+      else if (actions[name]) playAction(name);
+      // Not one of hers: one of the model's own motions, by its name.
+      else if (!REDUCED) model?.playMotion(name);
     },
     // New reply text arrived: the mouth keeps moving for about as long as
     // reading it aloud would take.
@@ -1250,6 +1707,13 @@
       };
     },
     activity: ({ name, remainingMs }) => setActivity(name, remainingMs),
+    // adapter.json was written (or removed): wear it now, no reload.
+    adapter: async () => {
+      adapter = await loadAdapter();
+      model.adapt(character, adapter);
+      applyCharacter();
+      post({ type: 'adapted', probe: probeReport() });
+    },
     // Her invitation (shown in Flutter): a look at the cushion, bubbles from it
     // while she waits, and the cushion's short show on a yes. None of these
     // posts anything back; the rest itself comes as an activity.
@@ -1280,9 +1744,14 @@
   let drawn = 0;
   let fpsAt = performance.now();
   let fps = 0;
+  // Share of the full resolution drawn: steps down while frames can't keep
+  // up with what was asked (an old phone, a heavy model), never below half.
+  let quality = 1;
+  let slowSeconds = 0;
+  let asked = 30;
 
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
+    const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP) * quality;
     const width = Math.round(canvas.clientWidth * dpr);
     const height = Math.round(canvas.clientHeight * dpr);
     if (width === canvas.width && height === canvas.height) return;
@@ -1302,10 +1771,12 @@
       life.mood === 'speaking' ||
       life.speech > 0 ||
       life.voice !== null ||
+      model?.moving ||
       life.patting ||
       home.show !== null ||
       scene.busy();
     const target = life.sleep > 0.9 ? 12 : busy ? 60 : 30;
+    asked = Math.max(asked, target);
     if (ts - last < 1000 / target - 2) return;
     const dt = clamp((ts - last) / 1000, 0.001, 0.05);
     last = ts;
@@ -1323,9 +1794,18 @@
     parallax(dt);
     drawn++;
     if (ts - fpsAt > 1000) {
-      fps = (drawn * 1000) / (ts - fpsAt);
+      // A gap (paused, hidden) says nothing about how fast she draws.
+      if (ts - fpsAt < 2000) {
+        fps = (drawn * 1000) / (ts - fpsAt);
+        slowSeconds = fps < Math.min(asked, 60) * 0.7 ? slowSeconds + 1 : 0;
+        if (slowSeconds >= 3 && quality > 0.5) {
+          quality = Math.max(0.5, quality - 0.15);
+          slowSeconds = 0;
+        }
+      }
       drawn = 0;
       fpsAt = ts;
+      asked = 12;
     }
   }
 
@@ -1406,6 +1886,8 @@
     home.reach = 0;
     resetBall();
     scene.clear();
+    // One of the model's own motions doesn't carry on after she was out of sight.
+    model?.stopMotions();
   }
 
   function pause() {
@@ -1468,16 +1950,16 @@
     try {
       const response = await fetch(`${CHARACTER}character.json`);
       character = response.ok ? await response.json() : {};
-      emotions = mergeEmotions(character.emotions);
-      actions = { ...ACTIONS, ...(character.actions ?? {}) };
-      if (Array.isArray(character.zones) && character.zones.length) zones = character.zones;
-      camera.zoom = Number(character.framing?.zoom) || camera.zoom;
-      camera.y = Number(character.framing?.y) || 0;
+      adapter = await loadAdapter();
+      applyCharacter();
 
       Fw.CubismFramework.startUp(Object.assign(new Fw.Option(), { logFunction: () => {}, loggingLevel: Fw.LogLevel?.LogLevel_Off ?? 5 }));
       Fw.CubismFramework.initialize();
 
-      const options = { alpha: true, premultipliedAlpha: true, antialias: true, preserveDrawingBuffer: query.get('capture') === '1' };
+      // MSAA costs a lot of fill on a phone (13 → 24 fps on an old one) and
+      // shows little on a dense screen, where the canvas is drawn at 2×.
+      const antialias = query.get('antialias') === '1' || (query.get('antialias') !== '0' && (window.devicePixelRatio || 1) < 1.5);
+      const options = { alpha: true, premultipliedAlpha: true, antialias, preserveDrawingBuffer: query.get('capture') === '1' };
       gl = canvas.getContext('webgl2', options) || canvas.getContext('webgl', options);
       if (!gl) throw new Error('webgl');
       canvas.width = canvas.height = 0;
@@ -1485,7 +1967,9 @@
 
       const next = new StageModel();
       await next.load(gl, character);
+      next.adapt(character, adapter);
       model = next;
+      applyCharacter();
       applyTimeOfDay();
       setInterval(applyTimeOfDay, 10 * 60 * 1000);
       setEmotion('calm');
@@ -1501,7 +1985,14 @@
         life.waking = ['stretch', 'yawn'];
         life.flourishAt = performance.now() + 6000;
       }
-      post({ type: 'ready', ms: Math.round(performance.now() - started), name: character.name ?? null, expressions: [...model.expressions.keys()] });
+      post({
+        type: 'ready',
+        ms: Math.round(performance.now() - started),
+        name: character.name ?? null,
+        expressions: [...model.expressions.keys()],
+        motions: [...model.motions.keys()],
+        probe: probeReport(),
+      });
     } catch (error) {
       post({ type: 'error', message: String(error?.message ?? error) });
       document.documentElement.dataset.ready = 'error';
@@ -1527,6 +2018,11 @@
     // For the verification harness; nothing in the app reads it.
     debug: () => ({
       fps,
+      quality,
+      masks: model?.masks ?? null,
+      zones,
+      zonesFrom,
+      camera: { ...camera },
       mood: life.mood,
       emotion: life.emotion,
       patting: life.patting,

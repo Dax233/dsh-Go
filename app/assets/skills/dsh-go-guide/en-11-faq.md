@@ -13,9 +13,17 @@ Reset and uninstall both delete data on this phone; you rarely need them to fix 
 <!-- nav: commonSettings,phoneEngineDiagnostics -->
 `Settings › Diagnostics` · [Open](dshgo://open/diagnostics)
 
-To report a problem, export a diagnostics bundle here. It includes the version, device, logs and the latest crash, never keys or tokens.
+To report a problem, export a diagnostics bundle here. It includes the version, device, bounded engine logs and captured errors, not all system logs or a complete crash history. The app attempts to remove keys and tokens; still inspect the bundle before sharing it.
 
-To let the AI look into it: tap **Let the AI read diagnostics**. The app writes the same (redacted) snapshot into the engine, then ask the AI to "check the diagnostics" — the bundled `dsh-go-support` skill walks the symptoms and drafts an issue you can paste.
+To let the AI look into it, tap **Let the AI read diagnostics**. The app writes a bounded snapshot for the local engine, then ask the AI to "check the diagnostics". The bundled `dsh-go-support` skill walks the symptoms and drafts an issue you can paste.
+
+### Input-method or keyboard problems
+
+After reproducing the problem, use **Capture recent events** under **System input-method diagnostics**, read the native prompt and confirm it yourself. It only reuses an already selected and connected Shizuku, Sui, wireless-debugging or Root channel; it does not request permissions, open a background screen or operate an editor. With no channel available, **Phone-control permissions (optional)** lets you choose whether to configure one.
+
+A one-time bounded read of existing fixed-tag system logs retains up to 64 known show/hide requests or input-connection-closed events emitted by this app process from the last two minutes. Typed text, candidates and raw log lines are not exported. Android 12 and some vendor systems may have no matching records; zero events and failures do not prove that the keyboard is healthy. There is no continuous monitoring. Backgrounding the app, leaving Diagnostics or clearing cancels the request. Switching focus in multi-window mode while Diagnostics remains visible does not revoke the one short read already approved.
+
+Results stay in app memory. Only **Let the AI read diagnostics** or a manual bundle export includes them; automatic snapshots do not. Manual AI reports and automatic environment snapshots each atomically replace their own fixed file; neither overwrites the other. Clear the in-memory evidence whenever you want, or restart the app. Clearing cannot retract files already generated or shared.
 
 ## The engine stops in the background, or notifications don't arrive
 
@@ -66,9 +74,20 @@ Check that the plugin is enabled, and restart the engine if asked. A plugin's na
 <!-- nav: commonSettings,hubPrivacy,usageStatsTitle -->
 `Settings › Privacy and sharing › Send anonymous usage stats` · [Open](dshgo://open/usage-stats)
 
-On by default; the switch is on the welcome screen the first time you open the app. If you updated from an earlier version, a one-time notice at the bottom of the home screen tells you, and can turn it off right there. While it's on, the app sends anonymous stats for the days before, at most once a day, and only this: app and Android version, CPU architecture, phone maker (not the model), app language, how the local engine was started, and that day's number of messages, voice inputs, phone control tasks, generations, shares and installed plugins. Devices are told apart by a random ID that changes every 90 days.
+dsh-go’s own anonymous usage statistics are on by default; the switch is on the welcome screen the first time you open the app. If you updated from an earlier version, a one-time notice at the bottom of the home screen tells you, and can turn it off right there. While it's on, the app sends anonymous stats for the days before, at most once a day, and only this: app and Android version, CPU architecture, phone maker (not the model), app language, how the local engine was started, and that day's number of messages, voice inputs, phone control tasks, generations, shares and installed plugins. Devices are told apart by a random ID that changes every 90 days.
 
-Never accounts, API keys, chats, files, prompts or host addresses, and no device identifiers such as phone number or IMEI. Turn it off and nothing more is sent; the random ID and the counts kept on the phone are deleted at once.
+These statistics never include accounts, API keys, chats, files, prompts or host addresses, or device identifiers such as phone number or IMEI. Turning this switch off stops these dsh-go statistics; the random ID and the counts kept on the phone are deleted at once.
+
+## Local text recognition and Google ML Kit
+
+<!-- nav: commonSettings,hubSettingsPhoneControl -->
+`Settings › Phone control`
+
+Phone control uses bundled Google ML Kit Chinese text recognition (`com.google.mlkit:text-recognition-chinese:16.0.1`), enabled by default; turn it off separately with **On-device text recognition (ML Kit)** on that page. Recognition runs on this device; screenshots and recognized text are not sent to Google. Google’s SDK collects usage statistics such as device model, app version and processing time. The anonymous usage statistics switch above does not control this SDK.
+
+Screenshots and recognized text may be sent to your configured model as part of phone control. While off, recognition requests do not trigger SDK loading or initialization. Turning local recognition off prevents new recognition; work already started may still finish. It does not uninstall the SDK, clear previously accumulated SDK statistics, or guarantee that old SDK statistics stop being sent. A device that has never initialized the SDK and a device previously used with recognition enabled have different histories.
+
+See [Google ML Kit terms](https://developers.google.com/ml-kit/terms) and [Android SDK data disclosure](https://developers.google.com/ml-kit/android-data-disclosure). These SDK terms are distinct from the Apache 2.0 license attached to example code in the documentation.
 
 ## The guide doesn't match what I see
 

@@ -15,6 +15,10 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Composer voice input (voice/VoicePlugin.kt), asked for on the first tap of the mic. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Remote 扫码配对电脑 (ui/remote/pairing_page.dart, mobile_scanner), asked for when the
+         scanner opens; the photo and paste paths work without it. Never required. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- TODO(targetSdk >= 30): package visibility hides recognition services from
          SpeechRecognizer.isRecognitionAvailable unless declared; add to <queries>:
          <intent><action android:name="android.speech.RecognitionService" /></intent> -->
@@ -208,6 +212,15 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
 
+        <!-- Local self-check only: App UID starts this fixed inert target on its leased display. -->
+        <activity
+            android:name=".phone.selfcheck.PhoneSelfCheckTargetActivity"
+            android:exported="false"
+            android:launchMode="standard"
+            android:taskAffinity="${applicationId}.phone.selfcheck"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+
         <!-- Quick Settings tile 「新对话」 (tile/NewChatTileService.kt). -->
         <service
             android:name=".tile.NewChatTileService"
@@ -318,6 +331,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Initialized manually only by an admitted local OCR call. -->
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

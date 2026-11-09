@@ -359,7 +359,17 @@ class SshHostLink implements HostLink {
       } catch (e) {
         // A reused DSH whose port no longer answers: start a fresh one.
         if (endpoint.reused && e is TunnelRefused) _forceRestart = true;
-        throw HostLinkError(HostLinkErrorKind.tunnelFailed, appL10n.remoteErrDshPort, detail: '$e', retryable: true);
+        throw HostLinkError(
+          HostLinkErrorKind.tunnelFailed,
+          appL10n.remoteErrDshPort,
+          detail: '$e',
+          retryable: true,
+          diagnosticCode: e is TimeoutException
+              ? HostLinkDiagnosticCode.sshTunnelTimedOut
+              : e is TunnelRefused
+              ? HostLinkDiagnosticCode.sshTunnelRefused
+              : HostLinkDiagnosticCode.sshTunnelFailed,
+        );
       }
       await _bridgeBreadcrumb(transport, 'tunnel ok');
       _checkOpen();
@@ -528,7 +538,14 @@ class SshHostLink implements HostLink {
     unawaited(
       transport.done.then((_) {
         if (identical(_transport, transport)) {
-          _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshDisconnected, retryable: true));
+          _lost(
+            HostLinkError(
+              HostLinkErrorKind.unreachable,
+              appL10n.remoteErrSshDisconnected,
+              retryable: true,
+              diagnosticCode: HostLinkDiagnosticCode.sshTransportEnded,
+            ),
+          );
         }
       }),
     );
@@ -691,8 +708,15 @@ class SshHostLink implements HostLink {
       return true;
     } catch (_) {
       _missedPings++;
-      if (_missedPings >= 3 && identical(transport, _transport)) {
-        _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshUnresponsive, retryable: true));
+      if (_missedPings >= 2 && identical(transport, _transport)) {
+        _lost(
+          HostLinkError(
+            HostLinkErrorKind.unreachable,
+            appL10n.remoteErrSshUnresponsive,
+            retryable: true,
+            diagnosticCode: HostLinkDiagnosticCode.sshKeepaliveMissed,
+          ),
+        );
       }
       return false;
     }
@@ -725,6 +749,7 @@ class SshHostLink implements HostLink {
             last.message,
             detail: [if (last.detail != null) last.detail!, appL10n.remoteRetryCount(_backoff.attempt)].join('\n'),
             retryable: true,
+            diagnosticCode: last.diagnosticCode,
           );
           _fail(error);
           throw error;
@@ -777,7 +802,14 @@ class SshHostLink implements HostLink {
           final alive = await _ping(const Duration(seconds: 5));
           if (!alive) {
             _backoff.reset();
-            _lost(HostLinkError(HostLinkErrorKind.unreachable, appL10n.remoteErrSshNetworkChanged, retryable: true));
+            _lost(
+              HostLinkError(
+                HostLinkErrorKind.unreachable,
+                appL10n.remoteErrSshNetworkChanged,
+                retryable: true,
+                diagnosticCode: HostLinkDiagnosticCode.sshKickProbeFailed,
+              ),
+            );
           }
         }());
       case HostLinkPhase.reconnecting:
