@@ -1213,6 +1213,7 @@ class BackgroundControl private constructor(context: Context) {
                         "releaseQuery" to cap.getString("releaseQueryError"),
                         "birthError" to cap.getString("birthError"),
                         "birthSource" to cap.getString("birthSource"),
+                        "birthDetail" to cap.getString("birthDetail"),
                         "alive" to peer.alive(),
                         "peer" to peer.javaClass.simpleName,
                     )

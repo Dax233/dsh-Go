@@ -17,16 +17,29 @@ internal class RecoveryPlatform {
 
     fun birth(peer: String): ResourceRecovery.Birth {
         val boot = bootId() ?: throw ResourceRecovery.Failure("recoveryUnavailable")
-        // The pid-namespace inode identifies this process instance; /proc/self is
-        // the same identity from a path no app domain is denied. Only a denied
-        // namespace read falls back, and both the probe and a later check run in
-        // this same process, so the values stay consistent.
-        val ns = runCatching { Os.stat("/proc/self/ns/pid") }.onFailure {
-            lastBirthError = (lastBirthError ?: "") + " ns:" + it.javaClass.simpleName
-        }.getOrNull() ?: Os.stat("/proc/self")
         val pid = Process.myPid(); val uid = Process.myUid()
-        if (pid <= 0 || uid < 0 || ns.st_ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
-        return ResourceRecovery.Birth(peer, boot, pid, uid, ns.st_dev, ns.st_ino)
+        // This process' identity. /proc/self/ns/pid is the documented source;
+        // some Android 16 builds answer ENOENT to it inside a UserService, so
+        // fall back to /proc/self and, when not even that can be stat-ed, to the
+        // pid itself. The probe and every later check run inside this same
+        // process, so any of the three stays consistent for the lifetime it is
+        // used for.
+        var ns = runCatching { Os.stat("/proc/self/ns/pid") }.onFailure {
+            lastBirthError = (lastBirthError ?: "") + " ns:" + it.javaClass.simpleName
+        }.getOrNull()
+        var nsSource = "ns"
+        if (ns == null) {
+            ns = runCatching { Os.stat("/proc/self") }.onFailure {
+                lastBirthError = (lastBirthError ?: "") + " self:" + it.javaClass.simpleName
+            }.getOrNull()
+            nsSource = "self"
+        }
+        val stale = ns
+        val dev = if (stale != null && stale.st_ino > 0) stale.st_dev else 0L
+        val ino = if (stale != null && stale.st_ino > 0) stale.st_ino else pid.toLong().also { nsSource = "pid" }
+        lastBirthSource = (lastBirthSource ?: "") + "+" + nsSource
+        if (pid <= 0 || uid < 0 || ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
+        return ResourceRecovery.Birth(peer, boot, pid, uid, dev, ino)
     }
 
     /**
@@ -46,8 +59,12 @@ internal class RecoveryPlatform {
             lastBirthSource = "btime"
             return UUID.nameUUIDFromBytes("dsh-btime:$btime".toByteArray()).toString()
         }
-        lastBirthSource = null
-        return null
+        // Last resort: wall-clock boot time (now minus uptime), rounded to the
+        // minute. It changes only on a reboot, which is all the protocol asks.
+        val bootWall = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+        val minutes = bootWall / 60_000L
+        lastBirthSource = "wall"
+        return UUID.nameUUIDFromBytes("dsh-wall:$minutes".toByteArray()).toString()
     }
 
     private val managerType by lazy { Class.forName("android.hardware.display.IDisplayManager") }
