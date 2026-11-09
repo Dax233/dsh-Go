@@ -659,18 +659,30 @@ class ChatController extends Notifier<ChatState> {
         _quietIfRunning();
       });
     } else if (_quiet) {
-      // Returning to the app must not rebuild the follow: a reopened stream
-      // makes the Host resend a window snapshot, the "syncing" the user sees
-      // on every return. The live follow was kept, so nothing to reopen.
+      // Back on screen: take the token stream up again. The follow is reopened
+      // with a warm window (the transcript already holds the history), so the
+      // snapshot is small and the screen does not flash "syncing".
       _quiet = false;
+      _relisten();
     }
   }
 
   void _quietIfRunning() {
     if (!_awayLong || _quiet || !ref.mounted || !_transcript.running) return;
-    // Mark quiet but keep the live follow: rebuilding it forces a fresh window
-    // snapshot on both entering and leaving the background.
+    // Out of sight: reopen without token frames. Leaving the live follow open
+    // would keep relaying every token of a running turn — on a remote link
+    // that is megabytes per minute for text nobody can see.
     _quiet = true;
+    _relisten();
+  }
+
+  /// Reopens the follow after a quiet transition. `building` keeps the warm
+  /// reopen from flashing the syncing state: what is on screen is still valid.
+  void _relisten() {
+    final client = _client;
+    if (client == null) return;
+    final warm = _transcript.events.isNotEmpty;
+    _listen(client, ref.read(runPulseProvider(sessionId)), building: warm);
   }
 
   /// The loaded conversation without its live parts (running, approvals,
