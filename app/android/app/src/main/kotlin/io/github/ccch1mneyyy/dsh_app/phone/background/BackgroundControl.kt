@@ -195,6 +195,9 @@ class BackgroundControl private constructor(context: Context) {
     @Volatile private var resourceMaintenance: Any? = null
     @Volatile private var retiredResourcePeer: RetiredResourcePeer? = null
 
+    /** What the last gate probe's peer actually answered, for diagnostics only. */
+    @Volatile private var lastProbeReply: Map<String, Any?>? = null
+
     init { recovery.execute { resourceJournal.load(); notifyChanged() } }
 
     /** Memory-only, shared by real MCP admission and new physical resource entry points. */
@@ -431,7 +434,10 @@ class BackgroundControl private constructor(context: Context) {
     // ---- status ------------------------------------------------------------
 
     /** Last accepted gate facts only: no connection, permission query or fresh self-test. */
-    fun inputProbeDiagnostics(): Map<String, Any?> = InputProbeDiagnostics.snapshot(gate.snapshot)
+    fun inputProbeDiagnostics(): Map<String, Any?> =
+        InputProbeDiagnostics.snapshot(gate.snapshot) +
+            mapOf("needsRetest" to gate.needsRetest) +
+            (lastProbeReply?.let { mapOf("lastProbe" to it) } ?: emptyMap())
 
     /** The `background` sub-map of the `dsh/phone` `status` method. */
     fun status(): Map<String, Any?> {
@@ -1184,6 +1190,19 @@ class BackgroundControl private constructor(context: Context) {
             call.io.call {
                 if (!gate.current(probe)) { reason = AppStrings.get(app, R.string.background_selection_cancelled); return@call }
                 val cap = peer.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) })
+                // The peer's capability answer decides "unsupported"; keep it so a
+                // diagnostics bundle can say which receipt it lacked.
+                lastProbeReply = runCatching {
+                    mapOf(
+                        "at" to System.currentTimeMillis(),
+                        "ok" to (cap.get(Proto.OK) as? Boolean),
+                        "scope" to OwnerScopeProtocol.supported(cap),
+                        "selfCheck" to (cap.get(Proto.SELF_CHECK_PROBE_VERSION) as? Int),
+                        "release" to (cap.get(Proto.RELEASE_RECEIPT) as? Int),
+                        "birth" to (BackgroundRecoveryProtocol.birth(cap::get) != null),
+                        "alive" to peer.alive(),
+                    )
+                }.getOrNull()
                 if ((cap.get(Proto.OK) as? Boolean) != true ||
                     !OwnerScopeProtocol.supported(cap) || (cap.get(Proto.SELF_CHECK_PROBE_VERSION) as? Int) != 1 ||
                     (cap.get(Proto.RELEASE_RECEIPT) as? Int) != 1) {
