@@ -102,6 +102,15 @@ void main() {
         'enabled': true,
         'bridgeListening': true,
         'a11y': {'enabled': true, 'serviceConnected': connected},
+        'background': {
+          'mode': 'off',
+          'ready': false,
+          'reason': null,
+          'androidOk': false,
+          'shizuku': {'installed': false, 'running': false, 'granted': false, 'provider': null},
+          'adb': {'wirelessDebugging': null, 'paired': false, 'connected': false},
+          'root': {'available': null, 'connected': false, 'starting': false, 'reasonCode': null},
+        },
       });
       final markdown = diagnosticsMarkdown(snapshot);
       expect(markdown, contains('无障碍开关：true · 服务已连接：$connected'));
@@ -128,6 +137,15 @@ void main() {
       'enabled': false,
       'bridgeListening': false,
       'a11y': {'enabled': false, 'serviceConnected': false},
+        'background': {
+          'mode': 'off',
+          'ready': false,
+          'reason': null,
+          'androidOk': false,
+          'shizuku': {'installed': false, 'running': false, 'granted': false, 'provider': null},
+          'adb': {'wirelessDebugging': null, 'paired': false, 'connected': false},
+          'root': {'available': null, 'connected': false, 'starting': false, 'reasonCode': null},
+        },
     });
     expect(calls, ['status', 'status']);
   });

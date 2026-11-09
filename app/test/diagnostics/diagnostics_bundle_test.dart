@@ -110,7 +110,8 @@ void main() {
     setUp(() => files = _unzip(DiagnosticsBundle.build(_snapshot())));
 
     test('the five files, in order', () {
-      expect(files.keys, ['summary.json', 'settings.json', 'crash.json', 'engine.log', 'failure.log']);
+      // tunnel.json is this fork's addition: real bytes through the SSH tunnel.
+    expect(files.keys, ['summary.json', 'settings.json', 'crash.json', 'engine.log', 'failure.log', 'tunnel.json']);
     });
 
     test('no key or launch token anywhere', () {
@@ -177,7 +178,7 @@ void main() {
 
   test('without a crash there is no crash.json or failure.log', () {
     final files = _unzip(DiagnosticsBundle.build(_snapshot(crashed: false)));
-    expect(files.keys, ['summary.json', 'settings.json', 'engine.log']);
+    expect(files.keys, ['summary.json', 'settings.json', 'engine.log', 'tunnel.json']);
   });
 
   test('the log keeps the newest lines only', () {
