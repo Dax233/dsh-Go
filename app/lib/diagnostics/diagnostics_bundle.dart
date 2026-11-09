@@ -119,6 +119,40 @@ abstract final class DiagnosticsBundle {
           'enabled': s.phone.enabled,
           'bridgeListening': s.phone.bridgeListening,
           'a11y': {'enabled': s.phone.a11y.enabled, 'serviceConnected': s.phone.a11y.serviceConnected},
+          // The background screen needs a live privileged channel (Shizuku,
+          // root or wireless ADB). When it is not ready the phone side answers
+          // "不打扰模式的特权通道未就绪"; these fields say which channel was
+          // missing, instead of leaving that to guesswork.
+          'background': {
+            'mode': s.phone.background.mode.name,
+            'ready': s.phone.background.ready,
+            'reason': s.phone.background.reason,
+            'androidOk': s.phone.background.androidOk,
+            'shizuku': {
+              'installed': s.phone.background.shizuku.installed,
+              'running': s.phone.background.shizuku.running,
+              'granted': s.phone.background.shizuku.granted,
+              'provider': s.phone.background.shizuku.provider,
+            },
+            'adb': {
+              'wirelessDebugging': s.phone.background.adb.wirelessDebugging,
+              'paired': s.phone.background.adb.paired,
+              'connected': s.phone.background.adb.connected,
+            },
+            'root': {
+              'available': s.phone.background.root.available,
+              'connected': s.phone.background.root.connected,
+              'starting': s.phone.background.root.starting,
+              'reasonCode': s.phone.background.root.reasonCode,
+            },
+            if (s.phone.background.privileged case final privileged?)
+              'privileged': {
+                'mode': privileged.mode.name,
+                'ready': privileged.ready,
+                'reason': privileged.reason,
+                'grantPath': privileged.grantPath,
+              },
+          },
         },
       },
       'connection': s.connection,
