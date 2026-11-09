@@ -1189,9 +1189,19 @@ class BackgroundControl private constructor(context: Context) {
         try {
             call.io.call {
                 if (!gate.current(probe)) { reason = AppStrings.get(app, R.string.background_selection_cancelled); return@call }
-                val cap = peer.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) })
                 // The peer's capability answer decides "unsupported"; keep it so a
                 // diagnostics bundle can say which receipt it lacked.
+                val cap = try {
+                    peer.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) })
+                } catch (e: Throwable) {
+                    lastProbeReply = mapOf(
+                        "at" to System.currentTimeMillis(),
+                        "alive" to peer.alive(),
+                        "peer" to peer.javaClass.simpleName,
+                        "error" to (e.javaClass.simpleName + ": " + e.message),
+                    )
+                    throw e
+                }
                 lastProbeReply = runCatching {
                     mapOf(
                         "at" to System.currentTimeMillis(),
@@ -1201,6 +1211,7 @@ class BackgroundControl private constructor(context: Context) {
                         "release" to (cap.get(Proto.RELEASE_RECEIPT) as? Int),
                         "birth" to (BackgroundRecoveryProtocol.birth(cap::get) != null),
                         "alive" to peer.alive(),
+                        "peer" to peer.javaClass.simpleName,
                     )
                 }.getOrNull()
                 if ((cap.get(Proto.OK) as? Boolean) != true ||
