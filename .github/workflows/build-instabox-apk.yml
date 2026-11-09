@@ -58,7 +58,9 @@ jobs:
           # a rebuilt APK could not install over the previous one.
           printf 'storeFile=%s\nstorePassword=android\nkeyAlias=androiddebugkey\nkeyPassword=android\n' \
             "$GITHUB_WORKSPACE/app/android/debug.keystore" > android/key.properties
-          (cd android && gradle wrapper --gradle-version "$GRADLE_VERSION" --no-daemon)
+          # --no-validate-url: the wrapper task downloads the distribution just to
+          # test the URL, which turns a flaky runner network into a build failure.
+          (cd android && gradle wrapper --gradle-version "$GRADLE_VERSION" --no-validate-url --no-daemon)
 
       - name: Build arm64 release APK
         working-directory: app
