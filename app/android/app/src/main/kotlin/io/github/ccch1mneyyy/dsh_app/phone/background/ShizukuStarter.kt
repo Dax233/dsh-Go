@@ -47,7 +47,11 @@ class ShizukuStarter(
 
     private val args0: Shizuku.UserServiceArgs
         get() = Shizuku.UserServiceArgs(ComponentName(context, PrivilegedDisplayService::class.java))
-            .tag("dsh.vdisplay").processNameSuffix("vdisplay").version(2).daemon(false)
+            // Bumped 2 → 3: the strict probe / release-receipt protocol landed
+            // while this stayed 2, so a UserService started by an older APK
+            // survived an app update and answered "unsupported". Shizuku only
+            // restarts the service when this number changes.
+            .tag("dsh.vdisplay").processNameSuffix("vdisplay").version(3).daemon(false)
 
     private fun appInstalled(): Boolean =
         runCatching { context.packageManager.getApplicationInfo(PACKAGE, 0); true }.getOrDefault(false)
