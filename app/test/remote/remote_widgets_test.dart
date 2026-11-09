@@ -4,10 +4,12 @@
 import 'dart:convert';
 import 'dart:ui' show Tristate;
 
+import 'package:dsh_app/phone/phone_channel.dart';
 import 'package:dsh_app/remote/secret_store.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/phone_state.dart' show phoneChannelProvider;
 import 'package:dsh_app/ui/remote/host_switcher.dart';
 import 'package:dsh_app/ui/remote/remote_screen.dart';
 import 'package:dsh_app/ui/remote/ssh_host_form.dart';
@@ -23,6 +25,12 @@ import 'support/fake_relay.dart';
 import 'support/fake_ssh.dart';
 
 const _unpinned = SshHostConfig(id: 'ssh-lab', name: '实验室服务器', host: 'lab.example.com', user: 'root');
+
+/// The phone side is absent, as on a desktop test host.
+class _NoPhone extends PhoneChannel {
+  @override
+  Future<PhoneStatus> status() async => const PhoneStatus.notReady();
+}
 
 void main() {
   late MemorySecretStore secrets;
@@ -61,6 +69,10 @@ void main() {
     hostLinkStatusProvider.overrideWith((ref, host) => Stream.value(linkStatus)),
     urlOpenerProvider.overrideWithValue((_) async => true),
     localRuntimeProvider.overrideWith(() => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus))),
+    // No phone-control module: without this, PhoneBridgeLink.start arms its 2 s
+    // timeout against a channel that never answers and the test ends with a
+    // pending timer.
+    phoneChannelProvider.overrideWithValue(_NoPhone()),
   ];
 
   Future<ProviderContainer> pump(WidgetTester tester, Widget home) async {

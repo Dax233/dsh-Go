@@ -119,9 +119,11 @@ class SshHostLink implements HostLink {
     this.muxProbeDelay = const Duration(seconds: 30),
     this.tunnelProbeTimeout = const Duration(seconds: 10),
     this.retryFirstOpen = true,
+    PhoneChannel? phone,
   }) : _transportFactory = transportFactory ?? DartSshTransport.connect,
        _connectClient = connectClient ?? _defaultConnector,
-       _backoff = backoff ?? Backoff() {
+       _backoff = backoff ?? Backoff(),
+       _phone = phone ?? PhoneChannel() {
     _kickSub = kicks?.listen((_) => kick());
   }
 
@@ -551,7 +553,7 @@ class SshHostLink implements HostLink {
     );
   }
 
-  final PhoneChannel _phone = PhoneChannel();
+  final PhoneChannel _phone;
   PhoneBridgeLink? _phoneBridge;
   String? _phoneProfileLaunch;
 

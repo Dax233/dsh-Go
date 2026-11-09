@@ -14,6 +14,7 @@ import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import 'hosts_state.dart';
 import 'permission_default_repair.dart';
+import 'phone_state.dart' show phoneChannelProvider;
 import 'provider_backend.dart';
 import 'provider_keys.dart';
 import 'settings_state.dart';
@@ -174,6 +175,9 @@ final sshLinkFactoryProvider = Provider<SshLinkFactory>(
       // confirmed in the UI (test connection / host sheet), so an unknown key
       // at this point fails closed.
       kicks: ref.read(networkKicksProvider),
+      // The same channel the UI reads: one phone-control instance, not one per
+      // link (and tests can stub it through the provider).
+      phone: ref.read(phoneChannelProvider),
     );
   },
 );
