@@ -7,16 +7,41 @@ import android.system.Os
 import android.system.OsConstants
 import android.view.Display
 import java.io.File
+import java.util.UUID
 
 /** Only fixed proc paths, signal zero and full raw Binder scope queries. Never removes a display. */
 internal class RecoveryPlatform {
+    /** Which source produced the boot identity, and why the first one failed (diagnostics only). */
+    @Volatile var lastBirthSource: String? = null
+    @Volatile var lastBirthError: String? = null
+
     fun birth(peer: String): ResourceRecovery.Birth {
-        val boot = ResourceRecovery.uuid(File("/proc/sys/kernel/random/boot_id").readText().trim())
-            ?: throw ResourceRecovery.Failure("recoveryUnavailable")
+        val boot = bootId() ?: throw ResourceRecovery.Failure("recoveryUnavailable")
         val ns = Os.stat("/proc/self/ns/pid")
         val pid = Process.myPid(); val uid = Process.myUid()
         if (pid <= 0 || uid < 0 || ns.st_ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
         return ResourceRecovery.Birth(peer, boot, pid, uid, ns.st_dev, ns.st_ino)
+    }
+
+    /**
+     * /proc/sys/kernel/random/boot_id is the documented source; some Android 15+
+     * builds refuse that path to an app-domain process, so fall back to the
+     * kernel boot time turned into the same UUID shape. Both change only on a
+     * reboot, which is all a "previous boot?" check needs.
+     */
+    private fun bootId(): String? {
+        runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }
+            .onSuccess { text -> ResourceRecovery.uuid(text)?.let { lastBirthSource = "boot_id"; return it } }
+            .onFailure { e -> lastBirthError = e.javaClass.simpleName + ": " + e.message }
+        val btime = runCatching {
+            File("/proc/stat").useLines { lines -> lines.firstOrNull { it.startsWith("btime ") } }
+        }.getOrNull()?.trim()?.split(" ")?.getOrNull(1)
+        if (btime != null) {
+            lastBirthSource = "btime"
+            return UUID.nameUUIDFromBytes("dsh-btime:$btime".toByteArray()).toString()
+        }
+        lastBirthSource = null
+        return null
     }
 
     private val managerType by lazy { Class.forName("android.hardware.display.IDisplayManager") }

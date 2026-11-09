@@ -1211,6 +1211,8 @@ class BackgroundControl private constructor(context: Context) {
                         "release" to (cap.get(Proto.RELEASE_RECEIPT) as? Int),
                         "birth" to (BackgroundRecoveryProtocol.birth(cap::get) != null),
                         "releaseQuery" to cap.getString("releaseQueryError"),
+                        "birthError" to cap.getString("birthError"),
+                        "birthSource" to cap.getString("birthSource"),
                         "alive" to peer.alive(),
                         "peer" to peer.javaClass.simpleName,
                     )

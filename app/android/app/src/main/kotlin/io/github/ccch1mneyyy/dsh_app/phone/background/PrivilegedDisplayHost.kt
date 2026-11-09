@@ -42,7 +42,12 @@ internal class PrivilegedDisplayHost(private val context: Context) {
     private val legacy = PrivilegedDisplayCore(context, trees)
     private val scopes = OwnerScopes<PrivilegedDisplayCore, HostedRelease>()
     private val recoveryPlatform = RecoveryPlatform()
-    private val birth by lazy { runCatching { recoveryPlatform.birth(peerInstance) }.getOrNull() }
+    @Volatile private var birthError: String? = null
+    private val birth by lazy {
+        runCatching { recoveryPlatform.birth(peerInstance) }
+            .onFailure { birthError = it.javaClass.simpleName + ": " + it.message }
+            .getOrNull()
+    }
     @Volatile private var retirementComplete = false
 
     fun handle(request: Bundle): Bundle {
@@ -55,7 +60,8 @@ internal class PrivilegedDisplayHost(private val context: Context) {
                     putString(Proto.RECOVERY_BOOT, value.boot); putInt(Proto.RECOVERY_PID, value.pid)
                     putInt(Proto.RECOVERY_UID, value.uid); putLong(Proto.RECOVERY_PID_NS_DEV, value.nsDev)
                     putLong(Proto.RECOVERY_PID_NS_INO, value.nsIno)
-                }
+                    putString("birthSource", recoveryPlatform.lastBirthSource)
+                } ?: putString("birthError", birthError ?: "birthUnavailable")
             }
         }
         if (op == Proto.OP_RECOVERY_RETIRE) return retire(request)
