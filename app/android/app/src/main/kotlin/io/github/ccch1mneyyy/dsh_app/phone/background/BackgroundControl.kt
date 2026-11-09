@@ -203,6 +203,8 @@ class BackgroundControl private constructor(context: Context) {
     @Volatile private var lastGateError: String? = null
     /** Permission token the peer named when its probe window was denied, if any. */
     @Volatile private var lastInjectPermission: String? = null
+    /** The platform API that refused the probe window, e.g. android.app.Presentation#<init>. */
+    @Volatile private var lastInjectSite: String? = null
 
     init { recovery.execute { resourceJournal.load(); notifyChanged() } }
 
@@ -447,6 +449,7 @@ class BackgroundControl private constructor(context: Context) {
                 "lastGateStage" to lastGateStage,
                 "lastGateError" to lastGateError,
                 "lastInjectPermission" to lastInjectPermission,
+                "lastInjectSite" to lastInjectSite,
             ) +
             (lastProbeReply?.let { mapOf("lastProbe" to it) } ?: emptyMap())
 
@@ -1262,6 +1265,7 @@ class BackgroundControl private constructor(context: Context) {
                     check(gate.admit(probe) { call.io.checkDispatch() })
                 }
                 lastInjectPermission = reply.getString("injectPermission")
+                lastInjectSite = reply.getString("injectSite")
                 when (val result = gate.updateStrict(probe, call.io.owner, reply.get(Proto.OWNER),
                     reply.get(Proto.SELF_CHECK_PROBE_VERSION), reply.get(Proto.OK),
                     reply.get(Proto.SELF_CHECK_DISPLAY_READY), reply.get(Proto.INJECT_OK),

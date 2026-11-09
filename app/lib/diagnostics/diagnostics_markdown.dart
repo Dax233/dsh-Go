@@ -209,6 +209,8 @@ void _backgroundInputProbe(StringBuffer b, Object? raw) {
   }
   final injectPermission = raw['lastInjectPermission'];
   if (injectPermission is String) b.writeln('- 探针窗口被拒时对端报的权限：$injectPermission');
+  final injectSite = raw['lastInjectSite'];
+  if (injectSite is String) b.writeln('- 拒绝探针窗口的平台接口：$injectSite');
   final lastProbe = raw['lastProbe'];
   if (lastProbe is Map) {
     final parts = <String>[

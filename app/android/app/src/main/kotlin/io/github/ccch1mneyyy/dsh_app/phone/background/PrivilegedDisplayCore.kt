@@ -269,6 +269,11 @@ class PrivilegedDisplayCore internal constructor(
             .firstOrNull { it.contains("PERMISSION") || it.contains("WINDOW") || it.contains("SYSTEM") || it.contains("DISPLAY") }
     }
 
+    /** The platform API that refused, e.g. "android.app.Presentation#<init>"; fixed shape, no text. */
+    private fun failureSite(e: Throwable): String? =
+        e.stackTrace.firstOrNull { it.className.startsWith("android.") || it.className.startsWith("com.android.") }
+            ?.let { frame -> (frame.className + "#" + frame.methodName).take(80) }
+
     private fun failureDetail(e: Throwable): String? =
         if (e is InputProbe.Failure) e.observation?.encode()
         else if (e is ResourceRecovery.Failure || e is Fault || e is TargetIdentity.Failure || e is InterruptedException || e is SecurityException) null
@@ -769,6 +774,7 @@ class PrivilegedDisplayCore internal constructor(
         } catch (e: Throwable) {
             response.putString(Proto.INJECT_ERROR, failureCode(e))
             permissionToken(e)?.let { response.putString("injectPermission", it) }
+            failureSite(e)?.let { response.putString("injectSite", it) }
             InputProbeDiagnostics.decode(window.failureDetail)?.let {
                 response.putString(Proto.ERROR_DETAIL, it.encode())
             }
@@ -804,6 +810,7 @@ class PrivilegedDisplayCore internal constructor(
             injection.exceptionOrNull()?.let {
                 response.putString(Proto.INJECT_ERROR, failureCode(it))
                 permissionToken(it)?.let { token -> response.putString("injectPermission", token) }
+                failureSite(it)?.let { site -> response.putString("injectSite", site) }
                 (probeDetail ?: failureDetail(it))?.let { detail -> response.putString(Proto.ERROR_DETAIL, detail) }
             }
         } finally {
