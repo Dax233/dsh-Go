@@ -123,6 +123,29 @@ class _PhoneDndPageState extends ConsumerState<PhoneDndPage> {
     });
   }
 
+  /// Explicit escape hatch for records that can never produce a verified-absence receipt
+  /// (for example after an OS upgrade changed the recovery identity).
+  Future<void> _discardOldResources() async {
+    final l10n = context.l10n;
+    final ok = await showAppDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(l10n.phoneResourceRecoveryDiscardTitle),
+        content: Text(l10n.phoneResourceRecoveryDiscardBody),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+          FilledButton(
+            key: const ValueKey('phone-resource-recovery-discard-ok'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(l10n.phoneResourceRecoveryDiscardAction),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _run(() => _phone.discardOldBackgroundResources(), done: l10n.phoneResourceRecoveryDiscardDone);
+  }
+
   Future<void> _retryCleanup(String handle) async {
     // Capture the displayed handle, never substitute a newer status after awaiting.
     await _run(() => _phone.retryBackgroundGateCleanup(handle), done: context.l10n.phoneGateCleanupDone);
@@ -251,6 +274,18 @@ class _PhoneDndPageState extends ConsumerState<PhoneDndPage> {
                   key: const ValueKey('phone-resource-recovery-retry'),
                   onPressed: _ready && !_busy && recovery.canRetry ? _retryResourceRecovery : null,
                   child: Text(l10n.phoneResourceRecoveryRetry),
+                ),
+              ),
+              ListPageRow(
+                key: const ValueKey('phone-resource-recovery-discard'),
+                title: l10n.phoneResourceRecoveryDiscardTitle,
+                titleMaxLines: 3,
+                subtitle: l10n.phoneResourceRecoveryDiscardBody,
+                subtitleMaxLines: 8,
+                trailing: TextButton(
+                  key: const ValueKey('phone-resource-recovery-discard-action'),
+                  onPressed: _ready && !_busy ? _discardOldResources : null,
+                  child: Text(l10n.phoneResourceRecoveryDiscardAction),
                 ),
               ),
             ],

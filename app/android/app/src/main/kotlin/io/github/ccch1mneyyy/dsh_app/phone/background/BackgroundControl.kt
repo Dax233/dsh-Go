@@ -265,6 +265,22 @@ class BackgroundControl private constructor(context: Context) {
         return mapOf("ok" to (reason == null), "reason" to reason)
     }
 
+    /**
+     * Explicit user action for records whose verified-absence receipt can never arrive (for
+     * example an OS upgrade changed the recovery identity). A VirtualDisplay cannot outlive
+     * the process that created it, so records from an earlier process instance are stale.
+     */
+    fun discardOldResourceRecords(): Map<String, Any?> {
+        if (!resourceJournal.load()) return mapOf("ok" to false, "reason" to "storageUnavailable")
+        val before = resourceJournal.status()
+        if (before.count == 0) return mapOf("ok" to false, "reason" to "nothingPending")
+        if (!resourceJournal.forgetOld()) {
+            return mapOf("ok" to false, "reason" to "currentProcessResource")
+        }
+        notifyChanged()
+        return mapOf("ok" to true, "cleared" to before.count - resourceJournal.status().count)
+    }
+
     private fun retryResourceRecoveryNow(): String? {
         val records = resourceJournal.oldRecords() ?: return "storageUnavailable"
         val lost = lostTaskResources()

@@ -152,6 +152,17 @@ abstract final class DiagnosticsBundle {
                 'reason': privileged.reason,
                 'grantPath': privileged.grantPath,
               },
+            // A blocked channel is usually a stored record waiting for verification;
+            // these two say whether a retry is possible and what is still pending.
+            if (s.phone.background.gateCleanup case final cleanup?)
+              'gateCleanup': {'state': cleanup.state, 'canRetry': cleanup.canRetry},
+            if (s.phone.background.resourceRecovery case final recovery?)
+              'resourceRecovery': {
+                'state': recovery.state,
+                'count': recovery.count,
+                'canRetry': recovery.canRetry,
+                'reason': recovery.reason,
+              },
           },
         },
       },

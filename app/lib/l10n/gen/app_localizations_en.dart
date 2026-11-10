@@ -12325,6 +12325,19 @@ class L10nEn extends L10n {
   String get phoneResourceRecoveryRetry => 'Retry resource verification';
 
   @override
+  String get phoneResourceRecoveryDiscardTitle => 'Old records cannot be verified?';
+
+  @override
+  String get phoneResourceRecoveryDiscardBody =>
+      'These records belong to an earlier process, and a virtual display cannot outlive the process that created it. Clear them only if you are sure no background screen is left behind: verification is skipped and past actions are not replayed.';
+
+  @override
+  String get phoneResourceRecoveryDiscardAction => 'Force clear';
+
+  @override
+  String get phoneResourceRecoveryDiscardDone => 'Old records cleared';
+
+  @override
   String get phoneSkillSectionTitle => 'Completed tasks and skills';
 
   @override

@@ -127,6 +127,19 @@ internal class BackgroundResourceJournal(
         records.any { it.process == processInstance && it.owner !in completed }
     }
 
+    /**
+     * Drops records written by an earlier process instance. A VirtualDisplay cannot outlive
+     * the process that created it, so those records can only be stale; they are kept only so
+     * a verified-absence receipt can retire them, and this is the explicit escape hatch when
+     * that receipt can never be produced (an OS upgrade changed the recovery identity).
+     */
+    fun forgetOld(): Boolean = synchronized(lock) {
+        if (!loaded || storageError != null || completed.isNotEmpty()) return false
+        val next = records.filter { it.process == processInstance }
+        if (next.size == records.size) return false
+        persist(next, retainOnFailure = false)
+    }
+
     private fun persist(next: List<Record>, retainOnFailure: Boolean): Boolean {
         val ok = try { commit(encode(next)) } catch (_: Exception) { false }
         if (ok) {

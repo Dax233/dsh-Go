@@ -11702,6 +11702,18 @@ class L10nZh extends L10n {
   String get phoneResourceRecoveryRetry => '重试资源核验';
 
   @override
+  String get phoneResourceRecoveryDiscardTitle => '旧记录无法核验？';
+
+  @override
+  String get phoneResourceRecoveryDiscardBody => '旧记录来自更早的进程，它创建的虚拟屏不可能还在（进程结束即销毁）。只有确认没有遗留的后台屏时才清除：清除后不再核验，也不会重放旧操作。';
+
+  @override
+  String get phoneResourceRecoveryDiscardAction => '强制清除';
+
+  @override
+  String get phoneResourceRecoveryDiscardDone => '已清除旧记录';
+
+  @override
   String get phoneSkillSectionTitle => '成功任务与技能';
 
   @override

@@ -1474,6 +1474,9 @@ class PhoneChannel {
 
   Future<PhoneResult> retryBackgroundRecovery() => _result('retryBackgroundRecovery');
 
+  /// Drops resource records from an earlier process: a virtual display cannot outlive it.
+  Future<PhoneResult> discardOldBackgroundResources() => _result('discardOldBackgroundResources');
+
   Future<PhoneResult> retryBackgroundGateCleanup(String handle) =>
       _result('retryBackgroundGateCleanup', {'v': 1, 'handle': handle});
 

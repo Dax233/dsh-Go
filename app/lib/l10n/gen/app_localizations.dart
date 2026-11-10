@@ -21500,6 +21500,30 @@ abstract class L10n {
   /// **'重试资源核验'**
   String get phoneResourceRecoveryRetry;
 
+  /// No description provided for @phoneResourceRecoveryDiscardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧记录无法核验？'**
+  String get phoneResourceRecoveryDiscardTitle;
+
+  /// No description provided for @phoneResourceRecoveryDiscardBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧记录来自更早的进程，它创建的虚拟屏不可能还在（进程结束即销毁）。只有确认没有遗留的后台屏时才清除：清除后不再核验，也不会重放旧操作。'**
+  String get phoneResourceRecoveryDiscardBody;
+
+  /// No description provided for @phoneResourceRecoveryDiscardAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'强制清除'**
+  String get phoneResourceRecoveryDiscardAction;
+
+  /// No description provided for @phoneResourceRecoveryDiscardDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已清除旧记录'**
+  String get phoneResourceRecoveryDiscardDone;
+
   /// No description provided for @phoneSkillSectionTitle.
   ///
   /// In zh, this message translates to:
