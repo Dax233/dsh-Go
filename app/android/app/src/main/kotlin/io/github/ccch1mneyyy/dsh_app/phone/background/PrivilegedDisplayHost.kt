@@ -62,8 +62,6 @@ internal class PrivilegedDisplayHost(private val context: Context) {
                     putLong(Proto.RECOVERY_PID_NS_INO, value.nsIno)
                     if (!value.nsAvailable) putBoolean(Proto.RECOVERY_PID_NS_AVAILABLE, false)
                 }
-                putString("birthSource", recoveryPlatform.lastBirthSource ?: "none")
-                recoveryPlatform.lastBirthError?.let { putString("birthDetail", it) }
                 if (birth == null) putString("birthError", birthError ?: "birthUnavailable")
             }
         }

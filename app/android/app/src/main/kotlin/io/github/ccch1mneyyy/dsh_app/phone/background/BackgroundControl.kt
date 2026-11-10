@@ -1224,7 +1224,7 @@ class BackgroundControl private constructor(context: Context) {
                         "scope" to OwnerScopeProtocol.supported(cap),
                         "selfCheck" to (cap.get(Proto.SELF_CHECK_PROBE_VERSION) as? Int),
                         "release" to (cap.get(Proto.RELEASE_RECEIPT) as? Int),
-                        "birth" to (BackgroundRecoveryProtocol.birth(cap::get) != null),
+                        "birth" to (BackgroundRecoveryProtocol.birth(cap::get, cap::containsKey) != null),
                         "releaseQuery" to cap.getString("releaseQueryError"),
                         "birthError" to cap.getString("birthError"),
                         "birthSource" to cap.getString("birthSource"),
