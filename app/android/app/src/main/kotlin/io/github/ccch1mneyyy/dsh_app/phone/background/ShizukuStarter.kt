@@ -47,11 +47,11 @@ class ShizukuStarter(
 
     private val args0: Shizuku.UserServiceArgs
         get() = Shizuku.UserServiceArgs(ComponentName(context, PrivilegedDisplayService::class.java))
-            // Bumped 2 → 3: the strict probe / release-receipt protocol landed
-            // while this stayed 2, so a UserService started by an older APK
-            // survived an app update and answered "unsupported". Shizuku only
-            // restarts the service when this number changes.
-            .tag("dsh.vdisplay").processNameSuffix("vdisplay").version(3).daemon(false)
+            // Bumped 2 → 3 → 4: 3 carried the strict probe / release-receipt protocol,
+            // 4 carries the Activity-based probe and its bounded cleanup. The probe runs
+            // inside this UserService, so a reused service would keep the old behaviour.
+            // Shizuku only restarts the service when this number changes.
+            .tag("dsh.vdisplay").processNameSuffix("vdisplay").version(4).daemon(false)
 
     private fun appInstalled(): Boolean =
         runCatching { context.packageManager.getApplicationInfo(PACKAGE, 0); true }.getOrDefault(false)
