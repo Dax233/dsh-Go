@@ -9,9 +9,11 @@ import 'dart:convert';
 import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/session_modes.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/chat/chat_list.dart';
 import 'package:dsh_app/ui/chat/chat_rows.dart';
+import 'package:dsh_app/ui/chat/media/media_paths.dart';
 import 'package:dsh_app/ui/chat/widgets/assistant_message.dart';
 import 'package:dsh_app/ui/chat/widgets/notice_row.dart';
 import 'package:dsh_app/ui/chat/widgets/tool_row.dart';
@@ -165,6 +167,19 @@ class _Guard {
 
   void startStream() => client.events.add(AssistantStreamStarted('attempt', 0, turn: 4, step: 2, startedAfterSeq: seq));
 
+  var _logged = 0;
+
+  /// A durable event after the history.
+  void log(String type, Map<String, Object?> data) {
+    final at = seq + ++_logged;
+    client.events.add(
+      parseFollowFrame(_session, {
+        'type': 'event',
+        'event': {'seq': at, 'time': 1792700000000 + at, 'type': type, 'data': data},
+      }),
+    );
+  }
+
   void chunk(StreamChunk chunk) =>
       client.events.add(AssistantChunkEvent('attempt', 0, index: _index++, time: time, chunk: chunk));
 
@@ -306,5 +321,35 @@ void main() {
     expect(counts.done, 0, reason: 'finished rows must not rebuild while tool arguments stream');
     expect(counts.derivations, 0, reason: 'an argument delta must not derive the rows again');
     await g.unmount(tester);
+  });
+
+  testWidgets('what the log decides is not worked out again per delta', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    final media = <Set<String>>[];
+    final modes = <SessionModes>[];
+    // A new set each time it is worked out: every recompute reaches the listener.
+    g.container.listen(sessionMediaPathsProvider(_session), (_, next) => media.add(next), fireImmediately: true);
+    g.container.listen(sessionModesProvider(_session), (_, next) => modes.add(next), fireImmediately: true);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '开始'));
+    await g.settle(tester);
+    media.clear();
+    modes.clear();
+    for (var delta = 0; delta < _deltas; delta++) {
+      g.chunk(TextDeltaChunk(0, ' 第$delta段'));
+      await tester.pump(const Duration(milliseconds: 32));
+    }
+    debugPrint('[GUARD] text stream, deltas=$_deltas: media paths worked out ${media.length} times');
+    expect(media, isEmpty, reason: 'media comes with a result, a log event');
+    // The log still moves them.
+    g.log('permission/preset', {'preset': 'danger-full-access'});
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(modes.map((m) => m.preset), ['danger-full-access']);
+    expect(media, hasLength(1));
+    g.dispose();
+    await tester.pump(const Duration(seconds: 1));
   });
 }
