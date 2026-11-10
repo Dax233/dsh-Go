@@ -53,11 +53,11 @@ class BackgroundProbeActivity : Activity() {
         runCatching {
             val filter = android.content.IntentFilter(ProbeActivityContract.ACTION_FINISH)
             if (android.os.Build.VERSION.SDK_INT >= 33) {
-                registerReceiver(forceFinish, filter, android.permission.INJECT_EVENTS, null,
+                registerReceiver(forceFinish, filter, "android.permission.INJECT_EVENTS", null,
                     android.content.Context.RECEIVER_EXPORTED)
             } else {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
-                registerReceiver(forceFinish, filter, android.permission.INJECT_EVENTS, null)
+                registerReceiver(forceFinish, filter, "android.permission.INJECT_EVENTS", null)
             }
             forceFinishRegistered = true
         }
