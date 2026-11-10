@@ -164,6 +164,36 @@ class PendingPrompt {
     failureSeq: seq,
   );
 
+  /// Equal prompts publish as equal lists, so the chat keeps its rows (see
+  /// `ChatRowsCache`) while a reply streams with messages waiting.
+  @override
+  bool operator ==(Object other) =>
+      other is PendingPrompt &&
+      other.requestId == requestId &&
+      other.text == text &&
+      other.time == time &&
+      other.mode == mode &&
+      _sameAttachments(other.attachments, attachments) &&
+      other.inboxId == inboxId &&
+      other.slot == slot &&
+      other.resendable == resendable &&
+      other.sourceKind == sourceKind &&
+      other.sourceForm == sourceForm &&
+      other.failureSeq == failureSeq;
+
+  @override
+  int get hashCode =>
+      Object.hash(requestId, text, time, mode, inboxId, slot, resendable, sourceKind, sourceForm, failureSeq);
+
+  static bool _sameAttachments(List<DraftAttachment> a, List<DraftAttachment> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   PendingPrompt placed(String? inboxId, InboxSlot? slot, {MessageSource? source}) => PendingPrompt(
     requestId: requestId,
     text: text,
@@ -437,6 +467,10 @@ class ChatController extends Notifier<ChatState> {
   bool _defaultModelSaveFailed = false;
   Object? _historyRead;
   List<PendingPrompt> _pending = const [];
+
+  /// When this device first saw each inbox item it did not send: a waiting
+  /// prompt keeps one time across publishes (and so stays equal).
+  final _inboxSeen = <String, DateTime>{};
 
   /// Prompts removed elsewhere or consumed by a finished turn: dropped at
   /// the next publish unless they are back by then (「改为插话」 removes,
@@ -1175,6 +1209,7 @@ class ChatController extends Notifier<ChatState> {
   /// here may move it.
   List<PendingPrompt> _placePending() {
     final inbox = _transcript.inbox;
+    _inboxSeen.removeWhere((id, _) => !inbox.any((q) => q.id == id));
     if (inbox.isEmpty && _moving.isEmpty) return _pending;
     final byRequest = {for (final q in inbox) ?q.requestId: q};
     final ours = {for (final p in _pending) p.requestId};
@@ -1192,7 +1227,7 @@ class ChatController extends Notifier<ChatState> {
           PendingPrompt(
             requestId: q.requestId ?? q.id,
             text: q.text,
-            time: DateTime.now(),
+            time: _inboxSeen.putIfAbsent(q.id, DateTime.now),
             mode: q.steering ? SendMode.steer : SendMode.queue,
             inboxId: q.id,
             slot: slotOf(q),

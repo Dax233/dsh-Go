@@ -9,6 +9,13 @@ import 'support/sample_chat.dart';
 
 // Compare the complete projection, including nested folded rows, to the
 // uncached implementation. This is a work-count contract, not an FPS claim.
+// A streaming draft's tool call is made anew on every transcript read; the
+// cache keeps the one it has while it is the same, so compare those by value.
+Object toolShape(ToolChatItem t) =>
+    t.seq == null && (t.status == ToolStatus.streaming || t.status == ToolStatus.running)
+    ? (t.callId, t.name, t.arguments, t.status, t.resultParts, t.meta, t.pendingApproval)
+    : t;
+
 Object shape(ChatRow row) => switch (row) {
   UserRow(:final item) => (row.key, item),
   PendingRow(:final prompt) => (row.key, prompt),
@@ -26,8 +33,8 @@ Object shape(ChatRow row) => switch (row) {
     showActions,
     footnote,
   ),
-  ToolCallRow(:final item, :final card) => (row.key, item, card),
-  ToolGroupRow(:final tools, :final live) => [row.key, tools, live],
+  ToolCallRow(:final item, :final card) => (row.key, toolShape(item), card),
+  ToolGroupRow(:final tools, :final live) => [row.key, tools.map(toolShape).toList(), live],
   NoticeRowData(:final item) => (row.key, item),
   ApprovalRow(:final request) => (row.key, request),
   QuestionRow(:final request) => (row.key, request),
@@ -100,6 +107,79 @@ void main() {
       }
       expect(identical(cache.index, index), isTrue);
       expect((first[1000] as AssistantRow).item.reasoning, '0', reason: 'previous results stay immutable');
+    }
+  });
+
+  test('streaming tool arguments keep every other row: alone, after thinking, in a live group', () {
+    ToolChatItem call(String id, String args, {ToolStatus status = ToolStatus.streaming}) =>
+        ToolChatItem(callId: id, name: 'bash', arguments: args, status: status);
+    final prompt = user(1, 'Question');
+    final earlier = assistant(2, 'Earlier');
+    final done = [
+      for (var i = 0; i < 2; i++) tool('done$i', 'read', {'path': '$i'}),
+    ];
+    final queued = [PendingPrompt(requestId: 'q', text: 'Next', time: DateTime(2026))];
+    final shapes = <String, List<ChatItem> Function(int)>{
+      'alone': (n) => [prompt, earlier, call('c', '{"command": "${'x' * n}')],
+      'after thinking': (n) => [
+        prompt,
+        assistant(3, '', reasoning: 'Look first', streaming: true),
+        call('a', '{"command": "ls"}', status: ToolStatus.running),
+        call('c', '{"command": "${'x' * n}'),
+      ],
+      'in a live group': (n) => [prompt, ...done, call('c', '{"command": "${'x' * n}')],
+    };
+    for (final MapEntry(key: name, value: items) in shapes.entries) {
+      final cache = ChatRowsCache();
+      // Each publish brings new pending and draft objects that are equal.
+      ChatState state(int n) => ChatState(
+        running: true,
+        items: items(n),
+        pending: [for (final p in queued) PendingPrompt(requestId: p.requestId, text: p.text, time: p.time)],
+      );
+      final first = check(cache, state(0));
+      final index = cache.index;
+      final live = first.indexWhere((row) => row is ToolGroupRow || (row is ToolCallRow && row.item.callId == 'c'));
+      final derived = debugDeriveRowsCount;
+      for (var n = 1; n <= 10; n++) {
+        final rows = check(cache, state(n));
+        for (var i = 0; i < rows.length; i++) {
+          if (i == live) continue;
+          expect(identical(rows[i], first[i]), isTrue, reason: '$name: row $i is not the call being written');
+        }
+        expect(identical(cache.index, index), isTrue, reason: name);
+      }
+      // check() itself derives once per update to compare against.
+      expect(debugDeriveRowsCount - derived, 10, reason: '$name: the cache derived no rows');
+      expect(identical(check(cache, state(10)), cache.update(state(10), foldTurns: false)), isTrue);
+    }
+  });
+
+  test('a finished draft, a result or an approval on a draft call still derive', () {
+    final cache = ChatRowsCache();
+    final prompt = user(1, 'Question');
+    ToolChatItem call(ToolStatus status, {List<Part> result = const [], ApprovalRequest? pending}) => ToolChatItem(
+      callId: 'c',
+      name: 'bash',
+      arguments: '{}',
+      status: status,
+      resultParts: result,
+      pendingApproval: pending,
+    );
+    final cases = [
+      [prompt, call(ToolStatus.streaming)],
+      [prompt, call(ToolStatus.running)],
+      [prompt, call(ToolStatus.running, pending: approval)],
+      [
+        prompt,
+        call(ToolStatus.succeeded, result: const [TextPart('ok')]),
+      ],
+      [prompt, assistant(2, 'Draft', streaming: true), call(ToolStatus.streaming)],
+      [prompt, assistant(2, 'Draft', streaming: false), call(ToolStatus.streaming)],
+      [prompt, assistant(2, 'Draft', streaming: true), call(ToolStatus.streaming)],
+    ];
+    for (final items in cases) {
+      check(cache, ChatState(items: items, running: true));
     }
   });
 

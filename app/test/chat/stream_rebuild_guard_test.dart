@@ -275,7 +275,7 @@ void main() {
 
   testWidgets('a streaming reply with queued messages derives no rows per delta', (tester) async {
     await streamText(tester, queued: ['排队一', '排队二']);
-  }, skip: true); // A2
+  });
 
   testWidgets('streaming tool arguments rebuild only the tool being written', (tester) async {
     final g = _Guard();
@@ -306,5 +306,5 @@ void main() {
     expect(counts.done, 0, reason: 'finished rows must not rebuild while tool arguments stream');
     expect(counts.derivations, 0, reason: 'an argument delta must not derive the rows again');
     await g.unmount(tester);
-  }, skip: true); // A2
+  });
 }
