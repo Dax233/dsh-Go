@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
@@ -26,6 +27,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/harness.dart';
+import 'support/pending_notice_harness.dart';
 
 class _Client extends DshClient {
   _Client() : super(DshConnection(Uri.parse('http://127.0.0.1:9')));
@@ -364,5 +366,35 @@ void main() {
     expect(debugToolSummaryCaches.turns, greaterThan(before.turns), reason: 'finished turns were summarised');
     await g.unmount(tester);
     expect(debugToolSummaryCaches, before);
+  });
+
+  testWidgets('a language switch reaches the kept rows', (tester) async {
+    addTearDown(() => AppLocale.use(AppLocale.zhCN));
+    final h = PendingNoticeHarness();
+    addTearDown(h.dispose);
+    await h.mount(tester);
+    h.snapshot([
+      pendingMessage(text: '排队的消息', source: {'kind': 'user'}),
+    ], slot: 'next-turn');
+    h.running(true);
+    await h.settle(tester);
+    expect(find.text('排队中 · 本轮结束后发送'), findsOneWidget);
+    expect(find.text('立即发送'), findsOneWidget);
+    expect(find.text('撤回'), findsOneWidget);
+
+    // As app.dart does: switch, then rebuild every element (no inherited
+    // change, and nothing in the chat changed).
+    AppLocale.use(AppLocale.en);
+    void mark(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(mark);
+    }
+
+    tester.binding.rootElement!.visitChildren(mark);
+    await tester.pump();
+    expect(find.text('Queued · Next turn'), findsOneWidget);
+    expect(find.text('Send now'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    expect(find.text('撤回'), findsNothing);
   });
 }

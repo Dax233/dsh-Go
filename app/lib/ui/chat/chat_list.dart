@@ -265,8 +265,18 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// a text delta rebuilds only the reply it grows. Cleared whenever rows are
   /// derived afresh, and when anything else a row reads changes (see
   /// [_clearBuiltRows]).
+  ///
+  /// The rule this rests on: whatever the row-building layer ([_rowFrame] and
+  /// the methods it calls) reads that does not come with the row object (the
+  /// chat state, the list's context, the language, the list's own fields,
+  /// other providers) must either clear this map when it changes, or be read
+  /// in the row widget's own build instead. Today that is: the chat state
+  /// ([_deriveRows]), the motion duration and the language ([build]), the
+  /// fork / regenerate marks ([_clearBuiltRows]) and which callbacks are given
+  /// ([didUpdateWidget]).
   final Map<String, ({ChatRow row, double gap, Widget widget})> _built = {};
   Duration? _builtMotion;
+  Locale? _builtLocale;
   ChatState? _builtState;
 
   /// A streaming draft has words, not only thinking: earlier rows read that
@@ -722,8 +732,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final split = _split;
     _fluid = AppMotion.fluid(context);
     final motion = AppMotion.of(context, AppMotion.quick);
-    if (motion != _builtMotion) {
+    // A language switch rebuilds every element (app.dart) without an
+    // inherited change; rows hold [appL10n] strings in their arguments.
+    final locale = AppLocale.current;
+    if (motion != _builtMotion || locale != _builtLocale) {
       _builtMotion = motion;
+      _builtLocale = locale;
       _built.clear();
     }
 
