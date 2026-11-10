@@ -36,7 +36,7 @@ internal object InputProbeDiagnostics {
             "java.util.concurrent.TimeoutException" -> "TimeoutException"
             "java.lang.InterruptedException" -> "InterruptedException"
             "android.content.ActivityNotFoundException" -> "ActivityNotFound"
-            "android.app.PendingIntent$CanceledException" -> "PendingCanceled"
+            ("android.app.PendingIntent" + "$" + "CanceledException") -> "PendingCanceled"
             "android.os.BadParcelableException" -> "BadParcelable"
             "android.os.RemoteException" -> "Remote"
             "android.os.DeadObjectException" -> "DeadObject"
