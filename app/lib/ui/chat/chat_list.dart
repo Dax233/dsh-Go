@@ -39,6 +39,7 @@ import 'composer_toast.dart';
 import 'dsh_ui/dsh_ui.dart';
 import 'render/markdown_image.dart';
 import 'trajectory_sheet.dart';
+import 'turn_summary.dart' show forgetToolSummaries;
 import 'widgets/approval_card.dart';
 import 'widgets/artifact_card.dart';
 import 'widgets/assistant_message.dart';
@@ -312,6 +313,11 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    // This conversation's calls leave the tool summary caches with it.
+    forgetToolSummaries({
+      for (final item in _builtState?.items ?? const <ChatItem>[])
+        if (item is ToolChatItem) item.callId,
+    });
     _glide.dispose();
     _scroll.dispose();
     _showJump.dispose();

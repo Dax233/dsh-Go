@@ -14,6 +14,7 @@ import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/chat/chat_list.dart';
 import 'package:dsh_app/ui/chat/chat_rows.dart';
 import 'package:dsh_app/ui/chat/media/media_paths.dart';
+import 'package:dsh_app/ui/chat/turn_summary.dart' show debugToolSummaryCaches;
 import 'package:dsh_app/ui/chat/widgets/assistant_message.dart';
 import 'package:dsh_app/ui/chat/widgets/notice_row.dart';
 import 'package:dsh_app/ui/chat/widgets/tool_row.dart';
@@ -351,5 +352,17 @@ void main() {
     expect(media, hasLength(1));
     g.dispose();
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a closed chat takes its calls out of the tool summary caches', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    final before = debugToolSummaryCaches;
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    expect(debugToolSummaryCaches.turns, greaterThan(before.turns), reason: 'finished turns were summarised');
+    await g.unmount(tester);
+    expect(debugToolSummaryCaches, before);
   });
 }
