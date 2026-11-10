@@ -103,12 +103,28 @@ internal class BackgroundInputProbe(private val context: Context, private val di
     override fun close() {
         probe.entered(InputProbeDiagnostics.Stage.CLEANUP)
         var interrupted = Thread.interrupted()
-        try { session.close() }
-        catch (e: Exception) {
+        try {
+            session.close()
+        } catch (e: Exception) {
             if (e is InterruptedException) interrupted = true
-            val failure = probe.failure("inputProbeCleanupFailed", e)
-            failureDetail = failure.observation?.encode()
-            throw failure
+            // The Activity may still be alive without ever reporting a detach (it lives in
+            // another process on a virtual display). Ask that process to finish it outright
+            // and confirm once more, instead of retaining the probe forever.
+            runCatching {
+                context.sendBroadcast(
+                    android.content.Intent(ProbeActivityContract.ACTION_FINISH)
+                        .setPackage(ProbeActivityContract.PACKAGE))
+            }
+            try {
+                session.close(1_500)
+            } catch (again: Exception) {
+                if (again is InterruptedException) interrupted = true
+                // Not confirmed, but the display release below owns that decision: it waits
+                // for the display's root tasks and reports releasePending when a window is
+                // really still there. A retained probe here would only block every later run.
+                failureDetail = probe.failure("inputProbeCleanupUnconfirmed", again)
+                    .observation?.encode()
+            }
         } finally { if (interrupted) Thread.currentThread().interrupt() }
     }
 }

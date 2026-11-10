@@ -33,6 +33,14 @@ class BackgroundProbeActivity : Activity() {
         }
     }
 
+    private val forceFinish = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            // The sender already proved INJECT_EVENTS; only a probe Activity exists to finish.
+            finishAndRemoveTask()
+        }
+    }
+    private var forceFinishRegistered = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         receiver = intent.getParcelableExtra(ProbeActivityContract.RECEIVER)
@@ -41,6 +49,17 @@ class BackgroundProbeActivity : Activity() {
         if (receiver == null || nonce?.let { runCatching { UUID.fromString(it).toString() == it }.getOrDefault(false) } != true) {
             finishAndRemoveTask()
             return
+        }
+        runCatching {
+            val filter = android.content.IntentFilter(ProbeActivityContract.ACTION_FINISH)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(forceFinish, filter, android.permission.INJECT_EVENTS, null,
+                    android.content.Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(forceFinish, filter, android.permission.INJECT_EVENTS, null)
+            }
+            forceFinishRegistered = true
         }
         report(ProbeActivityContract.CREATED, Bundle().apply {
             putParcelable(ProbeActivityContract.RECEIVER, finishReceiver)
@@ -119,6 +138,7 @@ class BackgroundProbeActivity : Activity() {
 
     override fun onDestroy() {
         ui.removeCallbacks(expire)
+        if (forceFinishRegistered) { runCatching { unregisterReceiver(forceFinish) }; forceFinishRegistered = false }
         super.onDestroy()
         val decor = window.decorView
         // finish() and onDestroy() alone are not proof that WindowManager removed the window.
@@ -155,4 +175,10 @@ internal object ProbeActivityContract {
     const val FAILED = 4
     const val DETACHED = 5
     const val FINISH = 6
+
+    /**
+     * A package-scoped broadcast that only INJECT_EVENTS holders may send. The Binder finish
+     * endpoint can be lost with the peer; this always reaches the probe's own process.
+     */
+    const val ACTION_FINISH = "$PACKAGE.phone.probe.FINISH"
 }
