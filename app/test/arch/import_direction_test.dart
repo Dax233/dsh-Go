@@ -54,7 +54,6 @@ const _allowed = {
   'state/media_generation.dart -> ui/chat/media/generate_header.dart',
   'state/media_settings.dart -> ui/chat/media/generate_header.dart',
   'state/schedule_editor_state.dart -> ui/features/schedule_editor/time_zones.dart',
-  'state/ui_mode_state.dart -> ui/web/web_target.dart',
   'state/voice_state.dart -> ui/chat/voice/voice_bridge.dart',
   'ui_config/ui_config_icons.dart -> ui/theme/app_icons.dart',
   'ui_config/ui_config_state.dart -> ui/theme/accent.dart',
