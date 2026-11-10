@@ -82,6 +82,11 @@ for f in package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml; do
   if [ -f "$D/web/$f" ]; then cp -a "$D/web/$f" "$D/web-phone/$f"; fi
 done
 ln -sfn ../web/node_modules "$D/web-phone/node_modules"
+# A profile edited outside the app can end without a newline; appending would
+# then glue the first inserted line onto its last line and break the overlay.
+if [ -s "$D/web-phone/cordis.patch.yml" ] && [ -n "$(tail -c 1 "$D/web-phone/cordis.patch.yml")" ]; then
+  printf '\n' >> "$D/web-phone/cordis.patch.yml"
+fi
 if ! grep -q 'id: mcp-phone' "$D/web-phone/cordis.patch.yml"; then
   cat >> "$D/web-phone/cordis.patch.yml" <<'PHONEYAML'
 - insert:
