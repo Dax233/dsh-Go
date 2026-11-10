@@ -60,6 +60,8 @@ dsh-app/
   docs/
 ```
 
+依赖方向：`ui/` 可以 import 其他目录，`ui/` 以外的目录不 import `ui/`（入口 `main.dart`、`app.dart` 除外）。`app/test/arch/import_direction_test.dart` 守着这条，尚未清掉的旧边列在它的白名单里，白名单只减不增；现状用 `cd app && dart run tool/import_graph.dart` 查看。
+
 ## 平台通道约定（Dart ↔ Kotlin）
 
 MethodChannel `dsh/runtime`：
