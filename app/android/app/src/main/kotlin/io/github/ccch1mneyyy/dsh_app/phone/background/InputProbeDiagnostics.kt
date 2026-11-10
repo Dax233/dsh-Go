@@ -15,8 +15,12 @@ internal object InputProbeDiagnostics {
         fun encode(): String = "probe-v1;stage=${stage.wire};type=$exceptionType;elapsedMs=$elapsedMs"
     }
 
+    // Fixed tokens, never a Throwable class name or message: enough to tell a missing
+    // Activity from a dropped PendingIntent without carrying any free-form text.
     private val types = setOf("none", "SecurityException", "IllegalStateException", "IllegalArgumentException",
-        "InvalidDisplayException", "BadTokenException", "TimeoutException", "InterruptedException", "OtherException")
+        "InvalidDisplayException", "BadTokenException", "TimeoutException", "InterruptedException",
+        "ActivityNotFound", "PendingCanceled", "BadParcelable", "Remote", "DeadObject", "ClassCast",
+        "NullPointer", "Runtime", "AndroidRuntime", "OtherException")
     private val wire = Regex("probe-v1;stage=([a-z_]+);type=([A-Za-z]+);elapsedMs=([0-9]{1,5})")
 
     fun observe(stage: Stage, error: Throwable?, elapsedMs: Long): Observation {
@@ -31,6 +35,15 @@ internal object InputProbeDiagnostics {
             "android.view.WindowManager\$BadTokenException" -> "BadTokenException"
             "java.util.concurrent.TimeoutException" -> "TimeoutException"
             "java.lang.InterruptedException" -> "InterruptedException"
+            "android.content.ActivityNotFoundException" -> "ActivityNotFound"
+            "android.app.PendingIntent$CanceledException" -> "PendingCanceled"
+            "android.os.BadParcelableException" -> "BadParcelable"
+            "android.os.RemoteException" -> "Remote"
+            "android.os.DeadObjectException" -> "DeadObject"
+            "java.lang.ClassCastException" -> "ClassCast"
+            "java.lang.NullPointerException" -> "NullPointer"
+            "java.lang.RuntimeException" -> "Runtime"
+            "android.util.AndroidRuntimeException" -> "AndroidRuntime"
             else -> "OtherException"
         }
         return Observation(stage, type, elapsedMs.coerceIn(0, 60_000))
