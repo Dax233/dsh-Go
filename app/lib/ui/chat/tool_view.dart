@@ -87,7 +87,9 @@ class ToolView {
       other.pendingApproval?.eventId == item.pendingApproval?.eventId;
 
   static Map<String, Object?>? _decode(String raw) {
-    if (raw.trim().isEmpty) return null;
+    // An object's JSON ends in `}`. Arguments still streaming mostly don't:
+    // skip the parse that would throw on every delta.
+    if (!raw.trimRight().endsWith('}')) return null;
     try {
       final value = jsonDecode(raw);
       return value is Map<String, Object?> ? value : null;
