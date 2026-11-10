@@ -46,6 +46,13 @@ internal class ProbeActivitySession {
     fun close(timeoutMs: Long = 2_000) {
         // The job only sends a Binder finish request; it does not run or wait on an Android UI.
         cleanup.close(onUiThread = true, post = { false })
-        if (!destroyed.await(timeoutMs, TimeUnit.MILLISECONDS)) throw TimeoutException()
+        if (destroyed.await(timeoutMs, TimeUnit.MILLISECONDS)) return
+        // A PendingIntent that was accepted can still be dropped silently (background
+        // activity limits), leaving no Activity to finish. Reporting a timeout there keeps
+        // this probe retained forever and the channel busy, so an unconnected session is
+        // closed as clean; a late creation is finished by connected() seeing the seal.
+        val neverConnected = synchronized(this) { finisher == null }
+        if (neverConnected) { destroyed.countDown(); return }
+        throw TimeoutException()
     }
 }
