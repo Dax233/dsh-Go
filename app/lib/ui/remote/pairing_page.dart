@@ -8,6 +8,7 @@
 import 'dart:async';
 
 import 'package:dsh_remote/dsh_remote.dart' show formatPairingFingerprint;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -598,6 +599,17 @@ class _CameraScannerState extends State<_CameraScanner> {
     detectionSpeed: DetectionSpeed.noDuplicates,
   );
   bool _reported = false;
+  late final Future<void> _initialization;
+
+  @override
+  void initState() {
+    super.initState();
+    // Android disables ML Kit's eager provider for OCR privacy. Both the camera
+    // and photo decoder need the shared SDK before mobile_scanner uses it.
+    _initialization = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? const MethodChannel('dsh/app').invokeMethod<void>('initializePairingScanner')
+        : Future<void>.value();
+  }
 
   @override
   void dispose() {
@@ -606,7 +618,7 @@ class _CameraScannerState extends State<_CameraScanner> {
   }
 
   void _report(BarcodeCapture capture) {
-    if (_reported) return;
+    if (!mounted || _reported) return;
     for (final code in capture.barcodes) {
       final text = code.rawValue;
       if (text == null || text.isEmpty) continue;
@@ -631,9 +643,12 @@ class _CameraScannerState extends State<_CameraScanner> {
     if (picked == null || !mounted) return;
     BarcodeCapture? capture;
     try {
+      await _initialization;
+      if (!mounted) return;
       capture = await _controller.analyzeImage(picked.path, formats: const [BarcodeFormat.qrCode]);
     } catch (_) {
-      capture = null;
+      if (mounted) messenger?.showSnackBar(SnackBar(content: Text(l10n.remotePairScannerFailed)));
+      return;
     }
     if (!mounted) return;
     if (capture == null || capture.barcodes.every((b) => (b.rawValue ?? '').isEmpty)) {
@@ -649,14 +664,25 @@ class _CameraScannerState extends State<_CameraScanner> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        MobileScanner(
-          controller: _controller,
-          onDetect: _report,
-          errorBuilder: (context, error) => _CameraUnavailable(
-            message: error.errorCode == MobileScannerErrorCode.permissionDenied
-                ? l10n.remotePairCameraDenied
-                : l10n.remotePairCameraFailed,
-          ),
+        FutureBuilder<void>(
+          future: _initialization,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return _CameraUnavailable(message: l10n.remotePairScannerFailed);
+            }
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return MobileScanner(
+              controller: _controller,
+              onDetect: _report,
+              errorBuilder: (context, error) => _CameraUnavailable(
+                message: error.errorCode == MobileScannerErrorCode.permissionDenied
+                    ? l10n.remotePairCameraDenied
+                    : l10n.remotePairCameraFailed,
+              ),
+            );
+          },
         ),
         const IgnorePointer(child: CustomPaint(painter: _FramePainter())),
         Positioned(

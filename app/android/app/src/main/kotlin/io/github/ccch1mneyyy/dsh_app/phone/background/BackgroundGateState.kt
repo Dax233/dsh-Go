@@ -59,22 +59,6 @@ internal class BackgroundGateState {
         needsRetest = false
         return true
     }
-
-    /**
-     * The platform refused the probe's own window (Android 16 denies a window
-     * context to the UserService), so input delivery cannot be proven here. Keep
-     * the display fact that did succeed and leave the input fact unknown, which
-     * is exactly what builds before the strict probe knew. A real task injects
-     * through its own path and reports its own failures.
-     */
-    @Synchronized fun acceptRestricted(owner: Probe, detail: String): Boolean {
-        if (!current(owner)) return false
-        failedChannel = null
-        snapshot = Snapshot(trustedDisplayOk = true, injectOk = null, gateDetail = detail)
-        needsRetest = false
-        return true
-    }
-
     @Synchronized fun reset() { probe = null; failedChannel = null; snapshot = Snapshot() }
 
     /** A deliberate retry can enter even after a failure; it does not erase capability facts. */

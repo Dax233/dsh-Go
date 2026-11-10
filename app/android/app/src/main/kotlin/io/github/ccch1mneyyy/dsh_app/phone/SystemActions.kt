@@ -99,11 +99,15 @@ class SystemActions(private val app: Context) : SystemApi {
     ) : SystemLaunch
 
     private fun handler(info: ActivityInfo?): SystemHandler? {
-        if (info == null || !info.enabled || !info.exported) return null
+        if (info == null || !info.exported) return null
         val application = info.applicationInfo ?: return null
         val pkg = info.packageName ?: return null
         val component = info.name ?: return null
         if (!application.enabled || application.packageName != pkg) return null
+        val enabled = SystemHandlers.componentEnabled(info.enabled) {
+            pm.getComponentEnabledSetting(ComponentName(pkg, component))
+        }
+        if (!enabled) return null
         return SystemHandler(pkg, component, application.uid)
     }
 

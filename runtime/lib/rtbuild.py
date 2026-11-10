@@ -33,6 +33,21 @@ BOOT_CACHE = "/opt/dsh-go/boot-cache.mjs"
 BOOT_CACHE_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "boot", "boot-cache.mjs")
 DIRECT_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "direct")
 PNPM_BINS = {"pnpm": "pnpm.mjs", "pnpx": "pnpx.mjs", "pn": "pnpm.mjs", "pnx": "pnpx.mjs"}
+# Only these app-owned paths may change during an engine upgrade. Python (including
+# pip packages), dpkg, /usr and the rest of /usr/local remain the user's system.
+ENGINE_PATHS = [
+    "opt/dsh", "opt/node", "opt/dsh-go", "etc/dsh-app",
+    "etc/profile.d/dsh-app.sh", "usr/local/lib/node_modules/pnpm",
+] + ["usr/local/bin/" + name for name in ("dsh", "node", "npm", "npx", "corepack", *PNPM_BINS)]
+
+
+def upgrade_descriptor(abi, ubuntu_version, base_sha, deb_shas, python_sha):
+    # Deliberately excludes DSH, Node, bridges, patches and build timestamps.
+    system = [abi, base_sha, sorted(deb_shas), python_sha]
+    identity = hashlib.sha256(json.dumps(system, sort_keys=True).encode()).hexdigest()
+    return {"schema": 1, "baseId": identity, "ubuntuVersion": ubuntu_version,
+            "paths": ENGINE_PATHS}
+
 ABI = {
     "arm64-v8a": {"machine": 183, "npm_cpu": "arm64", "node": "arm64", "ubuntu": "arm64", "termux": "aarch64"},
     "x86_64": {"machine": 62, "npm_cpu": "x64", "node": "x64", "ubuntu": "amd64", "termux": "x86_64"},
@@ -959,6 +974,16 @@ def cmd_assemble(args):
         if len(samples) < 12:
             samples.append(path)
 
+    runtime_info = json.loads(args.runtime_info)
+    def digest(path):
+        with open(path, "rb") as source:
+            return hashlib.file_digest(source, "sha256").hexdigest()
+    upgrade = upgrade_descriptor(abi, runtime_info["ubuntuVersion"], digest(args.base),
+                                 [digest(p) for p in args.deb or []],
+                                 digest(args.python) if args.python else None)
+    runtime_info["upgrade"] = upgrade
+    report["upgrade"] = upgrade
+
     # 1. Ubuntu Base
     hardlinks = []
     with tarfile.open(args.base, "r:gz") as t:
@@ -1153,7 +1178,6 @@ def cmd_assemble(args):
         add_tree(args.bridge, DSH_GO_BRIDGE.lstrip("/"), "bridge", lambda rel, abi, prune: None)
 
     # 4. dsh-app overlay (wins over everything above)
-    runtime_info = json.loads(args.runtime_info)
     for p, e in overlay_entries(runtime_info, with_python=bool(args.python), with_pnpm=bool(args.pnpm_prefix),
                                 with_bridge=bool(args.bridge)).items():
         entries[p] = e
@@ -1415,6 +1439,7 @@ def cmd_manifest(args):
     m = {
         "schema": 1,
         "runtimeVersion": v["runtimeVersion"],
+        "upgrade": report.get("upgrade"),
         "abi": args.abi,
         "rootfs": report["archive"],
         "rootfsFormat": "tar.xz" if report["archive"].endswith(".xz") else "tar.gz",

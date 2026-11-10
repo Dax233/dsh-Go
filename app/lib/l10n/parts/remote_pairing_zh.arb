@@ -9,6 +9,7 @@
   "remotePairScanHint": "对准电脑上 Remote 插件显示的配对二维码",
   "remotePairPasteLink": "粘贴配对链接",
   "remotePairPasteEmpty": "剪贴板里没有配对链接",
+  "remotePairScannerFailed": "二维码识别器不可用。可以粘贴配对链接继续配对。",
   "remotePairFromImage": "从相册识别",
   "remotePairImageNoCode": "这张图里没找到二维码",
   "remotePairCameraDenied": "没有相机权限。可以在系统设置里打开，或者用「从相册识别」「粘贴配对链接」",

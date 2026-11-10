@@ -7,73 +7,17 @@ import android.system.Os
 import android.system.OsConstants
 import android.view.Display
 import java.io.File
-import java.util.UUID
 
 /** Only fixed proc paths, signal zero and full raw Binder scope queries. Never removes a display. */
 internal class RecoveryPlatform {
-    /** Which source produced the boot identity, and why the first one failed (diagnostics only). */
-    @Volatile var lastBirthSource: String? = null
-    @Volatile var lastBirthError: String? = null
-
     fun birth(peer: String): ResourceRecovery.Birth {
-        val boot = bootId() ?: throw ResourceRecovery.Failure("recoveryUnavailable")
+        val boot = ResourceRecovery.uuid(File("/proc/sys/kernel/random/boot_id").readText().trim())
+            ?: throw ResourceRecovery.Failure("recoveryUnavailable")
+        // Some OEMs deny this namespace path. Missing evidence must not become a fake namespace.
+        val ns = try { Os.stat("/proc/self/ns/pid") } catch (_: Exception) { null }
         val pid = Process.myPid(); val uid = Process.myUid()
-        // This process' identity. /proc/self/ns/pid is the documented source;
-        // some Android 16 builds answer ENOENT to it inside a UserService, so
-        // fall back to /proc/self and, when not even that can be stat-ed, to the
-        // pid itself. The probe and every later check run inside this same
-        // process, so any of the three stays consistent for the lifetime it is
-        // used for.
-        var ns = runCatching { Os.stat("/proc/self/ns/pid") }.onFailure {
-            lastBirthError = (lastBirthError ?: "") + " ns:" + it.javaClass.simpleName
-        }.getOrNull()
-        var nsSource = "ns"
-        if (ns == null) {
-            // init's namespace entry is the same inode for every process of this
-            // namespace, so it keeps the cross-process meaning when the self
-            // entry is not stat-able.
-            ns = runCatching { Os.stat("/proc/1/ns/pid") }.onFailure {
-                lastBirthError = (lastBirthError ?: "") + " init:" + it.javaClass.simpleName
-            }.getOrNull()
-            if (ns != null && ns.st_ino > 0) nsSource = "init"
-        }
-        if (ns == null) {
-            ns = runCatching { Os.stat("/proc/self") }.onFailure {
-                lastBirthError = (lastBirthError ?: "") + " self:" + it.javaClass.simpleName
-            }.getOrNull()
-            nsSource = "self"
-        }
-        val stale = ns
-        val dev = if (stale != null && stale.st_ino > 0) stale.st_dev else 0L
-        val ino = if (stale != null && stale.st_ino > 0) stale.st_ino else pid.toLong().also { nsSource = "pid" }
-        lastBirthSource = (lastBirthSource ?: "") + "+" + nsSource
-        if (pid <= 0 || uid < 0 || ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
-        return ResourceRecovery.Birth(peer, boot, pid, uid, dev, ino)
-    }
-
-    /**
-     * /proc/sys/kernel/random/boot_id is the documented source; some Android 15+
-     * builds refuse that path to an app-domain process, so fall back to the
-     * kernel boot time turned into the same UUID shape. Both change only on a
-     * reboot, which is all a "previous boot?" check needs.
-     */
-    private fun bootId(): String? {
-        runCatching { File("/proc/sys/kernel/random/boot_id").readText().trim() }
-            .onSuccess { text -> ResourceRecovery.uuid(text)?.let { lastBirthSource = "boot_id"; return it } }
-            .onFailure { e -> lastBirthError = e.javaClass.simpleName + ": " + e.message }
-        val btime = runCatching {
-            File("/proc/stat").useLines { lines -> lines.firstOrNull { it.startsWith("btime ") } }
-        }.getOrNull()?.trim()?.split(" ")?.getOrNull(1)
-        if (btime != null) {
-            lastBirthSource = "btime"
-            return UUID.nameUUIDFromBytes("dsh-btime:$btime".toByteArray()).toString()
-        }
-        // Last resort: wall-clock boot time (now minus uptime), rounded to the
-        // minute. It changes only on a reboot, which is all the protocol asks.
-        val bootWall = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
-        val minutes = bootWall / 60_000L
-        lastBirthSource = "wall"
-        return UUID.nameUUIDFromBytes("dsh-wall:$minutes".toByteArray()).toString()
+        if (pid <= 0 || uid < 0 || ns != null && ns.st_ino <= 0) throw ResourceRecovery.Failure("recoveryUnavailable")
+        return ResourceRecovery.Birth(peer, boot, pid, uid, ns?.st_dev ?: 0L, ns?.st_ino ?: 0L, ns != null)
     }
 
     private val managerType by lazy { Class.forName("android.hardware.display.IDisplayManager") }

@@ -84,7 +84,7 @@ class RootStarter(private val context: Context, private val onChanged: () -> Uni
                         val ack = Bundles.unmarshal(process.exchange(Bundles.marshal(MuxProtocol.optIn(peer)), remaining()))
                         MuxProtocol.acknowledge(ack, peer)
                     }
-                    backgroundLimit = backgroundRequestLimit(probe::get, negotiated != null)
+                    backgroundLimit = backgroundRequestLimit(probe::get, probe::containsKey, negotiated != null)
                     null
                 }
             }

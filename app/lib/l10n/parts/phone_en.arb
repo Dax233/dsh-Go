@@ -592,7 +592,7 @@
   "phoneLocalOcrTitle": "On-device text recognition (ML Kit)",
   "phoneLocalOcrUnknown": "This setting could not be read. Refresh and try again.",
   "phoneLocalOcrDisclosure": "Recognition runs on this device. Screenshots and text are not sent to Google; Google’s SDK collects usage statistics such as device model, app version and processing time.",
-  "phoneLocalOcrDetails": "Enabled by default. While off, recognition requests do not trigger SDK loading or initialization. Screenshots and recognized text may be sent to your configured model. Turning this off prevents new local recognition; work already started may still finish. It does not uninstall the SDK or promise to clear or stop sending previously accumulated SDK statistics.",
+  "phoneLocalOcrDetails": "Enabled by default. While off, text recognition requests do not trigger SDK loading or initialization. Remote pairing initializes the shared SDK separately when its scanner opens; it does not enable text recognition. Screenshots and recognized text may be sent to your configured model. Turning this off prevents new local recognition; work already started may still finish. It does not uninstall the SDK or promise to clear or stop sending previously accumulated SDK statistics.",
   "phoneBackgroundParallelTitle": "Background task limit",
   "phoneBackgroundParallelStatus": "Configured: {configured} · Available limit: {effective} · Occupied: {held}",
   "phoneBackgroundParallelDescription": "A lower limit keeps existing tasks. New tasks still wait for apps and the main screen to become available.",

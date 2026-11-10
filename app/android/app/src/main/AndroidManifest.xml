@@ -212,6 +212,18 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
 
+        <!-- The privileged gate starts only this inert receiver. Ordinary apps cannot launch it. -->
+        <activity
+            android:name=".phone.background.BackgroundProbeActivity"
+            android:exported="true"
+            android:permission="android.permission.INJECT_EVENTS"
+            android:process=":input_probe"
+            android:launchMode="standard"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
         <!-- Local self-check only: App UID starts this fixed inert target on its leased display. -->
         <activity
             android:name=".phone.selfcheck.PhoneSelfCheckTargetActivity"
@@ -331,7 +343,7 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Initialized manually only by an admitted local OCR call. -->
+        <!-- Initialized on demand by Remote pairing or an admitted local OCR call, never at app startup. -->
         <provider
             android:name="com.google.mlkit.common.internal.MlKitInitProvider"
             android:authorities="${applicationId}.mlkitinitprovider"

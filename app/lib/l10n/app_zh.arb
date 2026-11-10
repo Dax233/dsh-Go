@@ -943,6 +943,85 @@
     }
   },
   "activityToolListSeparator": "、",
+  "androidShellTitle": "Android Shell",
+  "androidShellEntryHint": "独立的系统命令通道，默认关闭",
+  "androidShellSubtitle": "通过 Shizuku 或自连 ADB 在这台手机上执行 Android 系统命令，不是 Ubuntu 里的 bash。",
+  "androidShellEnable": "允许 Android Shell",
+  "androidShellEnableHint": "独立开关，不随不打扰模式或屏幕免确认设置开启。",
+  "androidShellConfirmationNote": "每条命令都要经过手机上的原生确认；屏幕操控的「免确认」不适用于这里。Shell 权限范围与屏幕操控不同，不能依靠应用名单拦截所有命令。",
+  "androidShellMasterOff": "先在上一页打开「手机操控」，才能启用 Android Shell。你仍可在这里查看授权和配对引导。",
+  "androidShellRiskTitle": "允许执行 Android 系统命令？",
+  "androidShellRiskBody": "命令使用所选通道的实际 UID，可能修改应用、系统设置和共享文件。它不受屏幕应用名单完整保护；每条命令仍会单独请求原生确认。只允许你理解并信任的命令。",
+  "androidShellRiskAction": "允许 Android Shell",
+  "androidShellBackend": "执行通道",
+  "androidShellShizukuHint": "使用已安装并启动的 Shizuku，需单独授权；不需要 Android 14、无障碍或不打扰模式。",
+  "androidShellAdb": "自连 ADB",
+  "androidShellAdbHint": "连接本机的无线调试，复用 App 的私有 ADB 身份；不会连接其他设备。",
+  "androidShellInstalled": "Shizuku 已安装",
+  "androidShellRunning": "Shizuku 正在运行",
+  "androidShellGranted": "Shizuku 已授权",
+  "androidShellPaired": "ADB 已配对",
+  "androidShellConnected": "ADB 已连接",
+  "androidShellAuthorize": "申请 Shizuku 授权",
+  "androidShellAuthorizeHint": "先安装并启动 Shizuku，再点此按钮允许 dsh-Go。打开本页或刷新不会申请授权。",
+  "androidShellStatus": "执行状态",
+  "androidShellUid": "实际 UID",
+  "androidShellUidUnknown": "尚未报告",
+  "androidShellRefresh": "刷新状态",
+  "androidShellStop": "停止 Android Shell",
+  "androidShellStopHint": "取消当前命令并停止独立 Shell 执行，不关闭屏幕操控。",
+  "androidShellPairingGuide": "在开发者选项中打开「无线调试」，选择「使用配对码配对设备」。配对码只在本次配对中使用，不保存、不写入日志。",
+  "androidShellStartPairing": "打开配对引导",
+  "androidShellPair": "输入配对码",
+  "androidShellPairSubmit": "配对",
+  "androidShellPairCode": "六位配对码",
+  "androidShellPairPort": "配对端口（可选）",
+  "androidShellPairPortHint": "填配对弹窗里的端口，不是无线调试主页的连接端口；留空时尝试自动发现。",
+  "androidShellConnect": "连接 ADB",
+  "androidShellConnectChannel": "连接所选通道",
+  "androidShellConnectPort": "连接端口（可选）",
+  "androidShellConnectPortHint": "填无线调试主页「IP 地址和端口」中的端口，不是配对端口。只连接本机；留空时尝试自动发现。",
+  "androidShellErrorCode": "错误码：{code}",
+  "@androidShellErrorCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "androidShellLimits": "单次最长 {seconds} 秒，输出最多 {bytes} 字节",
+  "@androidShellLimits": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      },
+      "bytes": {
+        "type": "int"
+      }
+    }
+  },
+  "androidShellErrorDisabled": "Android Shell 已关闭。",
+  "androidShellErrorNotConnected": "所选通道尚未连接。",
+  "androidShellErrorShizukuMissing": "请先安装 Shizuku。",
+  "androidShellErrorShizukuStopped": "请先启动 Shizuku，再刷新状态。",
+  "androidShellErrorPermissionRequired": "需要你在 Shizuku 中明确授权。",
+  "androidShellErrorAdbNotPaired": "请先完成本机无线调试配对，再连接 ADB。",
+  "androidShellErrorConnectFailed": "连接未成功。请检查所选通道和当前无线调试连接端口，再重试。",
+  "androidShellErrorIdentityChanged": "通道身份已改变，请停止后重新授权或连接。",
+  "androidShellErrorBusy": "另一项操作尚未结束，请稍后重试，或先停止 Android Shell。",
+  "androidShellErrorInvalidArguments": "输入无效。配对码须为六位数字，端口须在 1–65535 之间。",
+  "androidShellErrorCancelled": "操作已取消。",
+  "androidShellErrorTimeout": "操作超时。先核实结果；已派发的命令不要自动重试。",
+  "androidShellErrorConfirmationDenied": "未获准执行命令。",
+  "androidShellErrorCleanupFailed": "未能完成停止清理。请重试停止，暂勿执行新命令。",
+  "androidShellErrorLocked": "手机已锁定，请解锁后重试。",
+  "androidShellErrorConfirmationUnavailable": "当前无法显示原生确认，请回到 App 并检查通知权限。",
+  "androidShellErrorTransportLost": "通道已断开。先核实结果；已派发的命令不要自动重试，需要时重新连接。",
+  "androidShellErrorProtocolMismatch": "当前原生模块不支持此 Shell 协议，请更新 App。",
+  "androidShellErrorNativeUnavailable": "此构建的 Android Shell 原生模块不可用。",
+  "androidShellErrorInvalidResponse": "没有收到有效的原生状态，请刷新或更新 App。",
+  "androidShellErrorStopFailed": "未确认已停止，请刷新状态并重试停止。",
+  "androidShellErrorUnknown": "未能确认操作结果。先核实结果；已派发的命令不要自动重试。",
   "botsFolderGone": "这个文件夹已经不在了",
   "botsFolderReadFailed": "没能读取这个文件夹",
   "botsFolderOpenFailed": "打不开这个文件夹",
@@ -6738,7 +6817,7 @@
   "phoneLocalOcrTitle": "本机文字识别（ML Kit）",
   "phoneLocalOcrUnknown": "暂时无法读取本机文字识别设置，请刷新后再试。",
   "phoneLocalOcrDisclosure": "识别在本机进行，截图和文字不会发给 Google；Google 的 SDK 会收集机型、应用版本、耗时等使用统计。",
-  "phoneLocalOcrDetails": "默认开启。关闭时，识别请求不会触发 SDK 加载或初始化。截图和识别文字可能发送给你配置的模型。关闭后不再开始新的本机文字识别；已经开始的识别可能仍在收尾。关闭不会卸载 SDK，也不承诺清除或停止发送此前积累的 SDK 统计。",
+  "phoneLocalOcrDetails": "默认开启。关闭时，文字识别请求不会触发 SDK 加载或初始化；Remote 扫码配对会独立按需初始化共用的 SDK，不会开启文字识别。截图和识别文字可能发送给你配置的模型。关闭后不再开始新的本机文字识别；已经开始的识别可能仍在收尾。关闭不会卸载 SDK，也不承诺清除或停止发送此前积累的 SDK 统计。",
   "phoneBackgroundParallelTitle": "后台任务上限",
   "phoneBackgroundParallelStatus": "设置上限：{configured} · 当前可用上限：{effective} · 已占用：{held}",
   "@phoneBackgroundParallelStatus": {
@@ -9424,6 +9503,7 @@
   "remotePairScanHint": "对准电脑上 Remote 插件显示的配对二维码",
   "remotePairPasteLink": "粘贴配对链接",
   "remotePairPasteEmpty": "剪贴板里没有配对链接",
+  "remotePairScannerFailed": "二维码识别器不可用。可以粘贴配对链接继续配对。",
   "remotePairFromImage": "从相册识别",
   "remotePairImageNoCode": "这张图里没找到二维码",
   "remotePairCameraDenied": "没有相机权限。可以在系统设置里打开，或者用「从相册识别」「粘贴配对链接」",
@@ -9546,6 +9626,11 @@
   "askAiQuestionAllowForChat": "「本对话都允许」会放行哪些操作？怎么关掉？",
   "askAiQuestionPlugins": "插件能做什么？装第三方插件要注意什么？",
   "askAiQuestionRemote": "怎么连接自己的电脑或服务器？和用本机有什么不同？",
+  "phoneRuntimeUpgradeBase": "新引擎与现有 Linux 环境不能确认兼容，更新已停止。原环境和已装工具没有删除。请先完整备份，再联系维护者迁移；不要直接重置或卸载 App。",
+  "phoneRuntimeUpgradeManifest": "无法安全识别运行时更新清单，更新已停止，原环境保留。请核对安装包并联系维护者，不要直接重置。",
+  "phoneRuntimeUpgradeInterrupted": "运行时升级尚未完成，数据与恢复现场已保留。请重试安装；仍失败时导出诊断并联系维护者，不要重置或删除恢复目录。",
+  "phoneRuntimeUpgradeSymlink": "现有环境的系统路径已被自定义链接替换，无法安全更新。原环境保留，请先备份并联系维护者处理。",
+  "phoneRuntimeUpgradeRunning": "引擎或遗留进程尚未确认停止，更新未开始。请先停止本机引擎，等待清理完成后重试；不要重置环境。",
   "schemaDocumentationTitle": "字段说明",
   "schemaDocumentationOverview": "概述",
   "schemaDocumentationEach": "每一项",
@@ -9684,6 +9769,58 @@
   "searchKwPluginsMarket": "插件市场,安装插件,市场,获取插件",
   "searchKwUsageStats": "统计,使用统计,匿名,隐私,数据,改进,遥测,分析",
   "searchKwQuickPanel": "左滑,快捷入口,手势,滑动,目录,自定义目录,快捷,常用入口",
+  "selfUpdateTransport": "安装路线",
+  "selfUpdateSystem": "正常安装（默认）",
+  "selfUpdateShizuku": "Shizuku",
+  "selfUpdateAdb": "本机 ADB",
+  "selfUpdateSecurityNote": "各路线仍受 APK 签名、Android 与厂商安全策略约束，不保证跳过扫描。不支持 root，也不会在失败后自动切换路线。",
+  "selfUpdateNativeConfirm": "只安装已校验的本应用更新；稍后仍需原生安装确认。授权 Shizuku 不等于同意安装，不需要开启手机操控或 AI Shell。",
+  "selfUpdateAuthorize": "申请更新用 Shizuku 授权",
+  "selfUpdateRefresh": "刷新通道状态",
+  "selfUpdateShizukuStatus": "Shizuku：{status}",
+  "@selfUpdateShizukuStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "selfUpdateReady": "已授权",
+  "selfUpdatePermissionRequired": "请先安装、启动并授权 Shizuku",
+  "selfUpdateUnsupportedIdentity": "仅支持 shell UID 2000；root 与其他身份不受支持",
+  "selfUpdateAdbHint": "使用已配对的本机无线调试身份；点击安装才连接。未配对时可打开现有 Android Shell 配对页，无需开启手机操控或 AI Shell。配对码和端口不保存、不写入日志。",
+  "selfUpdatePairing": "打开 Android Shell 配对引导",
+  "selfUpdateAdbPaired": "本机 ADB 已配对",
+  "selfUpdateAdbNotPaired": "本机 ADB 尚未配对",
+  "selfUpdatePendingTitle": "正在核实安装结果",
+  "selfUpdatePendingMessage": "安装请求可能仍在处理。不会自动重试或切换路线；请查看系统提示，再读取实际安装状态。",
+  "selfUpdateUnknownTitle": "安装结果未知",
+  "selfUpdateUnknownMessage": "超时、失联或进程退出不能证明失败。不会自动重试或切换路线；请先读取实际安装状态。",
+  "selfUpdateReadResult": "读取实际安装状态",
+  "selfUpdateVerifiedTitle": "已核实当前安装版本",
+  "selfUpdateVerifiedVersion": "当前版本 {version}（构建 {code}），已由原生层核验。",
+  "@selfUpdateVerifiedVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "code": {
+        "type": "int"
+      }
+    }
+  },
+  "selfUpdateFailedTitle": "安装未完成",
+  "selfUpdateFailedMessage": "原生层报告本次安装失败。请检查系统提示和错误码，再明确选择安装路线。",
+  "selfUpdateErrorCode": "错误码：{code}",
+  "@selfUpdateErrorCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "selfUpdateEndWaiting": "结束本次等待",
+  "selfUpdateEndWaitingNote": "只有确认系统已不在安装时才结束等待。清除本次记录不等于取消系统安装；不会自动重试或切换路线，仍需再次原生确认。",
   "shellDeletePermanently": "永久删除",
   "shellDeleteNoUndo": "无法撤销，与归档不同",
   "shellDeleteChecking": "正在检查此主机是否支持永久删除…",
@@ -11330,7 +11467,7 @@
   },
   "usageStatsTitle": "发送匿名使用统计",
   "usageStatsSection": "改进 DSH Go",
-  "usageStatsFooter": "这个开关只控制 dsh-go 自身的使用次数、版本和手机品牌统计，不含对话、文件和账号；它不控制 Google ML Kit SDK 的统计。",
+  "usageStatsFooter": "这个开关只控制 dsh-go 自身的使用次数、版本、手机品牌和型号、系统版本统计，不含对话、文件和账号；它不控制 Google ML Kit SDK 的统计。",
   "usageNoticeBody": "不含对话和个人信息，可随时关闭",
   "usageUpgradeNotice": "新增匿名使用统计，帮助改进 DSH Go。\n不含对话和个人信息",
   "usageUpgradeLearn": "了解",

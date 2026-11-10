@@ -9,6 +9,7 @@
   "remotePairScanHint": "Point the camera at the pairing code the Remote plugin shows on your computer",
   "remotePairPasteLink": "Paste pairing link",
   "remotePairPasteEmpty": "No pairing link on the clipboard",
+  "remotePairScannerFailed": "The QR reader is unavailable. Paste the pairing link to continue pairing.",
   "remotePairFromImage": "From photos",
   "remotePairImageNoCode": "No QR code found in that image",
   "remotePairCameraDenied": "No camera access. Turn it on in system settings, or use From photos or Paste pairing link.",

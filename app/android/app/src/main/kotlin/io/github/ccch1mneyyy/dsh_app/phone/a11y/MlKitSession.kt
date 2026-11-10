@@ -3,15 +3,15 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
 import android.content.Context
 import android.graphics.Bitmap
 import com.google.android.gms.tasks.OnCompleteListener
-import com.google.mlkit.common.MlKit
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import io.github.ccch1mneyyy.dsh_app.mlkit.MlKitRuntime
 import java.util.concurrent.Executor
 
-/** The only SDK entry; host construction and settings do not instantiate this class. */
+/** The OCR SDK entry; host construction and settings do not instantiate this class. */
 internal class MlKitSession private constructor(private val recognizer: TextRecognizer) {
     fun start(bitmap: Bitmap, beforeProcess: () -> Boolean, accepting: () -> Boolean,
               complete: (LocalOcrResult) -> Unit): Boolean {
@@ -41,18 +41,10 @@ internal class MlKitSession private constructor(private val recognizer: TextReco
     fun close() = recognizer.close()
 
     companion object {
-        // Only the process host's single occupied slot can call create. OFF never resets these.
-        private var initializationAttempted = false
-        private var initializationSucceeded = false
         private val DIRECT = Executor { it.run() }
 
         fun create(context: Context): MlKitSession {
-            if (!initializationSucceeded) {
-                check(!initializationAttempted) { "ML Kit initialization unavailable" }
-                initializationAttempted = true
-                MlKit.initialize(context.applicationContext)
-                initializationSucceeded = true
-            }
+            MlKitRuntime.initialize(context)
             return MlKitSession(TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build()))
         }
 
