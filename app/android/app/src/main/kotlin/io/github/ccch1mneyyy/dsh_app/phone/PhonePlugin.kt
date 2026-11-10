@@ -227,7 +227,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             }
             "retryTaskInterruptionStorage" -> async(result) { control.retryTaskInterruptionStorage() }
             "retryBackgroundRecovery" -> async(result) { control.retryBackgroundRecovery() }
-            "discardOldBackgroundResources" -> async(result) { control.discardOldResourceRecords() }
+            "discardOldBackgroundResources" -> async(result) { control.discardOldBackgroundResources() }
             "startPhoneSelfCheck", "phoneSelfCheckStatus", "cancelPhoneSelfCheck",
             "retryPhoneSelfCheckCleanup" -> selfCheckCall(call, result)
             "setBackgroundParallelLimit" -> async(result, shortControl = true) {

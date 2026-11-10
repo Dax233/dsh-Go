@@ -840,6 +840,15 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         } finally { emitStatus() }
     }
 
+    /**
+     * Explicit escape hatch for stored records whose verified-absence receipt can never be
+     * produced (an OS upgrade changed the recovery identity). Kept separate from recovery so
+     * nothing clears a record without the person asking for it.
+     */
+    fun discardOldBackgroundResources(): Map<String, Any?> = try {
+        background.discardOldResourceRecords()
+    } finally { emitStatus() }
+
     private fun settleStoredTask(): Map<String, Any?>? {
         for (taskId in background.pendingStoredTaskIds()) {
             // The original driver already has a physical completion proof. Persist its clear
