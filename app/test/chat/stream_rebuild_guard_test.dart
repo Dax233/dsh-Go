@@ -189,9 +189,20 @@ class _Guard {
     }
   }
 
-  Future<void> dispose() async {
+  /// Unmounts and disposes before the test ends: the controller's timers
+  /// go with the container.
+  Future<void> unmount(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox());
+    dispose();
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  var _disposed = false;
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     container.dispose();
-    await client.events.close();
+    unawaited(client.events.close());
   }
 }
 
@@ -255,15 +266,16 @@ void main() {
     expect(counts.live, greaterThan(0), reason: 'the reply being written rebuilds');
     expect(counts.done, 0, reason: 'finished rows must not rebuild while a reply streams');
     expect(counts.derivations, 0, reason: 'a text delta must not derive the rows again');
+    await g.unmount(tester);
   }
 
   testWidgets('a streaming reply rebuilds only its own row', (tester) async {
     await streamText(tester);
-  }, skip: true); // A1
+  });
 
   testWidgets('a streaming reply with queued messages derives no rows per delta', (tester) async {
     await streamText(tester, queued: ['排队一', '排队二']);
-  }, skip: true); // A1, A2
+  }, skip: true); // A2
 
   testWidgets('streaming tool arguments rebuild only the tool being written', (tester) async {
     final g = _Guard();
@@ -293,5 +305,6 @@ void main() {
     expect(counts.live, greaterThan(0), reason: 'the tool call being written rebuilds');
     expect(counts.done, 0, reason: 'finished rows must not rebuild while tool arguments stream');
     expect(counts.derivations, 0, reason: 'an argument delta must not derive the rows again');
-  }, skip: true); // A1, A2
+    await g.unmount(tester);
+  }, skip: true); // A2
 }

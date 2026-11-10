@@ -17,12 +17,14 @@ class ChatRowsCache {
 
   Map<String, int> get index => _index;
 
-  List<ChatRow> update(
-    ChatState state, {
-    required bool foldTurns,
-    List<TurnArtifacts> artifacts = const [],
-  }) {
+  /// The last [update] changed nothing but the streaming draft's row: every
+  /// other row object is the one it was, and so is everything they show.
+  bool get onlyDraftChanged => _onlyDraftChanged;
+  bool _onlyDraftChanged = false;
+
+  List<ChatRow> update(ChatState state, {required bool foldTurns, List<TurnArtifacts> artifacts = const []}) {
     final previous = _state;
+    _onlyDraftChanged = false;
     List<ChatRow>? reused;
     if (previous != null &&
         foldTurns == _foldTurns &&
@@ -87,6 +89,7 @@ class ChatRowsCache {
     if (row is! AssistantRow || !identical(row.item, before) || row.showActions || row.footnote != null) return null;
     // Running drafts are not folded or given a copy action. Updating the
     // final draft cannot change earlier groups or trailing pending cards.
+    _onlyDraftChanged = true;
     return [..._rows]..[at] = AssistantRow(after);
   }
 }
