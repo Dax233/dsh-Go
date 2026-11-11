@@ -361,6 +361,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           ref.read(voiceModelProvider).status == VoiceModelStatus.ready,
       // The capability probe is async and can finish after this page is gone.
       client: () => mounted ? ref.read(activeConnectionProvider).value?.client : null,
+      inputOwner: () => mounted ? ref.read(activeHostProvider) : null,
       onRecognized: () {
         if (mounted) ref.read(usageStatsProvider.notifier).count(UsageCount.voice);
       },
