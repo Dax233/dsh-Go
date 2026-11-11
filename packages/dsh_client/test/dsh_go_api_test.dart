@@ -334,6 +334,40 @@ void main() {
       );
     });
 
+    test('HTTP errors accept nested and legacy flat codes, with nested taking precedence', () async {
+      host.status = 422;
+      for (final body in [
+        {
+          'error': {'code': 'invalid-config', 'message': 'check field'},
+          'code': 'obsolete-code',
+          'message': 'obsolete message',
+        },
+        {'v': 1, 'code': 'invalid-config', 'message': 'check field'},
+      ]) {
+        host.body = jsonEncode(body);
+        await expectLater(
+          client.readDshGoView('p', 'view'),
+          throwsA(
+            isA<DshRemoteException>()
+                .having((e) => e.code, 'code', 'dsh-go/invalid-config')
+                .having((e) => e.message, 'message', 'check field'),
+          ),
+        );
+      }
+      host.status = 503;
+      for (final body in ['Service Unavailable', '<html>upstream failure</html>']) {
+        host.body = body;
+        await expectLater(
+          client.readDshGoView('p', 'view'),
+          throwsA(
+            isA<DshRemoteException>()
+                .having((e) => e.code, 'code', 'dsh-go/http-503')
+                .having((e) => e.message, 'message', '${dshGoViewPath('p', 'view')}: HTTP 503'),
+          ),
+        );
+      }
+    });
+
     test('stream over a real socket: hello, sub, data, patch, changed, unsub', () async {
       final stream = client.openDshGoStream(locale: 'zh-CN');
       addTearDown(stream.close);

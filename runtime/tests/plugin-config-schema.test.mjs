@@ -140,7 +140,7 @@ test('secret any boundary preserves role and display metadata while hiding paylo
 for(const secretFirst of [true,false])test(`shared any with ordinary alias rejects, secretFirst=${secretFirst}`,async()=>{
  const any=z.any(),hidden=z.transform(any,x=>x,true).role('secret');
  const schema=z.object(secretFirst?{secret:hidden,ordinary:any}:{ordinary:any,secret:hidden});
- const response=await responseFor(schema,{secret:'private',ordinary:'public'});assert.equal(response.status,404);assert.equal(response.body.code,'entry-unavailable');
+ const response=await responseFor(schema,{secret:'private',ordinary:'public'});assert.equal(response.status,404);assert.equal(response.body.error.code,'entry-unavailable');
 });
 test('ordinary any remains unsupported',async()=>{assert.equal((await responseFor(z.object({ordinary:z.any()}),{ordinary:'public'})).status,404)});
 test('unknown type below secret remains unsupported',async()=>{const schema=z.object({secret:z.transform(z.never(),x=>x,true).role('secret')});const g=schema.toJSON();const fake={toJSON:()=>g};assert.equal((await responseFor(Object.assign(x=>x,fake),{})).status,404)});

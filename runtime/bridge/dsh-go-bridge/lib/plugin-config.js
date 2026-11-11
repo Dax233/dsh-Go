@@ -33,7 +33,7 @@ function validationPath(error,ops){
 }
 export function pluginConfigUnavailable(req){
  let path;try{path=new URL(req.url??'/', 'http://dsh-go.invalid').pathname;}catch{return;}
- if(path===BASE||path.startsWith(BASE+'/'))return {v:1,code:'host-unavailable',message:MESSAGES['host-unavailable']};
+ if(path===BASE||path.startsWith(BASE+'/'))return {v:1,error:{code:'host-unavailable',message:MESSAGES['host-unavailable']}};
 }
 function labelOf(title,entry){
  try{
@@ -293,7 +293,7 @@ export function createPluginConfig(ctx,{readBody,send}){
  return {statusChanged,async handle(req,res,path){
   if(path!==BASE&&!path.startsWith(BASE+'/'))return false;
   try{
-   if(path===BASE){if(req.method!=='GET')send(res,405,{v:1,code:'invalid-operation',message:'此接口不支持该请求方法。'});else send(res,200,{v:1,entries:(await rows()).map(x=>x.summary)});return true;}
+   if(path===BASE){if(req.method!=='GET')send(res,405,{v:1,error:{code:'invalid-operation',message:'此接口不支持该请求方法。'}});else send(res,200,{v:1,entries:(await rows()).map(x=>x.summary)});return true;}
    let id;try{id=decodeURIComponent(path.slice(BASE.length+1));}catch{throw fault(400,'invalid-operation');}
    if(!id||id.length>512)throw fault(404,'entry-unavailable');
    if(req.method==='GET')send(res,200,(await snapshot(id)).body);
@@ -304,8 +304,8 @@ export function createPluginConfig(ctx,{readBody,send}){
     if(String(req.headers['content-type']).split(';')[0].trim().toLowerCase()!=='application/json'){req.resume();throw fault(400,'invalid-operation');}
     let input;try{input=JSON.parse((await readBody(req,512*1024)).toString('utf8'));}catch{throw fault(400,'invalid-operation');}
     send(res,200,await update(id,input));
-   }else send(res,405,{v:1,code:'invalid-operation',message:'此接口不支持该请求方法。'});
-  }catch(error){const known=FAULTS.has(error),code=known?error.code:'host-unavailable',path=known?publicPath(error.path):undefined;send(res,known?error.status:503,{v:1,code,message:MESSAGES[code],...path?{path}:{}});}
+   }else send(res,405,{v:1,error:{code:'invalid-operation',message:'此接口不支持该请求方法。'}});
+  }catch(error){const known=FAULTS.has(error),code=known?error.code:'host-unavailable',path=known?publicPath(error.path):undefined;send(res,known?error.status:503,{v:1,error:{code,message:MESSAGES[code],...path?{path}:{}}});}
   return true;
  }};
 }

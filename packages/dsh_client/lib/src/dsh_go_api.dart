@@ -842,7 +842,8 @@ String dshGoViewPath(String pkg, String id) {
 }
 
 DshRemoteException _dshGoHttpError(String path, DshHttpResponse response) {
-  final error = asMap(asMap(tryDecodeJson(response.text))?['error']);
+  final body = asMap(tryDecodeJson(response.text));
+  final error = asMap(body?['error']) ?? body;
   final code = asString(error?['code']);
   return DshRemoteException(
     code == null ? 'dsh-go/http-${response.statusCode}' : 'dsh-go/$code',
