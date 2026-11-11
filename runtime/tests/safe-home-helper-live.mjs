@@ -144,6 +144,34 @@ test('helper atomic write preserves unrelated temp files on success', t => {
   assert.equal(readFileSync(unrelated, 'utf8'), 'keep this earlier file');
 });
 
+test('helper lock record write failure leaves no lock and permits a later repair', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(t);
+  const file = join(f.original, 'profiles/web/package.json');
+  const before = readFileSync(file, 'utf8');
+  // A zero kernel file-size limit allows exclusive creation but rejects the PID write.
+  // The error and syscall field come from Node itself, without replacing fs methods.
+  const limit = [
+    'import os, resource, signal, sys',
+    'signal.signal(signal.SIGXFSZ, signal.SIG_IGN)',
+    '_, hard = resource.getrlimit(resource.RLIMIT_FSIZE)',
+    'resource.setrlimit(resource.RLIMIT_FSIZE, (0, hard))',
+    'os.execv(sys.argv[1], sys.argv[1:])',
+  ].join('\n');
+  const failed = spawnSync('python3', ['-I', '-c', limit, process.execPath, f.helper, 'disable', 'original-plugin'], {
+    cwd: f.dir, encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, DSH_HOME: f.rescue, DSH_APP_ORIGINAL_HOME: f.original, DSH_APP_SAFE_DIR: f.dir },
+  });
+  assert.ifError(failed.error);
+  assert.notEqual(failed.status, 0);
+  assert.match(failed.stderr, /EFBIG.*write/);
+  assert.equal(readFileSync(file, 'utf8'), before);
+  assert.equal(existsSync(file + '.lock'), false);
+  const retried = f.run('disable', 'original-plugin');
+  assert.equal(retried.status, 0, retried.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).dsh.profile.bundles, []);
+  assert.equal(existsSync(file + '.lock'), false);
+});
+
 test('helper atomic write failure cleans its temp and preserves the profile', { skip: process.platform !== 'linux' }, t => {
   const f = fixture(t);
   const profile = join(f.original, 'profiles/web');
