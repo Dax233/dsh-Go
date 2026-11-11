@@ -83,7 +83,7 @@
 | B0 | 文档 | 把本方案提交为 `docs/design/refactor-2026-11.md`；`docs/architecture.md` 的目录一节补上 `lib` 下现有的顶层目录 |
 | B1 | 守卫 | 加一个测试（`app/test/arch/`），扫描 import：`state/`、`plugins/`、`ui_config/`、`links/`、`remote/`、`runtime/` 等非 ui 目录 import `ui/` 即失败。现存的边放进白名单，白名单只许变短 |
 | B2 | 下沉类型 | 把被借用的纯类型和纯函数（审查点到的有 `generate_header`、`web_target`、`isPluginForm` 等）移到非 ui 位置；旧位置留一行 `export`，ui 侧的调用点不用改。每移一组，白名单删掉对应的边 |
-| B3 | 拆 `plugins_state.dart` | 审查时的四段缝：市场（约 35 行起）、已装（526）、失败分类（1016）、安装任务（1322）。纯搬文件，`plugins_state.dart` 保留并 `export` 四个新文件，外部 import 不变 |
+| B3 | 拆 `plugins_state.dart` | 审查时的四段缝：市场（约 35 行起）、已装（526）、失败分类（1016）、安装任务（1322）。纯搬文件，`plugins_state.dart` 保留，外部 import 不变。**已完成（#967）**：四段搬到 `app/lib/state/plugins/`，用的是 `part` 而不是 `export`——四段之间互相用到对方的私有成员，拆成独立的库就得把这些成员公开，那已经不是纯搬移了 |
 | B4 | 度量 | 报告里给出前后的最大环规模和各目录 → ui 的边数（脚本放 `app/tool/`） |
 
 **不做**：A 的文件；避让清单；改任何行为；动 provider 的键或生命周期（F 包）；统一持久化（D 包）。

@@ -85,10 +85,13 @@ PluginFailure describeOperationFailure(
   final detail = [?result.error?.diagnostic, if (run != null && run.output.trim().isNotEmpty) run.output].join('\n\n');
   final d = detail.isEmpty ? null : detail;
   if (result.application == PluginApplication.cancelled) {
+    // The host stopped an operation that had already started, so it may have
+    // written something. Only a job cancelled before it ran (the queue's
+    // describeCancelled) can promise that nothing changed.
     return PluginFailure(
       PluginFailureKind.cancelled,
       appL10n.statePluginInstallCancelled,
-      appL10n.statePluginNoChanges,
+      appL10n.statePluginOperationIncomplete,
     );
   }
   final incompatible = [...?result.error?.incompatible, ...?run?.incompatible];
