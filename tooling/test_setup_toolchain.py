@@ -264,6 +264,27 @@ class SetupToolchainTest(unittest.TestCase):
         self.assertFalse(any(c["command"] in ("sdkmanager", "flutter") for c in result["calls"]))
         return result
 
+    def test_flutter_defaults_use_the_declaration_file_in_either_creation_order(self):
+        sources = {
+            "AgpCommonExtensionWrapper.kt": "    var ndkVersion: String\n",
+            "FlutterExtension.kt": '    val compileSdkVersion: Int = 36\n    val ndkVersion: String = "28.2.13676358"\n',
+        }
+        for order in (tuple(sources), tuple(reversed(sources))):
+            with self.subTest(order=order), self.fixture("success") as (root, script, env):
+                main = root / "dev/flutter/packages/flutter_tools/gradle/src/main"
+                (main / "FlutterExtension.kt").unlink()
+                kotlin = main / "kotlin"
+                kotlin.mkdir()
+                for name in order:
+                    (kotlin / name).write_text(sources[name])
+                result = self.invoke(root, script, env)
+                self.assertEqual(result["exit"], 0, result["stderr"])
+                self.assertIn("Flutter defaults: compileSdk=36 ndk=28.2.13676358", result["stdout"])
+                packages = next(c["args"] for c in result["calls"]
+                                if c["command"] == "sdkmanager" and "--licenses" not in c["args"])
+                self.assertIn("platforms;android-36", packages)
+                self.assertIn("ndk;28.2.13676358", packages)
+
     def test_success_still_configures_and_writes_environment(self):
         result = self.run_script("success")
         self.assertEqual(result["exit"], 0, result["stderr"])
