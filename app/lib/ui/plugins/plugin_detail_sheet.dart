@@ -390,7 +390,8 @@ class BundleSheet extends ConsumerWidget {
     final summary = bundle.summary();
     final error = bundleErrorText(bundle);
     final canSwitch = bundle.readOnlyReason == null && (bundle.installed || bundle.optional) && !gone;
-    final config = ref.watch(pluginConfigProvider).value;
+    final configSource = ref.watch(pluginConfigProvider);
+    final config = configSource.value;
     final configurable = bundleSettingsRows(bundle, config);
     // Every plugin with fields gets its native page; a third-party one
     // without any keeps its config seat (an island page, or DSH Web).
@@ -506,7 +507,17 @@ class BundleSheet extends ConsumerWidget {
                 // A third-party plugin's own config page in DSH Web: its
                 // schema form, its island page, or the way to DSH Web.
                 const SizedBox(height: 16),
-                ListPageCard(margin: EdgeInsets.zero, children: [configSeat]),
+                ListPageCard(
+                  margin: EdgeInsets.zero,
+                  children: [
+                    // Unknown fields are not absent fields: wait for the first
+                    // catalog before offering an alternate settings route.
+                    if (configSource.isLoading && !configSource.hasValue)
+                      ListPageRow(icon: AppIcons.configure, title: l10n.commonSettings, meta: l10n.pluginsLoading)
+                    else
+                      configSeat,
+                  ],
+                ),
               ] else if (configurable.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 ListPageCard(
