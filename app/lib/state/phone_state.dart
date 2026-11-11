@@ -519,7 +519,7 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
     final status = await channel.status();
     // No native side (tests, an older build): nothing to watch.
     if (disposed || !acceptStatus(status)) return;
-    var stopped = status.task.stopped;
+    var userStopped = status.task.stopped && (status.task.stopSource == null || status.task.stopSource == 'USER');
     var active = status.task.active;
     var launch = status.callerCapability?.launch;
     var modernSeen = status.callerCapability?.modernSeen == true || status.tasks.any((task) => task.sessionId != null);
@@ -534,7 +534,7 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
         launch = capability.launch;
         modernSeen = (previousLaunch == null && modernSeen) || capability.modernSeen || modernTasks;
         versioned = true;
-        stopped = s.task.stopped;
+        userStopped = s.task.stopped && (s.task.stopSource == null || s.task.stopSource == 'USER');
         active = s.task.active;
         return; // A new launch is a baseline, not a stop edge.
       }
@@ -549,10 +549,13 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
       // queued, so the neighbouring snapshots can miss a task that just began or just ended;
       // they are only the fallback for a native that doesn't report it.
       final interrupted = s.task.interrupted ?? (active || s.task.active);
-      if (interrupted && !modernSeen && (capability != null || !versioned) && s.task.stopped && !stopped) {
+      // Ambient interruption stops phone work, not every conversation on the host.
+      final userStop = s.task.stopped && (s.task.stopSource == null || s.task.stopSource == 'USER');
+      if (userStop && !userStopped && interrupted && !modernSeen && (capability != null || !versioned)) {
         unawaited(_cancelLocalTurns(ref));
       }
-      stopped = s.task.stopped;
+      // A later ambient source in the same hold must not re-arm cancel-all.
+      userStopped = s.task.stopped && (userStopped || userStop);
       active = s.task.active;
     }, onError: (_) {});
   }());
