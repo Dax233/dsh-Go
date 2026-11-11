@@ -38,6 +38,7 @@ fun main(args: Array<String>) {
     )), root, object : DshProcess.Listener {
         override fun onLog(line: String, stream: String, storageLine: String) { println("[$case] $line") }
         override fun onReady(source: DshProcess, baseUrl: String, token: String) {}
+        override fun onStartupFailure(source: DshProcess) {}
         override fun onExit(source: DshProcess, code: Int, expected: Boolean) {}
     }).also(attempts::add)
     val guestRecord = DshProcess::class.java.getDeclaredMethod("guestRecord").apply { isAccessible = true }

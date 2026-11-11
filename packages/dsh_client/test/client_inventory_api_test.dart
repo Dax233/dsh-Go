@@ -195,6 +195,7 @@ void main() {
       final inventory = BridgeInventory.fromJson(_bridge)!;
       expect(inventory.version, 1);
       expect(inventory.bootRev, 'g1');
+      expect(inventory.occupancyStale, isFalse, reason: 'older bridges may omit freshness');
       expect(inventory.routeGuard, isTrue);
       expect(inventory.release?.version, '0.2.1-rc.2');
       final pet = inventory.packages.single;
@@ -218,6 +219,23 @@ void main() {
       expect(empty.packages, isEmpty);
       expect(BridgeInventory.fromJson('nope'), isNull);
       expect(BridgeInventory.fromJson(null), isNull);
+    });
+
+    test('reads the bridge freshness signal independently of the reported boot rev', () {
+      final inventory = BridgeInventory.fromJson({
+        ..._bridge,
+        'currentRev': 'g2',
+        'occupancy': {'stale': true},
+      })!;
+      expect(inventory.bootRev, 'g1');
+      expect(inventory.occupancyStale, isTrue);
+      expect(inventory.slots, isNotNull);
+      final fresh = BridgeInventory.fromJson({
+        ..._bridge,
+        'currentRev': 'g1',
+        'occupancy': {'stale': false},
+      })!;
+      expect(fresh.occupancyStale, isFalse);
     });
   });
 
@@ -296,6 +314,41 @@ void main() {
       expect(inventory.occupancyStale, isFalse);
       expect(inventory.packages['dsh-pet']!.hasClient, isTrue);
       expect(inventory.packages['dsh-cost-meter']!.hasClient, isFalse);
+    });
+
+    test('reported stale occupancy stays stale with an unavailable or earlier page', () {
+      final stale = BridgeInventory.fromJson({
+        ..._bridge,
+        'currentRev': 'g2',
+        'occupancy': {'stale': true},
+      })!;
+      for (final page in <WebBootGraph?>[null, boot]) {
+        final inventory = ClientInventory.combine(bundles: bundles, boot: page, bridge: stale);
+        expect(inventory.tier, ClientInventoryTier.bridge);
+        expect(inventory.occupancyStale, isTrue);
+        expect(inventory.slots, isNotEmpty, reason: 'retain the report while asking for a refresh');
+        expect(inventory.routeGuard, isTrue);
+      }
+      final refreshed = BridgeInventory.fromJson({
+        ..._bridge,
+        'bootRev': 'g2',
+        'currentRev': 'g2',
+        'occupancy': {'stale': false},
+      })!;
+      expect(ClientInventory.combine(bridge: refreshed).occupancyStale, isFalse);
+      final currentPage = WebBootGraph.fromJson({..._graph, 'rev': 'g2'})!;
+      expect(ClientInventory.combine(boot: currentPage, bridge: refreshed).occupancyStale, isFalse);
+    });
+
+    test('a fresh bridge report does not override a different page rev', () {
+      final fresh = BridgeInventory.fromJson({
+        ..._bridge,
+        'currentRev': 'g1',
+        'occupancy': {'stale': false},
+      })!;
+      final moved = WebBootGraph.fromJson({..._graph, 'rev': 'g2'})!;
+      expect(ClientInventory.combine(boot: moved, bridge: fresh).occupancyStale, isTrue);
+      expect(ClientInventory.combine(boot: boot, bridge: fresh).occupancyStale, isFalse);
     });
   });
 
@@ -480,6 +533,30 @@ void main() {
       host.requests.clear();
       expect((await client.readClientInventory()).tier, ClientInventoryTier.boot);
       expect(host.requests.where((r) => r.path == dshGoCapabilitiesPath), isEmpty);
+    });
+
+    test('combined inventory retains bridge freshness with an earlier or unavailable page', () async {
+      host.bridge = {
+        ..._bridge,
+        'currentRev': 'g2',
+        'occupancy': {'stale': true},
+      };
+      for (final pageStatus in [200, 503]) {
+        host.indexStatus = pageStatus;
+        host.requests.clear();
+        final inventory = await client.readClientInventory();
+        expect(inventory.tier, ClientInventoryTier.bridge);
+        expect(inventory.occupancyStale, isTrue);
+        expect(host.requests.where((r) => r.path == bridgeInventoryPath).length, 1);
+        expect(host.requests.where((r) => r.path == dshGoCapabilitiesPath), isEmpty);
+      }
+      host.bridge = {
+        ..._bridge,
+        'bootRev': 'g2',
+        'currentRev': 'g2',
+        'occupancy': {'stale': false},
+      };
+      expect((await client.readClientInventory()).occupancyStale, isFalse);
     });
 
     test('readClientInventory climbs to the tier the Host offers', () async {

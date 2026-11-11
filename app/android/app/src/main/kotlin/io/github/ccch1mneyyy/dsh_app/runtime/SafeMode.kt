@@ -641,8 +641,12 @@ function withLock (file, fn) {
 }
 function writeAtomic (file, text) {
   const tmp = file + '.' + process.pid + '.' + Date.now() + '.tmp'
-  fs.writeFileSync(tmp, text)
-  fs.renameSync(tmp, file)
+  try {
+    fs.writeFileSync(tmp, text)
+    fs.renameSync(tmp, file)
+  } finally {
+    fs.rmSync(tmp, { force: true })
+  }
 }
 function updateBundles (change) {
   const file = manifestPath()
@@ -857,16 +861,22 @@ function trial (args) {
     env: cleanEnv(), stdio: ['ignore', 'pipe', 'pipe']
   })
   const seconds = function (ms) { return Math.round(ms / 1000) }
-  const onData = function (chunk) {
-    for (const line of String(chunk).split('\n')) {
-      if (!line) continue
-      tail.push(redact(line))
-      if (tail.length > 60) tail.shift()
-      if (!upAt && line.indexOf('token=') >= 0) upAt = Date.now()
-    }
+  const capture = function (stream) {
+    let pending = ''
+    stream.on('data', function (chunk) {
+      const text = pending + String(chunk)
+      if (!upAt && text.indexOf('token=') >= 0) upAt = Date.now()
+      // A pipe can split the six-byte marker anywhere; streams stay separate.
+      pending = text.slice(-5)
+      for (const line of String(chunk).split('\n')) {
+        if (!line) continue
+        tail.push(redact(line))
+        if (tail.length > 60) tail.shift()
+      }
+    })
   }
-  child.stdout.on('data', onData)
-  child.stderr.on('data', onData)
+  capture(child.stdout)
+  capture(child.stderr)
   const finish = function (code, text, showTail) {
     if (finished) return
     finished = true

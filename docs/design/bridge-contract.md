@@ -64,6 +64,8 @@
 
 inventory 成功仍只发一个请求，成功模型保持原有读取方式；其非404 HTTP错误仍是 `client-inventory/http-<status>`。`readClientInventory()` 是尽力聚合接口，boot 与 bridge 这两个可选部分失败时仍降低 tier；它没有把失败保存成“桥不支持”。需要区分资源错误的调用方使用 `readBridgeInventory()`。
 
+占位表的 `bootRev` 是上报页面的 graph，`currentRev` 是桥读取 inventory 时的 graph。合法的插件变更或仍打开的旧页面可以使两者不同；桥保留旧表，同时返回 `occupancy.stale: true`。Dart 的 `BridgeInventory.occupancyStale` 保留该信号；聚合时即使独立的 `GET /` 失败、尚未完成或取得的仍是旧 graph，也不能把它改判为新鲜表。`stale: false` 不覆盖客户端已有的缺表、缺 `bootRev` 或与页面版本不同的判断；旧桥缺省该字段时沿用这些旧判据。该标记只描述这次桥响应的快照，不保证两次 HTTP 读取原子一致，也不增加协商或重试请求。
+
 每次需要探测时重新读取，没有进程级缓存或第二套连接状态机。`timeout` 是每个 HTTP 请求的超时，不是整个方法的共享预算；无码404时最多再做一次能力请求，网络等待最坏接近两倍 `timeout`（默认约16秒）。成功、资源错误与明确路由缺失不增加请求。显式 `route-not-found` 是当前请求的直接路由缺失证据，当前 API 不接收调用方缓存的协商对象。持有其他代次声明的调用方不应据旧声明覆盖当前结果。
 
 ## 新旧双向兼容

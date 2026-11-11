@@ -181,6 +181,7 @@ export class NativeCore {
 
   markDirty() {
     this.dirty = true;
+    this.locations.clear();
     this.capabilityChanged?.();
     this.#scheduleChanged();
   }
@@ -451,7 +452,7 @@ export class NativeCore {
 
   /** Gets or creates the feed of a panel / strip for one scope and locale; undefined when over the cap. */
   feed(pkg, id, kind, scope, locale = "") {
-    const loc = typeof locale === "string" ? locale.toLowerCase().replace("_", "-") : "";
+    const loc = typeof locale === "string" ? locale.toLowerCase().replaceAll("_", "-") : "";
     const key = `${pkg}\0${id}\0${scope.key}\0${loc}`;
     let feed = this.feeds.get(key);
     if (feed !== undefined) return feed;

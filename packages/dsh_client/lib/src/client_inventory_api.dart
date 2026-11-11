@@ -274,6 +274,7 @@ class BridgeInventory {
     this.bootRev,
     this.packages = const [],
     this.slots,
+    this.occupancyStale = false,
     this.routeGuard = false,
   });
 
@@ -299,6 +300,7 @@ class BridgeInventory {
                         occupant,
                   ],
             },
+      occupancyStale: asMap(map['occupancy'])?['stale'] == true,
       routeGuard: map['routeGuard'] == true,
     );
   }
@@ -312,6 +314,11 @@ class BridgeInventory {
 
   /// Slot key → occupants in composition order; null until a page reported.
   final Map<String, List<ClientSlotOccupant>>? slots;
+
+  /// The bridge reports that [slots] do not match its current boot graph.
+  /// False when an older bridge does not report freshness; callers must still
+  /// check whether the table and revision are present and match their page.
+  final bool occupancyStale;
 
   /// The route guard (the runtime's route-guard patch, or the bridge's fallback
   /// wrapper) is active.
@@ -430,7 +437,10 @@ class ClientInventory {
       slots: slots,
       occupancyStale:
           bridge != null &&
-          (bridge.slots == null || bridge.bootRev == null || (boot != null && bridge.bootRev != boot.rev)),
+          (bridge.occupancyStale ||
+              bridge.slots == null ||
+              bridge.bootRev == null ||
+              (boot != null && bridge.bootRev != boot.rev)),
       routeGuard: bridge?.routeGuard ?? false,
     );
   }

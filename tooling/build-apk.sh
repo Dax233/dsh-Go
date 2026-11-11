@@ -14,7 +14,7 @@
 #   -f, --flavor arm64|x64|all       default arm64
 #   --release | --debug | --profile  default --release
 #   -t, --target FILE                Dart entry point, relative to app/
-#   -n, --build-number N             use N instead of the build minute (never lower than what's installed)
+#   -n, --build-number N             use 2..2100000000 instead of the build minute (never lower than installed)
 #   --build-name X.Y.Z               version name instead of app/pubspec.yaml's
 #   --keep-daemon                    leave the Gradle daemon running afterwards
 #   --beta                           embed the beta channel token (internal builds only)
@@ -85,6 +85,9 @@ if [[ -z $code ]]; then
 else
   [[ $code =~ ^[0-9]+$ ]] || die "build number is a positive integer: $code"
   python3 "$ROOT/tooling/build_number.py" --check "$code" || exit 1
+  code=$((10#$code))
+  # Gradle treats 1 as pubspec's placeholder and replaces it with the build minute.
+  ((code != 1)) || die "build number 1 is reserved for the pubspec placeholder; omit --build-number for automatic numbering"
 fi
 when=$(python3 "$ROOT/tooling/build_number.py" --decode "$code" 2>/dev/null || echo "custom")
 
