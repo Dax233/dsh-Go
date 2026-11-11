@@ -2,6 +2,9 @@
 // All sessions are synthetic; no Host, model calls or user data are involved.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -133,6 +136,93 @@ test('a persisted child is deleted together with its fork', async t => {
   }
   await f.unchanged([f.source.id, f.child.id]);
 });
+for (const compression of ['none', 'zstd']) {
+  test(`${compression}: reopening after a child cleanup failure still retries that child's cleanup`, async t => {
+    const f = await fixture(t, { compression, realChild: true });
+    const childId = 'synthetic-fork-child';
+    const cleanups = [];
+    await assert.rejects(f.storage.dshGoDeletion.delete(f.fork.id, {
+      ...hooks(),
+      cleanup: async id => { cleanups.push(id); throw new Error('derived state unavailable'); },
+    }), /derived state unavailable/);
+    assert.equal(f.storage.dshGoDeletion.deleted(childId), true);
+    assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), false);
+    await assert.rejects(readFile(f.paths.get(childId)), { code: 'ENOENT' });
+    await f.unchanged([f.source.id, f.child.id, f.fork.id]);
+
+    await f.reopen();
+    assert.equal(await f.storage.stat(childId), undefined);
+    await f.storage.dshGoDeletion.delete(f.fork.id, {
+      ...hooks(), cleanup: async id => { cleanups.push(id); },
+    });
+    assert.deepEqual(cleanups, [childId, childId, f.fork.id]);
+    assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), true);
+    await assert.rejects(readFile(f.paths.get(f.fork.id)), { code: 'ENOENT' });
+    await f.unchanged([f.source.id, f.child.id]);
+  });
+}
+test('a second storage instance cannot overtake a parent deletion during child cleanup', async t => {
+  const f = await fixture(t, { realChild: true });
+  const peer = new Context();
+  await jsonl(peer, { root: f.root, compression: 'none' });
+  let enter, release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const deleting = f.storage.dshGoDeletion.delete(f.fork.id, {
+    ...hooks(), cleanup: async id => { if (id === 'synthetic-fork-child') { enter(); await gate; } },
+  });
+  try {
+    await entered;
+    assert.equal(await peer.sessionPersistence.stat('synthetic-fork-child'), undefined);
+    await assert.rejects(peer.sessionPersistence.dshGoDeletion.delete(f.fork.id, hooks()), { name: 'SessionAlreadyOwnedError' });
+    assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), false);
+    await f.unchanged([f.source.id, f.child.id, f.fork.id]);
+  } finally {
+    release();
+    try { await deleting; } finally { await peer.fiber.dispose(); }
+  }
+  assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), true);
+  await f.unchanged([f.source.id, f.child.id]);
+});
+for (const point of ['file', 'directory']) {
+  test(`cascade ${point} sync failure leaves every log intact and a reopened retry completes`, async t => {
+    const f = await fixture(t, { realChild: true });
+    const slot = join(f.root, '.dsh-go-lifecycle', createHash('sha256').update(f.fork.id).digest('hex'));
+    const originalOpen = fs.open;
+    const fault = Object.assign(new Error(`controlled cascade ${point} sync failure`), { code: 'EIO' });
+    let fail = true;
+    fs.open = async function (path, ...args) {
+      const handle = await originalOpen.call(this, path, ...args);
+      const selected = point === 'file'
+        ? String(path).startsWith(`${slot}/.`) && String(path).endsWith('.tmp')
+        : String(path) === slot;
+      if (selected) {
+        const originalSync = handle.sync.bind(handle);
+        handle.sync = async () => {
+          if (fail) { fail = false; throw fault; }
+          return originalSync();
+        };
+      }
+      return handle;
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(f.storage.dshGoDeletion.delete(f.fork.id, hooks()), error => error === fault);
+    } finally { fs.open = originalOpen; syncBuiltinESMExports(); }
+    await f.unchanged();
+    for (const id of [f.fork.id, 'synthetic-fork-child']) {
+      assert.equal(f.storage.dshGoDeletion.deleted(id), false);
+      assert.equal(f.storage.dshGoDeletion.pending.has(id), false);
+    }
+    await f.reopen();
+    await f.storage.dshGoDeletion.delete(f.fork.id, hooks());
+    for (const id of [f.fork.id, 'synthetic-fork-child']) {
+      assert.equal(f.storage.dshGoDeletion.deleted(id), true);
+      await assert.rejects(readFile(f.paths.get(id)), { code: 'ENOENT' });
+    }
+    await f.unchanged([f.source.id, f.child.id]);
+  });
+}
 test('the schedule inspection gate still blocks an otherwise independent fork', async t => {
   const f = await fixture(t);
   await assert.rejects(f.storage.dshGoDeletion.delete(f.fork.id, { ...hooks(), inspectTasks: async () => true }), related);

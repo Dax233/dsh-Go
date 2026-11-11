@@ -3,7 +3,8 @@
 // engine, no user data.
 //   node --test runtime/tests/session-deletion-core.test.mjs
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,6 +15,7 @@ const { createDeletionSeam } = await import(pathToFileURL(resolve('runtime/sessi
 
 const leases = new Set();
 const acquire = async (dir) => {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   if (leases.has(dir)) throw Object.assign(new Error('owned'), { name: 'SessionAlreadyOwnedError' });
   leases.add(dir);
   return { async release() { leases.delete(dir); } };
@@ -53,7 +55,7 @@ function storage() {
       const dir = join(root, 'aa', id);
       return files[id] === undefined ? undefined : { currentPath: join(dir, files[id][0]) };
     },
-    async readGenerationHeader(id) {
+    async readGenerationHeader(_record, id) {
       const current = headers[id] ?? header;
       return current === undefined ? undefined : { header: current };
     },
@@ -68,6 +70,7 @@ function storage() {
 }
 
 const directory = (id) => join(root, 'aa', id);
+const cascadeFile = (id) => join(root, '.dsh-go-lifecycle', createHash('sha256').update(id).digest('hex'), 'cascade.json');
 const HEADER = (id, extra = {}) => ({ id, ...extra });
 const hooks = (overrides = {}) => ({
   validate: async (id) => { validations.push(id); },
@@ -227,6 +230,101 @@ test('a failed child cleanup is retried and the tree still completes', async () 
   // Retry resumes from the tombstoned child and finishes the requested chat.
   await seam.delete('s1', hooks());
   for (const id of ['s1', 'c1', 'c2']) assert.equal(seam.deleted(id), true, id);
+  assert.deepEqual(cleanups, ['c2', 'c2', 'c1', 's1']);
+  assert.deepEqual(emitted, ['c2', 'c1', 's1']);
+});
+
+test('a failed parent cleanup retains descendants across reopen and retires the completed cascade', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await assert.rejects(seam.delete('s1', hooks({ cleanup: async (id) => {
+    cleanups.push(id);
+    if (id === 's1') throw new Error('parent cleanup failed');
+  } })), /parent cleanup failed/);
+  assert.equal(seam.deleted('s1'), true);
+  assert.equal(seam.deleted('c1'), true);
+  assert.equal(existsSync(cascadeFile('s1')), true);
+  seam = createDeletionSeam(storage(), { acquire, parseGeneration, notFound });
+  validations = []; disposals = []; taskChecks = [];
+  await seam.delete('s1', hooks());
+  assert.deepEqual(cleanups, ['c1', 's1', 'c1', 's1']);
+  assert.deepEqual(validations, []);
+  assert.deepEqual(disposals, []);
+  assert.deepEqual(taskChecks, []);
+  assert.equal(existsSync(cascadeFile('s1')), false);
+  await seam.delete('s1', hooks());
+  assert.deepEqual(cleanups, ['c1', 's1', 'c1', 's1', 's1']);
+});
+
+for (const gate of ['active', 'scheduled']) {
+  test(`a ${gate} surviving member still blocks a retry before further cleanup`, async () => {
+    await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+    await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+    await assert.rejects(seam.delete('s1', hooks({ cleanup: async (id) => {
+      cleanups.push(id); throw new Error('cleanup failed');
+    } })), /cleanup failed/);
+    const blocked = gate === 'active'
+      ? { validate: async (id) => { if (id === 'c1') throw Object.assign(new Error('active'), { code: 'session-active' }); } }
+      : { inspectTasks: async (id) => id === 'c1' };
+    disposals = [];
+    await assert.rejects(seam.delete('s1', hooks(blocked)), { code: gate === 'active' ? 'session-active' : 'session-related' });
+    assert.deepEqual(cleanups, ['c2']);
+    assert.deepEqual(disposals, []);
+    for (const id of ['s1', 'c1']) {
+      assert.equal(seam.deleted(id), false);
+      assert.deepEqual(await readdir(directory(id)), ['session.jsonl']);
+    }
+    await seam.delete('s1', hooks());
+    assert.deepEqual(cleanups, ['c2', 'c2', 'c1', 's1']);
+  });
+}
+
+test('a saved surviving member must still belong to the recorded parent', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+  await assert.rejects(seam.delete('s1', hooks({ cleanup: async (id) => {
+    cleanups.push(id); throw new Error('cleanup failed');
+  } })), /cleanup failed/);
+  headers.c1.parentSession = 'unrelated-chat';
+  disposals = [];
+  await assert.rejects(seam.delete('s1', hooks()), { code: 'session-related' });
+  assert.deepEqual(cleanups, ['c2']);
+  assert.deepEqual(disposals, []);
+  assert.equal(seam.deleted('s1'), false);
+  assert.equal(seam.deleted('c1'), false);
+  assert.deepEqual(await readdir(directory('c1')), ['session.jsonl']);
+  headers.c1.parentSession = 's1';
+  await seam.delete('s1', hooks());
+  assert.deepEqual(cleanups, ['c2', 'c2', 'c1', 's1']);
+});
+
+test('a retry includes new descendants without forgetting the tombstoned member', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+  await assert.rejects(seam.delete('s1', hooks({ cleanup: async (id) => {
+    cleanups.push(id); throw new Error('cleanup failed');
+  } })), /cleanup failed/);
+  await addSession('g1', { origin: 'subagent', parentSession: 'c1' });
+  await seam.delete('s1', hooks());
+  assert.deepEqual(cleanups, ['c2', 'g1', 'c2', 'c1', 's1']);
+  for (const id of ['s1', 'c1', 'c2', 'g1']) assert.equal(seam.deleted(id), true, id);
+});
+
+test('a damaged cascade record refuses deletion without losing the remaining logs', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await assert.rejects(seam.delete('s1', hooks({ cleanup: async () => { throw new Error('cleanup failed'); } })), /cleanup failed/);
+  const saved = await readFile(cascadeFile('s1'));
+  const record = JSON.parse(saved);
+  record.children[0].parentSession = 'unrelated-chat';
+  await writeFile(cascadeFile('s1'), JSON.stringify(record));
+  await assert.rejects(seam.delete('s1', hooks()), { code: 'failed' });
+  assert.equal(seam.deleted('s1'), false);
+  assert.deepEqual(await readdir(directory('s1')), ['session.jsonl']);
+  assert.deepEqual(cleanups, []);
+  assert.equal(seam.pending.size, 0);
+  assert.equal(leases.size, 0);
+  await writeFile(cascadeFile('s1'), saved);
+  await seam.delete('s1', hooks());
+  assert.deepEqual(cleanups, ['c1', 's1']);
 });
 
 test('a symlinked session directory is refused instead of deleting elsewhere', async () => {
