@@ -406,7 +406,7 @@ class _PhonePainter extends CustomPainter {
 
 // ── 配色 ─────────────────────────────────────────────────────────────────
 
-/// 一排色点:六套预设 + 自定义(色轮)。色点画的是守卫之后、当前明暗下的
+/// 六套预设 + 自定义(色轮),设置页窄时折行。色点画的是守卫之后、当前明暗下的
 /// 主色;选中的外面一圈同色环,下面是名字。[custom] 为 false 时只有六套
 /// 预设(首次启动的外观页)。
 class PalettePicker extends ConsumerWidget {
@@ -463,13 +463,17 @@ class PalettePicker extends ConsumerWidget {
         final step = (constraints.maxWidth - 2 * PickerGrid.inset - ringSide) / (items.length - 1);
         final width = math.max(ringSide, math.min(slot, step));
         final side = PickerGrid.inset - (width - ringSide) / 2;
+        final slots = [for (final item in items) SizedBox(width: width, child: item)];
         return Padding(
           padding: EdgeInsets.fromLTRB(side, PickerGrid.inset, side, PickerGrid.inset),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [for (final item in items) SizedBox(width: width, child: item)],
-          ),
+          child: custom
+              ? Wrap(alignment: WrapAlignment.spaceBetween, runSpacing: PickerGrid.gap, children: slots)
+              // First-run pages measure this six-palette row with heightFor.
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: slots,
+                ),
         );
       },
     );
