@@ -15,6 +15,7 @@ for (const [scenario, fileLimit, expected] of [
   ['normal', null, 'done'],
   ['local-storage-failure', 8192, 'storage'],
   ['index-storage-failure', null, 'storage'],
+  ['stage-link-storage-failure', null, 'storage'],
   ['query-outage', null, 'remote_may_continue'],
   ['terminal-failed', null, 'generation_failed'],
   ['cancel-after-success', null, 'remote_may_continue'],
@@ -40,6 +41,10 @@ for (const [scenario, fileLimit, expected] of [
     assert.equal(value.providerWires.filter(wire => wire.method === 'POST').length, 1);
     if (scenario === 'index-storage-failure') {
       assert.equal(value.indexWriteFailures, 1);
+      assert.equal(value.downloadRequests, 1);
+    }
+    if (scenario === 'stage-link-storage-failure') {
+      assert.equal(value.stageLinkFailures, 1);
       assert.equal(value.downloadRequests, 1);
     }
     if (fileLimit !== null) {

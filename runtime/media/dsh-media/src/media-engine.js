@@ -133,7 +133,9 @@ export async function generateMedia(request, context) {
             ownDownload: store.ownDownload,
           });
           const info = await inspectVideo(staged.path, signal);
-          const path = await store.stageDownloaded(staged, info.extension);
+          const path = await store.stageDownloaded(staged, info.extension).catch(error => {
+            throw error instanceof MediaError ? error : new MediaError('storage');
+          });
           meta.items.push({ path, mime: info.mime, width: info.width, height: info.height,
             bytes: staged.bytes, duration: info.duration, codec: info.codec });
           break;
