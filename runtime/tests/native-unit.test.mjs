@@ -2,7 +2,8 @@
 //   node --test runtime/tests/native-unit.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Duplex } from "node:stream";
@@ -627,4 +628,60 @@ test("core: concurrent first-data waits settle once on data or stop", async (t) 
   await stopped;
   assert.equal(other.waiters.length, 0);
   t.mock.timers.tick(100);
+});
+
+
+for (const keepOld of [true, false]) test(`core: plugin reload resolves its new package directory, old retained=${keepOld}`, (t) => {
+  const pkg = `location-move-${keepOld}`;
+  const old = pkgDir(`${pkg}-old`, { v: 1, title: "Old package", contributes: {} });
+  const next = pkgDir(`${pkg}-new`, { v: 1, title: "New package manifest", contributes: {} });
+  writeFileSync(join(old.dir, "package.json"), JSON.stringify({ ...old.pkg, name: pkg }));
+  writeFileSync(join(next.dir, "package.json"), JSON.stringify({ ...next.pkg, name: pkg, version: "2.0.0" }));
+  const profile = join(tmp, `home-${pkg}`, "profiles", "web");
+  mkdirSync(join(profile, "node_modules"), { recursive: true });
+  const link = join(profile, "node_modules", pkg);
+  symlinkSync(old.dir, link, "junction");
+  const baseUrl = pathToFileURL(profile + "/").href;
+  const host = fakeHost([old]);
+  const entry = host.entries[0];
+  entry.options.name = pkg;
+  entry.parent.tree.ctx.baseUrl = baseUrl;
+  const resolved = [];
+  const loader = { entries: () => host.entries, internal: { version: "v2", resolveSync(base, request) {
+    assert.equal(base, baseUrl);
+    assert.equal(request.specifier, pkg);
+    // The live loader is an explicit peer; directory movement and manifest reads are real.
+    const url = pathToFileURL(realpathSync(join(link, "index.js"))).href;
+    resolved.push(url);
+    return { url };
+  } } };
+  const core = new NativeCore({ ...host.ctx, get: (name) => name === "loader" ? loader : undefined }, LIMITS, "test");
+  t.after(() => core.dispose());
+  const before = core.contributions(CAPS);
+  assert.equal(before.plugins[0].title, "Old package");
+  assert.equal(core.contributions(CAPS), before);
+  assert.equal(resolved.length, 1, "same generation uses its location cache");
+
+  host.entries.splice(0, 1);
+  entry.fiber.uid = null;
+  core.markDirty();
+  assert.deepEqual(core.contributions(CAPS).plugins, []);
+  unlinkSync(link);
+  symlinkSync(next.dir, link, "junction");
+  if (!keepOld) rmSync(old.dir, { recursive: true, force: true });
+  assert.equal(realpathSync(join(link, "index.js")), join(next.dir, "index.js"));
+  const replacement = { ...entry, options: { ...entry.options } };
+  replacement.fiber = { uid: 101, entry: replacement, parent: { fiber: null } };
+  host.entries.push(replacement);
+  core.markDirty();
+
+  const after = core.contributions(CAPS);
+  assert.equal(after.plugins.length, 1, "the newly enabled plugin stays discoverable");
+  assert.equal(after.plugins[0].title, "New package manifest");
+  assert.equal(after.plugins[0].version, "2.0.0");
+  assert.equal(core.plugin(pkg).dir, next.dir);
+  assert.notEqual(after.rev, before.rev);
+  assert.equal(resolved.length, 2, "new generation asks the live loader again");
+  assert.equal(core.contributions(CAPS), after);
+  assert.equal(resolved.length, 2, "new generation is cached again");
 });

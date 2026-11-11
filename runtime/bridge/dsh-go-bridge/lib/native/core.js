@@ -181,6 +181,7 @@ export class NativeCore {
 
   markDirty() {
     this.dirty = true;
+    this.locations.clear();
     this.capabilityChanged?.();
     this.#scheduleChanged();
   }
