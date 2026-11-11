@@ -305,7 +305,10 @@ export function installMedia(ctx, config, { generate, admit = admitGeneration, e
             if (!ctx.jobs) throw new MediaError('not_configured');
             return startVideo(selected.request, context, session, exec, controller);
           } catch (error) {
-            await admission?.releaseUnsent();
+            try { await admission?.releaseUnsent(); }
+            finally {
+              if (error instanceof MediaError && error.code === 'cleanup_failed') throw error;
+            }
             throw safeFailure(error, signal);
           }
         })());
