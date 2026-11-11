@@ -10,9 +10,9 @@
 #
 # <dsh-prefix> is an `npm --prefix` tree such as runtime/.work/x86_64/dsh-prefix.
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME="$(dirname "$HERE")"
-PREFIX="$(cd "${1:?usage: run-native-tests.sh <dsh-prefix> [--port N]}" && pwd)"; shift
+PREFIX="$(CDPATH= cd "${1:?usage: run-native-tests.sh <dsh-prefix> [--port N]}" && pwd)"; shift
 PORT=38191
 while [[ $# -gt 0 ]]; do
   case "$1" in

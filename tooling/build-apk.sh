@@ -28,7 +28,7 @@
 # This script takes no machine locks; callers add their own.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$ROOT/app"
 OUT="$APP/build/app/outputs/flutter-apk"
 

@@ -15,7 +15,7 @@
 #   DIRECT_ONLY=1 DIRECT_ROOTFS=/disposable/rootfs DIRECT_MANIFEST=/fixture/manifest.json \
 #     DIRECT_PROOT=/path/to/pinned-source-proot KOTLINC=kotlinc runtime/test-host.sh
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABI=x86_64
 PORT="${1:-38080}"
 NETWORK="${NETWORK:-1}"

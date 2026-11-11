@@ -29,7 +29,7 @@
 # D:/Tools/flutter-3.47.7/flutter), Python in DSH_PYTHON. Elsewhere, what's on PATH.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$ROOT/app"
 PKG=io.github.ccch1mneyyy.dsh_app
 APK="$APP/build/app/outputs/flutter-apk/app-arm64-debug.apk"
