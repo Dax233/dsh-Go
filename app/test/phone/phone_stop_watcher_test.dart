@@ -8,13 +8,17 @@ import 'support.dart';
 
 /// Records cancels; two sessions, one of them running.
 class _Client extends DshClient {
-  _Client() : super(DshConnection(Uri.parse('http://127.0.0.1:9')));
+  _Client({this.extraRunning = false}) : super(DshConnection(Uri.parse('http://127.0.0.1:9')));
+
+  final bool extraRunning;
 
   final cancelled = <String>[];
 
   @override
   Future<List<SessionSummary>> listSessions() async => [
     SessionSummary(sessionId: 'busy', updatedAt: DateTime(2026), running: true, blank: false, agentAvailable: true),
+    if (extraRunning)
+      SessionSummary(sessionId: 'other-busy', updatedAt: DateTime(2026), running: true, blank: false, agentAvailable: true),
     SessionSummary(sessionId: 'idle', updatedAt: DateTime(2026), running: false, blank: false, agentAvailable: true),
   ];
 
@@ -247,6 +251,37 @@ void main() {
     await pumpEventQueue();
     expect(client.cancelled, isEmpty);
   });
+
+  for (final source in <Object?>['SCREEN_OFF', 'ENVIRONMENT', 'UNKNOWN', null, 7]) {
+    test('legacy ambient stop does not cancel either running conversation (source=$source)', () async {
+      Map<String, Object?> status(bool stopped, Object? reason) {
+        final base = phoneStatus(taskActive: !stopped, taskStopped: stopped);
+        return {
+          ...base,
+          'taskProtocol': 1,
+          'tasks': [],
+          'callerCapability': {'launch': 1, 'modernSeen': false},
+          'task': {...base['task']! as Map, 'interrupted': stopped, 'stopSource': reason},
+        };
+      }
+      final native = FakePhoneNative(status: status(false, null))..install();
+      final client = _Client(extraRunning: true);
+      final container = ProviderContainer(overrides: [localConnectionProvider.overrideWith(() => _Local(client))]);
+      addTearDown(container.dispose);
+      await container.read(localConnectionProvider.future);
+      container.listen(phoneStopWatcherProvider, (_, _) {});
+      await pumpEventQueue();
+      native.push(status(true, source));
+      await pumpEventQueue();
+      expect(client.cancelled, isEmpty);
+      native.push(status(true, 'USER')); // An explicit stop during the same ambient hold is a new user edge.
+      await pumpEventQueue();
+      expect(client.cancelled, ['busy', 'other-busy']);
+      native.push(status(true, 'USER'));
+      await pumpEventQueue();
+      expect(client.cancelled, ['busy', 'other-busy']); // Duplicate sampling is not another stop.
+    });
+  }
 
   test('without the native side nothing is watched', () async {
     final client = _Client();

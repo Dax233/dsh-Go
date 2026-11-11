@@ -19,6 +19,8 @@ class PhoneTasks(
     val stopHoldMs: Long = 30_000L,
     private val idSource: (() -> Long)? = null,
 ) {
+    enum class StopSource { USER, SCREEN_OFF, ENVIRONMENT }
+
     data class Snapshot(
         val id: Long,
         val active: Boolean,
@@ -34,10 +36,11 @@ class PhoneTasks(
         internal val lifecycle: Long = 0,
         /** This stop hold interrupted a task whose public active projection was true. */
         val interrupted: Boolean = false,
+        val stopSource: StopSource? = null,
     ) {
         fun toMap(): Map<String, Any?> =
             linkedMapOf("id" to id, "active" to active, "app" to app, "paused" to paused, "stopped" to stopped,
-                "waived" to waived, "interrupted" to interrupted)
+                "waived" to waived, "interrupted" to interrupted, "stopSource" to stopSource?.name)
     }
 
     sealed interface Begin {
@@ -56,6 +59,7 @@ class PhoneTasks(
     private var lastCallAt = 0L
     private var stoppedUntil = 0L
     private var stopReason: String? = null
+    private var stopSource: StopSource? = null
     private var interrupted = false
     private val approved = LinkedHashSet<String>()
     private var waived = false
@@ -138,7 +142,7 @@ class PhoneTasks(
         stopLocked(reason)
     }
 
-    private fun stopLocked(reason: String, now: Long = clock()): Change {
+    private fun stopLocked(reason: String, now: Long = clock(), source: StopSource = StopSource.USER): Change {
         // Record the fact before endLocked clears active. Repeated stops in
         // this hold retain a prior interruption, but an expired hold cannot
         // donate that fact to a later cold/idle stop.
@@ -147,6 +151,7 @@ class PhoneTasks(
         if (active) endLocked() else lifecycle++
         stoppedUntil = now + stopHoldMs
         stopReason = reason
+        stopSource = source
         paused = false
         lock.notifyAll()
         return Change(snapshotLocked(now))
@@ -171,20 +176,22 @@ class PhoneTasks(
     internal fun publish(change: Change) = fire(change.snapshot)
 
     /** Commit a stop without listeners; callers publish only after their admission lock is released. */
-    internal fun stopDeferred(reason: String): Change = synchronized(lock) { stopLocked(reason) }
+    internal fun stopDeferred(reason: String, source: StopSource = StopSource.USER): Change = synchronized(lock) { stopLocked(reason, source = source) }
 
     /** Ambient stops fence queued calls/prompts, but only a live task starts a stop hold. */
-    internal fun stopActiveDeferred(reason: String): Change = synchronized(lock) {
+    internal fun stopActiveDeferred(reason: String, source: StopSource = StopSource.ENVIRONMENT): Change = synchronized(lock) {
         val now = clock()
-        if (active && !idleLocked(now)) return stopLocked(reason, now)
+        if (active && !idleLocked(now)) return stopLocked(reason, now, source)
+        // A later ambient boundary revokes screen-only recovery without extending the hold.
+        if (now < stoppedUntil && source != StopSource.SCREEN_OFF) { stopSource = source }
         admissionEpoch++
         if (active) endLocked() else lifecycle++
         lock.notifyAll()
         Change(snapshotLocked(now))
     }
 
-    fun stop(reason: String) {
-        publish(stopDeferred(reason))
+    fun stop(reason: String, source: StopSource = StopSource.USER) {
+        publish(stopDeferred(reason, source))
     }
 
     /** Ends the task without a stop hold (the engine went away). */
@@ -497,7 +504,7 @@ class PhoneTasks(
         val stopped = now < stoppedUntil
         if (!stopped) interrupted = false
         return Snapshot(taskId, active && !idle, if (active && !idle) app else null, paused, stopped, stopReason,
-            active && !idle && waived, lifecycle, interrupted)
+            active && !idle && waived, lifecycle, interrupted, if (stopped) stopSource else null)
     }
 
     /** Idle: no call running, not paused, and nothing for [idleMs]. */
@@ -526,7 +533,7 @@ class PhoneTasks(
 
     companion object {
         // l10n:keep agent stop protocol
-        const val STOPPED_MESSAGE = "用户已停止本次手机操作。不要再调用手机工具，直接告诉用户已经停下"
+        const val STOPPED_MESSAGE = "本轮手机操作已停止。不要重试本轮手机动作；与手机无关的工作可继续"
     }
 }
 
