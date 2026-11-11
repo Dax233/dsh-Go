@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Small real archives exercise partitioning, compatibility evidence and byte reuse."""
 import copy
+import errno
 import gzip
 import hashlib
 import importlib.util
@@ -203,6 +204,29 @@ class LayerPackaging(unittest.TestCase):
         embedded = json.loads(members(out / 'engine-arm64-v8a.tar.gz')['etc/dsh-app/runtime.json'][3])
         self.assertEqual(embedded['baseCompatibility'], manifest['baseCompatibility'])
         self.assertIn('python3Sha256', embedded['baseCompatibility'])
+
+    def test_tree_read_error_aborts_assembly_without_success_report(self):
+        real_scandir = os.scandir
+        for layered in (False, True):
+            for relative in ('dsh/node_modules', 'pnpm/node_modules/pnpm/bin', 'bridge/lib'):
+                with self.subTest(layered=layered, directory=relative):
+                    out, command = self.command(
+                        'denied-%s-%s' % (layered, relative.split('/')[0]), layered=layered)
+                    denied = self.root / relative
+                    problem = PermissionError(errno.EACCES, 'synthetic directory read failure', str(denied))
+
+                    def scandir(path):
+                        if Path(path) == denied:
+                            raise problem
+                        return real_scandir(path)
+
+                    with mock.patch.object(sys, 'argv', command[2:]), \
+                            mock.patch.object(os, 'scandir', side_effect=scandir), \
+                            mock.patch.object(sys, 'stdout', io.StringIO()):
+                        with self.assertRaises(PermissionError) as raised:
+                            rt.main()
+                    self.assertIs(raised.exception, problem)
+                    self.assertFalse((out / 'report.json').exists())
 
     def test_cli_requires_one_mode_and_stable_layer_names(self):
         for name, change in (

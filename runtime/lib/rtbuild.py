@@ -1393,8 +1393,11 @@ def cmd_assemble(args):
 
     # 3. npm trees on disk: DSH (whole --prefix) and pnpm (laid out like `npm i -g pnpm`)
     def add_tree(src, dest_root, origin, drop_reason):
+        def walk_error(error):
+            raise error
+
         src = os.path.abspath(src)
-        for dirpath, dirnames, filenames in os.walk(src):
+        for dirpath, dirnames, filenames in os.walk(src, onerror=walk_error):
             dirnames.sort()
             rel_dir = os.path.relpath(dirpath, src)
             rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
