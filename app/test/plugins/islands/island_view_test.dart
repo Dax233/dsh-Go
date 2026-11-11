@@ -388,7 +388,7 @@ void main() {
     expect(_page.scripts[2], contains('"package":"pet-plugin"'));
     expect(_page.scripts[2], contains('"cell":"pet"'));
     await tester.pumpWidget(_app(const SizedBox()));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
     expect(_host.live, isEmpty);
     expect(handle.phase, IslandPhase.closed);
   });

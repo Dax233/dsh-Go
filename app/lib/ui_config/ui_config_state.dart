@@ -56,7 +56,11 @@ final uiRootfsResolverProvider = Provider<UiRootfsResolver>(
 /// follows the connection); null when the host can't be read now.
 typedef UiConfigSourceBuilder = UiConfigSource? Function(Ref ref, HostRef host);
 
-final uiConfigSourceBuilderProvider = Provider<UiConfigSourceBuilder>((ref) => defaultUiConfigSource);
+/// What [uiConfigSourceBuilderProvider] uses; tests swap in a no-op builder so
+/// pages that read `ui.json` do not open `dsh/runtime/events` unasked.
+UiConfigSourceBuilder defaultUiConfigSourceBuilder = defaultUiConfigSource;
+
+final uiConfigSourceBuilderProvider = Provider<UiConfigSourceBuilder>((ref) => defaultUiConfigSourceBuilder);
 
 /// Local: the rootfs file, looked at again on resumes and runtime changes.
 /// Remote: only the active host's, over its open connection.
