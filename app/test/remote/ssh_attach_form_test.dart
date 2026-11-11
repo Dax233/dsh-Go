@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:dsh_app/remote/secret_store.dart';
-import 'package:dsh_app/remote/link_status.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/ui/remote/ssh_host_form.dart';
@@ -88,7 +87,9 @@ void main() {
     expect(server.last.isClosed, isTrue, reason: 'nodsh terminated the SSH connection');
     final progress = tester.widget<LinkProgressCard>(find.byType(LinkProgressCard));
     expect(progress.status.phase, HostLinkPhase.failed, reason: 'last step: ${progress.status.step}');
-    expect(find.byType(CircularProgressIndicator), findsNothing, reason: 'terminal test stopped all progress indicators');
+    final indicators = tester.widgetList<CircularProgressIndicator>(find.byType(CircularProgressIndicator));
+    expect(indicators, isEmpty, reason: 'indicator widths: ${indicators.map((indicator) => indicator.strokeWidth).toList()}; '
+        'button labels: ${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).whereType<String>().toList()}');
     await tester.pumpAndSettle();
     expect(server.last.scripts.any((script) => script.contains(r'kill "$P"')), isFalse);
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '测试连接')).onPressed, isNotNull);
