@@ -71,7 +71,7 @@ PBS_OFFICIAL="https://github.com/astral-sh/python-build-standalone/releases/down
 PBS_MIRROR="https://registry.npmmirror.com/-/binary/python-build-standalone"
 
 # sha256 pins, cross-checked against cdimage.ubuntu.com / nodejs.org / the Termux Packages
-# index. The mirror's SHA256SUMS / SHASUMS256.txt are verified as well.
+# index. Unpinned version overrides still resolve the upstream checksum metadata.
 declare -A PIN=(
   [ubuntu-base-24.04.5-base-arm64.tar.gz]=a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2
   [ubuntu-base-24.04.5-base-amd64.tar.gz]=e77b6f10c2590cef872b33ee9f635a0e3fd1f57fb074c0e52b5c7f56147a0c86
@@ -99,7 +99,13 @@ for tool in curl sha256sum python3 tar xz; do
   command -v "$tool" >/dev/null || die "missing host tool: $tool"
 done
 
-# fetch URL DEST [expected-sha256] [fallback-url]: cached, checksum-verified download.
+RUNTIME_INPUT_STORE_URL="${RUNTIME_INPUT_STORE_URL:-}"  # explicit HTTPS or local file:// CAS directory
+case "$RUNTIME_INPUT_STORE_URL" in
+  ""|https://*|file:///*) ;;
+  *) die "RUNTIME_INPUT_STORE_URL must be an HTTPS or absolute file:// URL" ;;
+esac
+
+# fetch URL DEST [expected-sha256] [fallback-url]: verified cache, origin, then retained bytes.
 fetch() {
   local url="$1" dest="$2" want="${3:-}"
   mkdir -p "$(dirname "$dest")" || die "cannot create download directory for $dest"
@@ -107,20 +113,29 @@ fetch() {
   if [[ -f "$dest" && -z "$want" ]]; then return 0; fi
   # Handle transport failure here: callers include command substitutions, where
   # errexit is disabled, and a conditional fetch call would disable it too.
-  local candidate fetched=0
-  for candidate in "$url" "${4:-}"; do
+  local candidate fetched=0 retained=""
+  if [[ -n "$want" && -n "$RUNTIME_INPUT_STORE_URL" ]]; then
+    retained="${RUNTIME_INPUT_STORE_URL%/}/sha256-$want"
+  fi
+  for candidate in "$url" "${4:-}" "$retained"; do
     [[ -n "$candidate" ]] || continue
     log "download $candidate"
     if curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -sS -o "$dest.part" "$candidate"; then
       fetched=1; break
     fi
   done
-  [[ "$fetched" == 1 ]] || die "download failed for $dest"
-  mv "$dest.part" "$dest" || die "cannot publish download $dest"
-  if [[ -n "$want" ]]; then
-    local got; got="$(sha256 "$dest")"
-    [[ "$got" == "$want" ]] || { rm -f "$dest"; die "sha256 mismatch for $dest: got $got want $want"; }
+  if [[ "$fetched" != 1 ]]; then
+    rm -f "$dest.part"
+    if [[ -n "$want" && -z "$RUNTIME_INPUT_STORE_URL" ]]; then
+      log "自留回落不可用：未配置 RUNTIME_INPUT_STORE_URL"
+    fi
+    die "download failed for $dest"
   fi
+  if [[ -n "$want" ]]; then
+    local got; got="$(sha256 "$dest.part")" || { rm -f "$dest.part"; die "cannot checksum download $dest"; }
+    [[ "$got" == "$want" ]] || { rm -f "$dest.part"; die "sha256 mismatch for $dest: got $got want $want"; }
+  fi
+  mv "$dest.part" "$dest" || { rm -f "$dest.part"; die "cannot publish download $dest"; }
 }
 
 pin_of() {
@@ -134,39 +149,46 @@ pin_of() {
 ubuntu_base() {  # $1 = ubuntu arch; echoes path
   local arch="$1" name="ubuntu-base-${UBUNTU_VERSION}-base-$1.tar.gz"
   local dir="$CACHE/ubuntu/$UBUNTU_VERSION"
-  fetch "$UBUNTU_MIRROR/SHA256SUMS" "$dir/SHA256SUMS"
-  local listed; listed="$(awk -v f="$name" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' "$dir/SHA256SUMS")"
-  [[ -n "$listed" ]] || { rm -f "$dir/SHA256SUMS"; die "$name not listed in SHA256SUMS (stale cache removed, rerun)"; }
   local pin; pin="$(pin_of "$name")"
-  [[ -z "$pin" || "$pin" == "$listed" ]] || die "SHA256SUMS disagrees with pinned hash for $name"
-  fetch "$UBUNTU_MIRROR/$name" "$dir/$name" "$listed"
+  if [[ -z "$pin" ]]; then
+    fetch "$UBUNTU_MIRROR/SHA256SUMS" "$dir/SHA256SUMS"
+    pin="$(awk -v f="$name" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' "$dir/SHA256SUMS")"
+    [[ -n "$pin" ]] || { rm -f "$dir/SHA256SUMS"; die "$name not listed in SHA256SUMS (stale cache removed, rerun)"; }
+  fi
+  fetch "$UBUNTU_MIRROR/$name" "$dir/$name" "$pin"
   printf '%s' "$dir/$name"
 }
 
 node_dist() {  # $1 = node arch (arm64|x64); echoes path
   local name="node-v${NODE_VERSION}-linux-$1.tar.xz" dir="$CACHE/node/v$NODE_VERSION"
-  fetch "$NODE_MIRROR/v$NODE_VERSION/SHASUMS256.txt" "$dir/SHASUMS256.txt"
-  local listed; listed="$(awk -v f="$name" '$2==f {print $1}' "$dir/SHASUMS256.txt")"
-  [[ -n "$listed" ]] || die "$name not listed in SHASUMS256.txt"
   local pin; pin="$(pin_of "$name")"
-  [[ -z "$pin" || "$pin" == "$listed" ]] || die "SHASUMS256.txt disagrees with pinned hash for $name"
-  fetch "$NODE_MIRROR/v$NODE_VERSION/$name" "$dir/$name" "$listed"
+  if [[ -z "$pin" ]]; then
+    fetch "$NODE_MIRROR/v$NODE_VERSION/SHASUMS256.txt" "$dir/SHASUMS256.txt"
+    pin="$(awk -v f="$name" '$2==f {print $1}' "$dir/SHASUMS256.txt")"
+    [[ -n "$pin" ]] || die "$name not listed in SHASUMS256.txt"
+  fi
+  fetch "$NODE_MIRROR/v$NODE_VERSION/$name" "$dir/$name" "$pin"
   printf '%s' "$dir/$name"
 }
 
 termux_deb() {  # $1 = package, $2 = version, $3 = termux arch; echoes path
   local pkg="$1" ver="$2" arch="$3" name="$1_$2_$3.deb"
   local dest="$CACHE/termux/$name" pin; pin="$(pin_of "$name")"
-  if [[ -f "$dest" && -n "$pin" && "$(sha256 "$dest")" == "$pin" ]]; then printf '%s' "$dest"; return; fi
-  # Resolve pool path + hash from the current Packages index (verifies index -> deb).
-  local idx="$CACHE/termux/Packages-$arch"
-  fetch "$TERMUX_REPO/dists/stable/main/binary-$arch/Packages" "$idx.new" && mv "$idx.new" "$idx"
-  local rec; rec="$(awk -v RS= -v p="$pkg" -v v="$ver" \
-    '$0 ~ "(^|\n)Package: " p "\n" && $0 ~ "\nVersion: " v "\n"' "$idx")"
-  [[ -n "$rec" ]] || die "Termux index no longer has $pkg $ver for $arch (bump the pin in build-runtime.sh)"
-  local file sum; file="$(sed -n 's/^Filename: //p' <<<"$rec")"; sum="$(sed -n 's/^SHA256: //p' <<<"$rec")"
-  [[ -z "$pin" || "$pin" == "$sum" ]] || die "Termux index hash for $name differs from pin"
-  fetch "$TERMUX_REPO/$file" "$dest" "$sum"
+  local file
+  if [[ -n "$pin" ]]; then
+    # Debian pool convention: lib* uses four characters, other names use one.
+    local pool="${pkg:0:1}"; [[ "$pkg" != lib* ]] || pool="${pkg:0:4}"
+    file="pool/main/$pool/$pkg/$name"
+  else
+    # Unknown overrides still resolve path + hash from the original Packages index.
+    local idx="$CACHE/termux/Packages-$arch"
+    fetch "$TERMUX_REPO/dists/stable/main/binary-$arch/Packages" "$idx.new" && mv "$idx.new" "$idx"
+    local rec; rec="$(awk -v RS= -v p="$pkg" -v v="$ver" \
+      '$0 ~ "(^|\n)Package: " p "\n" && $0 ~ "\nVersion: " v "\n"' "$idx")"
+    [[ -n "$rec" ]] || die "Termux index no longer has $pkg $ver for $arch (bump the pin in build-runtime.sh)"
+    file="$(sed -n 's/^Filename: //p' <<<"$rec")"; pin="$(sed -n 's/^SHA256: //p' <<<"$rec")"
+  fi
+  fetch "$TERMUX_REPO/$file" "$dest" "$pin"
   printf '%s' "$dest"
 }
 
@@ -217,16 +239,16 @@ PYEOF
 }
 
 # Relocatable CPython (python-build-standalone, install_only_stripped). Checksums come from the
-# release's SHA256SUMS on GitHub; the tarball itself may come from the npmmirror copy.
+# checked-in pins, or SHA256SUMS on GitHub for an unpinned version override.
 python_dist() {  # $1 = aarch64|x86_64; echoes path
   local name="cpython-${PYTHON_VERSION}+${PBS_RELEASE}-$1-unknown-linux-gnu-install_only_stripped.tar.gz"
   local dir="$CACHE/python/$PBS_RELEASE" pin; pin="$(pin_of "$name")"
-  if [[ -f "$dir/$name" && -n "$pin" && "$(sha256 "$dir/$name")" == "$pin" ]]; then printf '%s' "$dir/$name"; return; fi
-  fetch "$PBS_OFFICIAL/$PBS_RELEASE/SHA256SUMS" "$dir/SHA256SUMS"
-  local listed; listed="$(awk -v f="$name" '$2==f {print $1}' "$dir/SHA256SUMS")"
-  [[ -n "$listed" ]] || die "$name not in SHA256SUMS of $PBS_RELEASE"
-  [[ -z "$pin" || "$pin" == "$listed" ]] || die "SHA256SUMS disagrees with pinned hash for $name"
-  fetch "$PBS_MIRROR/$PBS_RELEASE/$name" "$dir/$name" "$listed" \
+  if [[ -z "$pin" ]]; then
+    fetch "$PBS_OFFICIAL/$PBS_RELEASE/SHA256SUMS" "$dir/SHA256SUMS"
+    pin="$(awk -v f="$name" '$2==f {print $1}' "$dir/SHA256SUMS")"
+    [[ -n "$pin" ]] || die "$name not in SHA256SUMS of $PBS_RELEASE"
+  fi
+  fetch "$PBS_MIRROR/$PBS_RELEASE/$name" "$dir/$name" "$pin" \
     "$PBS_OFFICIAL/$PBS_RELEASE/$name"
   printf '%s' "$dir/$name"
 }
@@ -264,6 +286,16 @@ npm_prefix_flags() {  # $1 = npm cpu, $2 = prefix dir; sets the caller's npm_fla
   )
 }
 
+warm_npm_cache() {  # $1 = host npm bin dir, $2 = pinned lock; updates caller's npm_flags
+  [[ -n "$RUNTIME_INPUT_STORE_URL" ]] || return 0
+  PATH="$1:$PATH" python3 -I "$HERE/lib/input_store.py" warm-npm \
+    --repo "$HERE/.." --lock "$2" --store "$CACHE/input-store" \
+    --mirror-base "$RUNTIME_INPUT_STORE_URL" --npm "$1/npm" --npm-cache "$CACHE/npm" \
+    --userconfig "$WORK/empty-user-npmrc" --globalconfig "$WORK/empty-global-npmrc" >&2 \
+    || die "cannot prepare retained npm inputs for $2"
+  npm_flags+=(--offline)
+}
+
 install_dsh() {  # $1 = npm cpu, $2 = prefix dir
   local cpu="$1" prefix="$2" bin; bin="$(host_npm)"
   local lockdir="$LOCKS/dsh-$DSH_VERSION"
@@ -272,6 +304,7 @@ install_dsh() {  # $1 = npm cpu, $2 = prefix dir
   if [[ -f "$lockdir/package-lock.json" ]]; then
     log "npm ci @deepseek-ai/dsh@$DSH_VERSION (cpu=$cpu, pinned lock)"
     cp "$lockdir/package.json" "$lockdir/package-lock.json" "$prefix/"
+    warm_npm_cache "$bin" "$lockdir/package-lock.json"
     PATH="$bin:$PATH" npm ci "${npm_flags[@]}"
   else
     log "npm install @deepseek-ai/dsh@$DSH_VERSION (cpu=$cpu) — first run, will pin the lock"
@@ -302,6 +335,7 @@ install_pnpm() {  # $1 = npm cpu, $2 = prefix dir
   if [[ -f "$lockdir/package-lock.json" ]]; then
     log "npm ci pnpm@$PNPM_VERSION (pinned lock)"
     cp "$lockdir/package.json" "$lockdir/package-lock.json" "$prefix/"
+    warm_npm_cache "$bin" "$lockdir/package-lock.json"
     PATH="$bin:$PATH" npm ci "${npm_flags[@]}"
   else
     log "npm install pnpm@$PNPM_VERSION — first run, will pin the lock"
