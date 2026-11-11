@@ -174,6 +174,8 @@ internal fun activateRuntimeUpdate(
     }
     if (Files.exists(rootfs.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         val spec = checkEngineCompatibility(base, raw, version, abi)
+        // Finish an interrupted first install before the engine journal can mark it ready.
+        if (keep != null && !File(base, "rootfs.version").present()) restoreKept(keep, rootfs, dropKept)
         onLog("[dsh-app] upgrading engine; preserving installed Linux system and user tools")
         EngineUpgrade(base, sync).activate(version, spec)
         File(base, "staging").deleteRecursivelySafely()

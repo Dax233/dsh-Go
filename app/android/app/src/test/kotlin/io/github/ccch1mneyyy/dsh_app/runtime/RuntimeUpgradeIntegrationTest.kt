@@ -44,7 +44,8 @@ class RuntimeUpgradeIntegrationTest {
         write("rootfs.version", "old")
     }
 
-    private fun activate() = activateRuntimeUpdate(base, "new", "arm64-v8a", next, sync = {})
+    private fun activate(keep: File? = null, dropKept: Boolean = false) =
+        activateRuntimeUpdate(base, "new", "arm64-v8a", next, keep, dropKept, sync = {})
 
     @Test fun productionRouteKeepsTheEntireUserSystemForLegacyAndLayeredUpgrades() {
         for (layered in listOf(false, true)) {
@@ -76,6 +77,59 @@ class RuntimeUpgradeIntegrationTest {
         stage(); activate()
         assertEquals("factory gh (must not replace the user copy)", File(base, "rootfs/usr/bin/gh").readText())
         assertEquals("factory package database", File(base, "rootfs/var/lib/dpkg/status").readText())
+        assertEquals("new", File(base, "rootfs.version").readText())
+    }
+
+    @Test fun unfinishedResetRestoreIsRetriedBeforeCommittingTheReadyMarker() {
+        for (layered in listOf(false, true)) {
+            base.deleteRecursively(); base.mkdirs()
+            if (layered) next.put("schema", 2).put("baseCompatibility", layerDescriptor())
+            stage()
+            write("staging/root/.agents", "blocked parent")
+            write("kept/root/.dsh/dsh-go/ui.json", "saved ui")
+            write("kept/root/.agents/skills/mine/SKILL.md", "saved skill")
+            val keep = File(base, "kept")
+            assertThrows(KeepFailed::class.java) { activate(keep) }
+            assertFalse(File(base, "rootfs.version").exists())
+            assertEquals("saved ui", File(base, "rootfs/root/.dsh/dsh-go/ui.json").readText())
+
+            // The next install sees rootfs already present, so it takes the engine route.
+            stage()
+            assertThrows(KeepFailed::class.java) { activate(keep) }
+            assertFalse(File(base, "rootfs.version").exists())
+            assertFalse(File(base, "engine.upgrade").exists())
+            assertEquals("saved skill", File(keep, "root/.agents/skills/mine/SKILL.md").readText())
+
+            assertTrue(File(base, "rootfs/root/.agents").delete())
+            activate(keep)
+            assertEquals("saved skill", File(base, "rootfs/root/.agents/skills/mine/SKILL.md").readText())
+            assertEquals("saved ui", File(base, "rootfs/root/.dsh/dsh-go/ui.json").readText())
+            assertFalse(keep.exists())
+            assertEquals("new", File(base, "rootfs.version").readText())
+        }
+    }
+
+    @Test fun unfinishedResetRestoreHonorsExplicitDropOnRetry() {
+        stage()
+        write("staging/root/.agents", "blocked parent")
+        write("kept/root/.agents/skills/mine/SKILL.md", "saved skill")
+        val keep = File(base, "kept")
+        assertThrows(KeepFailed::class.java) { activate(keep) }
+        stage()
+        activate(keep, dropKept = true)
+        assertFalse(keep.exists())
+        assertEquals("blocked parent", File(base, "rootfs/root/.agents").readText())
+        assertEquals("new", File(base, "rootfs.version").readText())
+    }
+
+    @Test fun staleKeptFilesDoNotOverwriteAPreviouslyReadyUserSystem() {
+        installed(true); stage()
+        write("kept/root/.dsh/dsh-go/ui.json", "older saved ui")
+        write("rootfs/root/.dsh/dsh-go/ui.json", "edited after the system was ready")
+        val keep = File(base, "kept")
+        activate(keep)
+        assertEquals("edited after the system was ready", File(base, "rootfs/root/.dsh/dsh-go/ui.json").readText())
+        assertEquals("older saved ui", File(keep, "root/.dsh/dsh-go/ui.json").readText())
         assertEquals("new", File(base, "rootfs.version").readText())
     }
 
