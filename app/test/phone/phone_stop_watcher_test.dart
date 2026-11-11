@@ -84,6 +84,43 @@ void main() {
     });
   }
 
+  test('native interrupted decides the stop when it is reported, whatever the snapshots around it say', () async {
+    Map<String, Object?> status({bool active = false, bool stopped = false, Object? interrupted = false}) {
+      final base = phoneStatus(taskActive: active, taskStopped: stopped);
+      return {...base, 'task': {...base['task']! as Map, 'interrupted': interrupted}};
+    }
+
+    final native = FakePhoneNative(status: status(active: true))..install();
+    final client = _Client();
+    final container = ProviderContainer(overrides: [localConnectionProvider.overrideWith(() => _Local(client))]);
+    addTearDown(container.dispose);
+    await container.read(localConnectionProvider.future);
+    container.listen(phoneStopWatcherProvider, (_, _) {});
+    await pumpEventQueue();
+
+    // The task finished and the screen went off before the idle snapshot got here: the last
+    // one seen was still active, but nothing was interrupted.
+    native.push(status(stopped: true));
+    await pumpEventQueue();
+    expect(client.cancelled, isEmpty);
+    native.push(status());
+    await pumpEventQueue();
+
+    // A task began and was stopped before any active snapshot got here.
+    native.push(status(stopped: true, interrupted: true));
+    await pumpEventQueue();
+    expect(client.cancelled, ['busy']);
+    native.push(status());
+    await pumpEventQueue();
+
+    // Present but not a bool: false, with no fallback to the snapshots.
+    native.push(status(active: true));
+    await pumpEventQueue();
+    native.push(status(stopped: true, interrupted: 'true'));
+    await pumpEventQueue();
+    expect(client.cancelled, ['busy']);
+  });
+
   for (final initiallyModern in [false, true]) {
     test('launch capability survives retired task lists and late status (initial=$initiallyModern)', () async {
       Map<String, Object?> status(int launch, bool modern, bool stopped) => {

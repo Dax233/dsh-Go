@@ -545,7 +545,10 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
       // Native also reports a stop when the screen goes off or the service leaves while no
       // phone task runs. That interrupted nothing, so it must not end the conversations
       // (1.0.14 lost native's own "only a running task stops" check: #848, #926, #968).
-      final interrupted = active || s.task.active;
+      // Newer native says so itself, decided as it stopped. Status pushes are re-sampled, not
+      // queued, so the neighbouring snapshots can miss a task that just began or just ended;
+      // they are only the fallback for a native that doesn't report it.
+      final interrupted = s.task.interrupted ?? (active || s.task.active);
       if (interrupted && !modernSeen && (capability != null || !versioned) && s.task.stopped && !stopped) {
         unawaited(_cancelLocalTurns(ref));
       }
