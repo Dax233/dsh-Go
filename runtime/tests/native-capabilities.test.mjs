@@ -2,6 +2,7 @@
 // WebSocket through the bridge's apply(), with a fake loader. No DSH needed.
 //   node --test runtime/tests/native-capabilities.test.mjs
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
@@ -167,13 +168,30 @@ test('speechStart clears audio role while voice survives; speech edges are paced
   f.service.media('clip', () => ({ body: Buffer.from('a'), contentType: 'audio/wav' })); f.service.onCapability((s, e) => events.push(e.event));
   f.service.on('go', () => [{ type: 'audio', op: 'play', instance: 'owner', src: 'media:clip' }, { type: 'voice', op: 'start', instance: 'owner' }]);
   const w = await f.ws(['audio', 'voice']); const r = await f.invoke(w); assert.equal(r.effects.length, 2); const lease = r.effects[0].lease; assert.equal(r.effects[1].lease, lease);
-  w.send({ t: 'cap.event', lease, seq: 1, event: 'voice.speechStart' }); await delay(25); assert.deepEqual(events, ['voice.speechStart']); assert.equal((await f.request(f.mediaPath(r.effects[0]))).status, 404);
-  // A burst of four edges passes, the fifth inside the same instant does not.
+  // Hold elapsed time after connection setup; socket waits and their timeouts stay real.
+  let now = Math.ceil(performance.now());
+  t.mock.method(performance, 'now', () => now);
+  w.send({ t: 'cap.event', lease, seq: 1, event: 'voice.speechStart' });
+  w.send({ t: 'ping', at: 1 }); await w.next(m => m.t === 'pong' && m.at === 1);
+  assert.deepEqual(events, ['voice.speechStart']); assert.equal((await f.request(f.mediaPath(r.effects[0]))).status, 404);
+  // At one logical instant only four edges fit, including the first speechStart.
   for (let seq = 2; seq <= 6; seq++) w.send({ t: 'cap.event', lease, seq, event: seq % 2 ? 'voice.speechStart' : 'voice.speechEnd' });
-  await delay(25); assert.equal(events.length, 4);
-  // The terminal right after the burst still arrives: losing it would leak the lease.
-  w.send({ t: 'cap.event', lease, seq: 7, event: 'voice.stopped' }); await delay(25); assert.equal(events.at(-1), 'voice.stopped');
-  w.send({ t: 'cap.event', lease, seq: 8, event: 'voice.error' }); await delay(25); assert.equal(events.at(-1), 'voice.stopped');
+  w.send({ t: 'ping', at: 2 }); await w.next(m => m.t === 'pong' && m.at === 2);
+  const burst = ['voice.speechStart', 'voice.speechEnd', 'voice.speechStart', 'voice.speechEnd'];
+  assert.deepEqual(events, burst);
+  // 10 edges/second replenishes one slot after 100ms, not another whole burst.
+  now += 100;
+  w.send({ t: 'cap.event', lease, seq: 7, event: 'voice.speechEnd' });
+  w.send({ t: 'cap.event', lease, seq: 8, event: 'voice.speechStart' });
+  w.send({ t: 'ping', at: 3 }); await w.next(m => m.t === 'pong' && m.at === 3);
+  assert.deepEqual(events, [...burst, 'voice.speechEnd']);
+  // The empty edge budget cannot drop the terminal, and the retired role stays closed.
+  w.send({ t: 'cap.event', lease, seq: 9, event: 'voice.stopped' });
+  w.send({ t: 'ping', at: 4 }); await w.next(m => m.t === 'pong' && m.at === 4);
+  assert.deepEqual(events, [...burst, 'voice.speechEnd', 'voice.stopped']);
+  w.send({ t: 'cap.event', lease, seq: 10, event: 'voice.error' });
+  w.send({ t: 'ping', at: 5 }); await w.next(m => m.t === 'pong' && m.at === 5);
+  assert.deepEqual(events, [...burst, 'voice.speechEnd', 'voice.stopped']);
 });
 
 test('v1.1 plugins are untouched: undeclared capability effects and keys keep their old answers', async t => {
