@@ -3,6 +3,7 @@ cordis-effect-dispose-completion.diff
 credentials-decimal-refs.diff
 fs-create-exclusive.diff
 install-log-redaction.diff
+piai-anthropic-opus55-thinking.diff
 piai-google-openai-store.diff
 plugin-manager-active-run-guard.diff
 plugin-manager-cancel-tree-confirmation.diff

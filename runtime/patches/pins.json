@@ -56,6 +56,14 @@
         }
       }
     },
+    "piai-anthropic-opus55-thinking.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js": {
+          "after": "26430731ff87ce6cd3b7fa038784dbbffd7fcab072bdf70e4ef9132c2af6764b",
+          "before": "992daf485e2d479ac1df3886019946d0bf512ef6517ec730ce4c7315f9472ecc"
+        }
+      }
+    },
     "piai-google-openai-store.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
