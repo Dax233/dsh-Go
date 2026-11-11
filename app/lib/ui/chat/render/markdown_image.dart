@@ -599,6 +599,11 @@ class _MarkdownImageState extends ConsumerState<MarkdownImage> {
       if (_source is! WebImageSource && _source is! WorkspaceImageSource) return;
       setState(() {
         _engineUrl = null;
+        // A workspace path can stay the same across clients. Retire its read
+        // before resolving it, including a completion still in flight.
+        _future = null;
+        _loaded = null;
+        _error = null;
         _resolve();
       });
     });
