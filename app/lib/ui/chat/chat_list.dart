@@ -530,6 +530,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   bool _onScroll(ScrollNotification n) {
     if (n.depth != 0) return false;
+    // Only this list's drag dismisses the keyboard. A code well's inner
+    // horizontal drag must keep its SelectionArea focused.
+    if (n is ScrollUpdateNotification && n.dragDetails != null) {
+      final scope = FocusScope.of(context);
+      if (scope.hasFocus && !scope.hasPrimaryFocus) FocusManager.instance.primaryFocus?.unfocus();
+    }
     _consumeScrollMetrics(n.metrics, (metrics) => _applyScroll(n, metrics));
     return false;
   }
@@ -953,7 +959,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
                       scrollBehavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
                       center: _centerKey,
                       anchor: anchor,
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
                       slivers: [
                         SliverToBoxAdapter(child: SizedBox(height: widget.topInset + AppSpace.sm)),
                         SliverToBoxAdapter(
