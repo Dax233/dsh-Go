@@ -93,11 +93,12 @@ final seatOverridesProvider = Provider<SeatOverrides>((ref) {
   final preferences = ref.watch(seatPreferencesProvider)[seatPreferenceHostKey(host)] ?? const <String, bool>{};
   final configured = ref.watch(uiSeatOverridesProvider);
   // Do not flash a locally enabled overlay before a cached ui.json hide loads.
-  if (!ref.watch(uiConfigProvider(host).select((s) => s.restored))) return configured;
+  final restored = ref.watch(uiConfigProvider(host).select((s) => s.restored));
   return SeatOverrides({
     ...configured.bySlot,
     Slots.shellOverlay: {
-      for (final entry in preferences.entries) entry.key: entry.value ? SeatOverride.island : SeatOverride.hidden,
+      for (final entry in preferences.entries)
+        if (!entry.value) entry.key: SeatOverride.hidden else if (restored) entry.key: SeatOverride.island,
       ...?configured.bySlot[Slots.shellOverlay],
     },
   });
