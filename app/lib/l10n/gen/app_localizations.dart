@@ -33929,7 +33929,7 @@ abstract class L10n {
   /// No description provided for @updateInstallBlockedMessage.
   ///
   /// In zh, this message translates to:
-  /// **'在系统的安装确认里允许，或去发布页手动下载。'**
+  /// **'在系统的安装确认里允许；如果系统直接拦下（小米等机型），试试下面的「安装路线」：Shizuku 或本机 ADB，不用重新签名。'**
   String get updateInstallBlockedMessage;
 
   /// No description provided for @updateInstallIncomplete.
@@ -34087,6 +34087,36 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没能打开系统安装器'**
   String get updateSystemInstallerFailed;
+
+  /// No description provided for @updateExportApk.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出安装包'**
+  String get updateExportApk;
+
+  /// No description provided for @updateExportApkTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出安装包？'**
+  String get updateExportApkTitle;
+
+  /// No description provided for @updateExportApkMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'会把这次下载并校验过的安装包复制到「下载/DSH-Go」，可以用 MT 管理器之类的工具重新签名后再装。\n\n重新签名后，手机上的签名和官方包不同，App 内更新会一直提示「签名不一致」，以后每次更新都要这样手动重签安装。\n\n如果只是系统拦着装不上（小米等机型），先试「安装路线」里的 Shizuku 或本机 ADB，那条路不用重新签名。'**
+  String get updateExportApkMessage;
+
+  /// No description provided for @updateExportApkDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已存到 下载/{path}'**
+  String updateExportApkDone(String path);
+
+  /// No description provided for @updateExportApkFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能导出安装包'**
+  String get updateExportApkFailed;
 
   /// No description provided for @updateStarProject.
   ///

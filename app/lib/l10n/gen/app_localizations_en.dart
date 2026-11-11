@@ -19593,7 +19593,7 @@ class L10nEn extends L10n {
 
   @override
   String get updateInstallBlockedMessage =>
-      'Allow installation in the system prompt, or download from the release page.';
+      'Allow installation in the system prompt. If the system blocks it outright (Xiaomi and others), try Shizuku or on-device ADB under Installation route; that needs no new signature.';
 
   @override
   String get updateInstallIncomplete => 'Installation incomplete';
@@ -19681,6 +19681,24 @@ class L10nEn extends L10n {
 
   @override
   String get updateSystemInstallerFailed => 'Couldn\'t open the system installer';
+
+  @override
+  String get updateExportApk => 'Save the package';
+
+  @override
+  String get updateExportApkTitle => 'Save the package?';
+
+  @override
+  String get updateExportApkMessage =>
+      'Copies the package downloaded and verified now into Downloads/DSH-Go, so you can sign it yourself (MT Manager and the like) and install that.\n\nA package you signed has a different signature from ours: in-app updates then always report a signature mismatch, and every later version has to be signed and installed by hand.\n\nIf the system simply blocks the install (Xiaomi and other vendors), try Shizuku or on-device ADB under Installation route first; that needs no signing.';
+
+  @override
+  String updateExportApkDone(String path) {
+    return 'Saved to Downloads/$path';
+  }
+
+  @override
+  String get updateExportApkFailed => 'Couldn\'t save the package';
 
   @override
   String get updateStarProject => 'Star it';
