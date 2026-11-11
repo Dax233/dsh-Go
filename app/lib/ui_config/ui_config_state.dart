@@ -387,8 +387,7 @@ final uiDensityProvider = Provider<UiValue<UiDensity>>((ref) {
   return UiValue(density, ref.watch(uiSettingEntryProvider(UiSettingKey.density)));
 });
 
-/// ui.json `plugins.seats` for the seat planner (not yet read by
-/// `seatOverridesProvider` in lib/plugins/seams/seat_state.dart).
+/// Applied ui.json `plugins.seats`, before the planner merges local preferences.
 final uiSeatOverridesProvider = Provider<SeatOverrides>((ref) {
   final seats = ref.watch(uiOverridesProvider.select((o) => o.config.seats));
   if (seats.isEmpty) return SeatOverrides.none;

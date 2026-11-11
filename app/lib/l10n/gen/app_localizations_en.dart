@@ -12975,6 +12975,24 @@ class L10nEn extends L10n {
   String get plugInputGestureRequired => 'This effect requires a user tap';
 
   @override
+  String get seamsTitle => 'In-app interface';
+
+  @override
+  String get seamsOverlay => 'Chat overlay';
+
+  @override
+  String get seamsOverlayNote => 'Stays over the chat and yields when memory is tight';
+
+  @override
+  String get seamsSidebarPage => 'Sidebar entry';
+
+  @override
+  String get seamsSettingsPage => 'Plugin settings page';
+
+  @override
+  String get seamsDetailPage => 'Plugin detail extension';
+
+  @override
   String get pluginsOperationHostChanged => 'Host changed — nothing was done';
 
   @override

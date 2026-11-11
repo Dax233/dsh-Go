@@ -255,6 +255,7 @@ class IslandHandle extends ChangeNotifier {
     'slot': spec.slot,
     'slots': ?recipe?.slots,
     'cell': spec.cell,
+    'package': spec.package,
     'mode': spec.form.name,
     'mask': spec.maskOfficial && spec.slot != rightPaneTabSlot,
     'stretch': (recipe?.stretch ?? IslandStretch.none).name,

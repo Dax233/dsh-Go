@@ -12327,6 +12327,24 @@ class L10nZh extends L10n {
   String get plugInputGestureRequired => '该效果需要用户点按';
 
   @override
+  String get seamsTitle => 'App 内界面';
+
+  @override
+  String get seamsOverlay => '聊天页浮层';
+
+  @override
+  String get seamsOverlayNote => '常驻聊天区域，内存紧张时自动让位';
+
+  @override
+  String get seamsSidebarPage => '侧栏入口';
+
+  @override
+  String get seamsSettingsPage => '插件设置页';
+
+  @override
+  String get seamsDetailPage => '插件详情扩展';
+
+  @override
   String get pluginsOperationHostChanged => '主机已切换，未执行';
 
   @override
