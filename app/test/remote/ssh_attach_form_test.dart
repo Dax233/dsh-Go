@@ -82,6 +82,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '测试连接'));
     await tester.pumpAndSettle();
     expect(server.last.scripts.any((script) => script.contains(r'kill "$P"')), isFalse);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '测试连接')).onPressed, isNotNull);
 
     await tester.ensureVisible(restart);
     await tester.pumpAndSettle();

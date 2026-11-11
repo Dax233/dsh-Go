@@ -291,7 +291,11 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> {
     } finally {
       await _testSub?.cancel();
       _testSub = null;
-      if (identical(_test, link)) _test = null;
+      if (identical(_test, link)) {
+        _test = null;
+        // The terminal status may have painted before async cleanup finished.
+        if (mounted) setState(() {});
+      }
       // The remote dsh keeps running for the real connection; only our
       // test session closes.
       await link.close();
