@@ -85,6 +85,21 @@ test('real c-ares A/AAAA, all/order, IP literal, hosts and IDNA', async (t) => {
   assert(udp.queries.some((query) => query.name === 'xn--fsqu00a.test'));
 });
 
+test('mutating a hosts result does not change later callback or Promise lookups', async (t) => {
+  const udp = await server(t); const adapter = fixture(t, udp.endpoint);
+  const callback = promisify(adapter.lookup);
+  const options = { all: true, order: 'ipv4first' };
+  const expected = [{ address: '127.0.0.1', family: 4 }, { address: '::1', family: 6 }];
+  const first = await callback('fixture.local', options);
+  first[0].address = '192.0.2.9';
+  first[1].family = 4;
+  const second = await adapter.promiseLookup('fixture.local', options);
+  assert.deepEqual(second, expected);
+  second[0].address = '192.0.2.10';
+  assert.deepEqual(await callback('fixture.local', options), expected);
+  assert.equal(udp.queries.length, 0);
+});
+
 test('IPv6 DNS transport uses the configured server', async (t) => {
   const udp = await server(t, true); const adapter = fixture(t, udp.endpoint);
   assert.equal((await adapter.promiseLookup('dual.test', 6)).address, '2001:db8::7');
