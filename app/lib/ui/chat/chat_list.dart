@@ -147,8 +147,8 @@ class ChatList extends ConsumerStatefulWidget {
 }
 
 class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderStateMixin {
-  late final _scroll = _TopBoundedScrollController(_leadingBoundary);
-  final _centerKey = UniqueKey();
+  late final _scroll = _TopBoundedScrollController(_leadingBoundary, _prependCorrection);
+  final _centerKey = GlobalKey();
   final _beforeKey = GlobalKey();
   final _historyKey = GlobalKey();
   double _anchorPixels = 0;
@@ -251,6 +251,9 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// before 段最后一行的主键;null = before 段为空。首次加载完成时确定。
   String? _splitKey;
   bool _splitChosen = false;
+  int? _oldestRowSeq;
+  ({String key, double offset})? _prependAnchor;
+  String? _snapPaddingKey;
 
   // 行派生缓存:输入不变就不重算。
   List<ChatRow> _rows = const [];
@@ -523,7 +526,28 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     _rowsInputs = inputs;
     _held = false;
     final previousLength = _rows.length;
+    final previousRows = _rows;
     final previousKeys = _index;
+    final previousSplit = _split;
+    final previousOldest = _oldestRowSeq;
+    _oldestRowSeq = s.items
+        .map(
+          (item) => switch (item) {
+            UserChatItem(:final seq) => seq,
+            AssistantChatItem(:final seq) => seq,
+            ToolChatItem(:final seq) => seq,
+            NoticeChatItem(:final seq) => seq,
+          },
+        )
+        .whereType<int>()
+        .firstOrNull;
+    final oldestCommand = s.commands.map((command) => command.seq).whereType<int>().firstOrNull;
+    if (oldestCommand != null) _oldestRowSeq = math.min(_oldestRowSeq ?? oldestCommand, oldestCommand);
+    // A page can restore an older turn boundary and fold existing items
+    // without adding a message or command of its own.
+    final oldestTurn = s.turns.firstOrNull?.startSeq;
+    if (oldestTurn != null) _oldestRowSeq = math.min(_oldestRowSeq ?? oldestTurn, oldestTurn);
+    final prepended = previousOldest != null && _oldestRowSeq != null && _oldestRowSeq! < previousOldest;
     final hadPending = _rows.any((r) => r is PendingRow);
     _rows = _rowCache.update(s, foldTurns: foldTurns, artifacts: artifacts);
     _index = _rowCache.index;
@@ -551,17 +575,45 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     }
     _lastPendingCount = s.pending.length;
 
+    if (!s.loading && _splitChosen && prepended) {
+      // Restoring turn metadata can also change rows after a valid center.
+      // Capture them using the previous split; keep that center if it survives.
+      if (!_pinned) _rememberPrependAnchor(previousRows, previousSplit);
+      for (final row in _rows.whereType<TurnFootnoteRow>()) {
+        // This restored footnote is history, not a new row that should grow in.
+        if (row.trace.startSeq < previousOldest) _fresh.remove(row.key);
+      }
+      final first = previousRows.skip(previousSplit).where((row) => _index.containsKey(row.key)).firstOrNull;
+      if (first case AssistantRow(:final key)) {
+        // Prepending can change the gap before the first surviving forward
+        // row. Lay out that history change with the prepend correction.
+        _snapPaddingKey = key;
+        _afterFrame(() {
+          if (_snapPaddingKey == key) _snapPaddingKey = null;
+        });
+      }
+    }
+
     if (s.loading) {
       // (重新)加载中:等首个快照到了再定分界,别把整段历史放进 after 段。
       _splitChosen = false;
       _splitKey = null;
     } else if (!_splitChosen) {
       _splitChosen = true;
-      _splitKey = _lastStableKey();
+      _splitKey = _lastStableKey(beforeSeq: s.runningTurn?.startSeq);
+      _snapNext = true;
+    } else if (_splitKey == null && prepended) {
+      // A partial window can have no stable row before its running turn.
+      // Reselect only from newly loaded history, never from the old forward
+      // segment when completion removes the running-turn cutoff.
+      _splitKey = _lastStableKey(beforeSeq: math.min(previousOldest, s.runningTurn?.startSeq ?? previousOldest));
+      for (var i = 0; i < _split; i++) {
+        _fresh.remove(_rows[i].key);
+      }
     } else if (_splitKey != null && !_index.containsKey(_splitKey)) {
       // 锚点行被替换(重新同步后结构变了):重新分界,贴底时跟上。
       final folded = _rows.whereType<TurnProcessRow>().where((row) => row.rows.any((child) => child.key == _splitKey));
-      _splitKey = folded.isEmpty ? _lastStableKey() : folded.first.key;
+      _splitKey = folded.isEmpty ? _lastStableKey(beforeSeq: s.runningTurn?.startSeq) : folded.first.key;
     }
 
     if (uiTraceEnabled) {
@@ -625,9 +677,26 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     });
   }
 
-  String? _lastStableKey() {
+  String? _lastStableKey({int? beforeSeq}) {
     for (var i = _rows.length - 1; i >= 0; i--) {
-      if (_rows[i].stable) return _rows[i].key;
+      final row = _rows[i];
+      if (!row.stable) continue;
+      // A durable message in the running turn can still be folded away.
+      // Keep the whole turn after the center, including steering pieces,
+      // so its completion cannot move the history the person is reading.
+      if (beforeSeq != null) {
+        final seq = switch (row) {
+          UserRow(:final item) => item.seq,
+          AssistantRow(:final item) => item.seq,
+          NoticeRowData(:final item) => item.seq,
+          TurnProcessRow(:final trace) => trace.endSeq,
+          TurnFootnoteRow(:final trace) => trace.endSeq,
+          CommandNoticeRow(:final notice) => notice.seq,
+          _ => null,
+        };
+        if (seq == null || seq >= beforeSeq) continue;
+      }
+      return row.key;
     }
     return null;
   }
@@ -637,6 +706,57 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     if (key == null) return 0;
     final i = _index[key];
     return i == null ? 0 : i + 1;
+  }
+
+  Iterable<({String key, RenderBox body, double offset})> _laidOutForwardRows(List<ChatRow> rows, int split) sync* {
+    final sliver = _centerKey.currentContext?.findRenderObject();
+    if (sliver is! RenderSliverMultiBoxAdaptor) return;
+    for (RenderBox? child = sliver.firstChild; child != null; child = sliver.childAfter(child)) {
+      final data = child.parentData! as SliverMultiBoxAdaptorParentData;
+      final index = data.index;
+      if (index == null || data.layoutOffset == null) continue;
+      final at = split + index;
+      if (at < 0 || at >= rows.length) continue;
+      // _buildRow's outer Padding owns the inter-message gap. Anchor its
+      // child so a newly inserted leading gap cannot move the read text.
+      RenderBox? box = child;
+      while (box != null && box is! RenderPadding) {
+        box = switch (box) {
+          RenderProxyBox(:final child) || RenderShiftedBox(:final child) => child,
+          _ => null,
+        };
+      }
+      if (box case RenderPadding(child: final body?) when body.hasSize) {
+        // A sliver coordinate excludes scroll motion and viewport resizing.
+        // It remains valid when a prepend arrives during a drag or fling.
+        yield (
+          key: rows[at].key,
+          body: body,
+          offset: data.layoutOffset! + body.localToGlobal(Offset.zero, ancestor: child).dy,
+        );
+      }
+    }
+  }
+
+  void _rememberPrependAnchor(List<ChatRow> previousRows, int previousSplit) {
+    for (final row in _laidOutForwardRows(previousRows, previousSplit)) {
+      if (!_index.containsKey(row.key)) continue;
+      final viewport = RenderAbstractViewport.of(row.body);
+      final top = row.body.localToGlobal(Offset.zero, ancestor: viewport).dy;
+      if (top + row.body.size.height <= widget.topInset || top >= (_lastViewport ?? 0) - widget.bottomInset) continue;
+      _prependAnchor = (key: row.key, offset: row.offset);
+      return;
+    }
+  }
+
+  double _prependCorrection() {
+    final anchor = _prependAnchor;
+    _prependAnchor = null;
+    if (anchor == null) return 0;
+    for (final row in _laidOutForwardRows(_rows, _split)) {
+      if (row.key == anchor.key) return row.offset - anchor.offset;
+    }
+    return 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -671,12 +791,20 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
           if (_lastViewport != null && _lastViewport != viewport && _pinned) {
             _follow();
           }
-          _lastViewport = viewport;
           // The chat page's pet stands over the composer: the last line
           // stops clear of it (0 without a pet).
           final bottomPad = widget.bottomInset + AppSpace.sm + headroom;
           final anchor = viewport <= 0 ? 1.0 : ((viewport - bottomPad) / viewport).clamp(0.0, 1.0);
-          _anchorPixels = viewport * anchor;
+          final anchorPixels = viewport * anchor;
+          if (_lastViewport != null && !_pinned && _scroll.hasClients) {
+            // The composer can shrink when a turn ends. Preserve the same
+            // visible history as its bottom-anchored viewport grows, without
+            // ending a drag or fling with jumpTo.
+            final shift = anchorPixels - _anchorPixels;
+            if (shift != 0) _scroll.position.correctBy(shift);
+          }
+          _lastViewport = viewport;
+          _anchorPixels = anchorPixels;
 
           return Stack(
             children: [
@@ -786,7 +914,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
           child: row is AssistantRow
               // 等待和思考算过程行,正文不算:接上正文时间距缓缓让开,回复不跳。
               ? AnimatedPadding(
-                  duration: AppMotion.of(context, AppMotion.quick),
+                  duration: row.key == _snapPaddingKey ? Duration.zero : AppMotion.of(context, AppMotion.quick),
                   curve: AppMotion.std,
                   padding: padding,
                   child: SizedBox(width: double.infinity, child: body),
@@ -1364,14 +1492,16 @@ class _FollowPhysics extends ScrollPhysics {
 /// If all content fits, the bounds coincide and dragging cannot move it away
 /// from the top.
 class _TopBoundedScrollController extends ScrollController {
-  _TopBoundedScrollController(this.leadingBoundary);
+  _TopBoundedScrollController(this.leadingBoundary, this.prependCorrection);
 
   final double? Function() leadingBoundary;
+  final double Function() prependCorrection;
 
   @override
   ScrollPosition createScrollPosition(ScrollPhysics physics, ScrollContext context, ScrollPosition? oldPosition) =>
       _TopBoundedScrollPosition(
         leadingBoundary: leadingBoundary,
+        prependCorrection: prependCorrection,
         physics: physics,
         context: context,
         initialPixels: initialScrollOffset,
@@ -1384,6 +1514,7 @@ class _TopBoundedScrollController extends ScrollController {
 class _TopBoundedScrollPosition extends ScrollPositionWithSingleContext {
   _TopBoundedScrollPosition({
     required this.leadingBoundary,
+    required this.prependCorrection,
     required super.physics,
     required super.context,
     super.initialPixels,
@@ -1393,9 +1524,17 @@ class _TopBoundedScrollPosition extends ScrollPositionWithSingleContext {
   });
 
   final double? Function() leadingBoundary;
+  final double Function() prependCorrection;
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    // The slivers now have actual geometry. Retry this layout at the same
+    // readable row, without estimating heights or ending a drag/fling.
+    final correction = prependCorrection();
+    if (correction.abs() > precisionErrorTolerance) {
+      correctBy(correction);
+      return false;
+    }
     if (minScrollExtent == 0) {
       final leading = leadingBoundary();
       if (leading != null && leading.isFinite && leading > 0) {
@@ -1410,7 +1549,9 @@ class _TopBoundedScrollPosition extends ScrollPositionWithSingleContext {
     // RangeMaintainingScrollPhysics otherwise retains an out-of-range offset
     // at nonzero velocity and springs a now-short chat back over later frames.
     if (!hasContentDimensions || minScrollExtent == maxScrollExtent) {
-      final initial = pixels.clamp(minScrollExtent, maxScrollExtent);
+      // The initial running turn can fill the forward segment: land at its
+      // end in this layout, without painting the center for one frame first.
+      final initial = hasContentDimensions ? pixels.clamp(minScrollExtent, maxScrollExtent) : maxScrollExtent;
       if (initial != pixels) {
         correctPixels(initial);
         return false;
