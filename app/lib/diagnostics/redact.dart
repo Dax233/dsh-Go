@@ -2,7 +2,7 @@
 // the phone.
 
 import '../ui/chat/secret_mask.dart' show findSecrets;
-import '../ui/engine/log_view.dart' show stripAnsi;
+import 'ansi.dart';
 
 /// What a removed value becomes.
 const redactionMark = '•••';
