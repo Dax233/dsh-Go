@@ -43,6 +43,9 @@ class BackgroundProbeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The launcher's ResultReceiver is a class of the calling process; make this
+        // process resolve it with its own loader instead of the default one.
+        intent.extras?.classLoader = BackgroundProbeActivity::class.java.classLoader
         receiver = intent.getParcelableExtra(ProbeActivityContract.RECEIVER)
         nonce = intent.getStringExtra(ProbeActivityContract.NONCE)
         expectedDisplay = intent.getIntExtra(ProbeActivityContract.DISPLAY, Display.INVALID_DISPLAY)

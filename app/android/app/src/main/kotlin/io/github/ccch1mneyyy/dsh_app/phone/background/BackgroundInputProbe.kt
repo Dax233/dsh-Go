@@ -27,6 +27,11 @@ internal class BackgroundInputProbe(private val context: Context, private val di
     private val receiver = object : ResultReceiver(ui) {
         override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
             val data = resultData ?: return
+            // The Activity answers with its own (app-class) ResultReceiver inside this
+            // Bundle. This process is the Shizuku user service, whose default class loader
+            // does not know app classes, so reading the extra without ours fails with
+            // BadParcelableException before any stage can advance.
+            data.classLoader = BackgroundInputProbe::class.java.classLoader
             if (data.get(ProbeActivityContract.NONCE) != nonce) return
             try {
                 if (resultCode == ProbeActivityContract.CREATED) {
