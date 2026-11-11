@@ -87,10 +87,11 @@ void main() {
     expect(server.last.isClosed, isTrue, reason: 'nodsh terminated the SSH connection');
     final progress = tester.widget<LinkProgressCard>(find.byType(LinkProgressCard));
     expect(progress.status.phase, HostLinkPhase.failed, reason: 'last step: ${progress.status.step}');
-    final indicators = tester.widgetList<CircularProgressIndicator>(find.byType(CircularProgressIndicator));
-    expect(indicators, isEmpty, reason: 'indicator widths: ${indicators.map((indicator) => indicator.strokeWidth).toList()}; '
-        'button labels: ${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).whereType<String>().toList()}');
+    // Subscription cancellation resumes outside FakeAsync; yield a real event
+    // turn, then verify the terminal UI rather than sleeping or skipping it.
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(server.last.scripts.any((script) => script.contains(r'kill "$P"')), isFalse);
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '测试连接')).onPressed, isNotNull);
 
@@ -99,6 +100,7 @@ void main() {
     await tester.tap(restart);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重启托管 DSH'));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
     expect(server.last.scripts.single, contains(r'kill "$P"'));
   });

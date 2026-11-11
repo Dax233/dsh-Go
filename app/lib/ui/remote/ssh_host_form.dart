@@ -289,9 +289,7 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> {
     } catch (_) {
       // Shown in the progress card.
     } finally {
-      debugPrint('SSH form test cleanup: cancelling status subscription');
       await _testSub?.cancel();
-      debugPrint('SSH form test cleanup: status subscription cancelled');
       _testSub = null;
       if (identical(_test, link)) {
         _test = null;
@@ -301,7 +299,6 @@ class _SshHostFormPageState extends ConsumerState<SshHostFormPage> {
       // The remote dsh keeps running for the real connection; only our
       // test session closes.
       await link.close();
-      debugPrint('SSH form test cleanup: link closed');
     }
   }
 
