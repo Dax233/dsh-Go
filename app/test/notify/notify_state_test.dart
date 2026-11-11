@@ -49,6 +49,18 @@ void main() {
       expect(deliveryFor(done, prefs: prefs, foreground: true), AlertDelivery.banner);
     });
 
+    test('background ignores a stale foreground conversation target', () {
+      final ask = _alert('s1', AlertKind.approval, host: _ssh, key: 'e1');
+      expect(
+        deliveryFor(ask, prefs: prefs, foreground: false, viewed: (host: _ssh, sessionId: 's1')),
+        AlertDelivery.system,
+      );
+      expect(
+        deliveryFor(ask, prefs: const NotifyPrefs(approval: false), foreground: false, viewed: (host: _ssh, sessionId: 's1')),
+        AlertDelivery.none,
+      );
+    });
+
     test('the conversation on screen is never interrupted', () {
       expect(
         deliveryFor(done, prefs: prefs, foreground: true, viewed: (host: HostRef.local, sessionId: 's1')),

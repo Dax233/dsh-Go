@@ -217,8 +217,9 @@ AlertDelivery deliveryFor(
   bool petOnScreen = false,
 }) {
   if (!prefs.allows(alert.kind)) return AlertDelivery.none;
-  if (viewed != null && viewed.host == alert.host && viewed.sessionId == alert.sessionId) return AlertDelivery.none;
+  // A lifecycle listener may still see the last foreground viewed target.
   if (!foreground) return AlertDelivery.system;
+  if (viewed != null && viewed.host == alert.host && viewed.sessionId == alert.sessionId) return AlertDelivery.none;
   return petOnScreen ? AlertDelivery.pet : AlertDelivery.banner;
 }
 
