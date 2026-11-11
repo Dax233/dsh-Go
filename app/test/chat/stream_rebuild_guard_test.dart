@@ -255,6 +255,38 @@ Future<({int done, int live, int derivations})> _count(Future<void> Function() b
 void main() {
   setUpAll(loadTestFonts);
 
+  testWidgets('metadata publishes retain the unchanged live transcript', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '回答'));
+    g.chunk(const ToolCallDeltaChunk(1, id: 'live-call', name: 'bash', argumentsDelta: '{'));
+    await g.settle(tester);
+    final items = g.state.items;
+    final status = await _count(() async {
+      g.client.events.add(const SessionStatusEvent(_session, true));
+      await g.settle(tester);
+    });
+    final title = await _count(() async {
+      g.log('session/title', {'title': '新的标题'});
+      await g.settle(tester);
+    });
+    debugPrint('[GUARD] unchanged draft metadata: status=$status title=$title');
+    expect(status.done, 0, reason: 'an unchanged live projection must not rebuild historical rows');
+    expect(status.derivations, 0);
+    expect(g.state.title, '新的标题');
+    expect(g.state.items, same(items));
+    expect(tester.takeException(), isNull);
+    g.chunk(const TextDeltaChunk(0, '继续'));
+    await g.settle(tester);
+    expect(g.state.items.whereType<AssistantChatItem>().last.text, '回答继续');
+    expect(items.whereType<AssistantChatItem>().last.text, '回答');
+    await g.unmount(tester);
+  });
+
   Future<void> streamText(WidgetTester tester, {List<String> queued = const []}) async {
     final g = _Guard();
     addTearDown(g.dispose);

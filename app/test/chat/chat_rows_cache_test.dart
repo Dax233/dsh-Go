@@ -9,8 +9,8 @@ import 'support/sample_chat.dart';
 
 // Compare the complete projection, including nested folded rows, to the
 // uncached implementation. This is a work-count contract, not an FPS claim.
-// A streaming draft's tool call is made anew on every transcript read; the
-// cache keeps the one it has while it is the same, so compare those by value.
+// A changed streaming draft makes fresh tool calls; the cache keeps the one
+// it has while its values are the same, so compare those by value.
 Object toolShape(ToolChatItem t) =>
     t.seq == null && (t.status == ToolStatus.streaming || t.status == ToolStatus.running)
     ? (t.callId, t.name, t.arguments, t.status, t.resultParts, t.meta, t.pendingApproval)

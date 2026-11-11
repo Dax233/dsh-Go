@@ -64,10 +64,15 @@ class ChatRowsCache {
   }
 
   List<ChatRow>? _reuseTail(List<ChatItem> previous, List<ChatItem> items, {required bool running}) {
-    if (identical(previous, items)) return _rows;
+    if (identical(previous, items)) {
+      // A cached live projection is the same unchanged draft the value check
+      // below used to find. Keep its historical widgets across status updates.
+      _onlyDraftChanged = running && items.isNotEmpty && _isDraft(items.last);
+      return _rows;
+    }
     if (previous.length != items.length) return null;
     // The transcript reuses durable ChatItems across deltas and makes the
-    // streaming draft's items (no seq yet, at the end) anew on every read.
+    // streaming draft's items (no seq yet, at the end) anew when they change.
     // Check every item: a matching last key alone cannot detect a history edit.
     var start = 0;
     while (start < items.length && identical(previous[start], items[start])) {
