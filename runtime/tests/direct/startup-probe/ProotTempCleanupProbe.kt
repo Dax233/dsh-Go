@@ -48,7 +48,7 @@ fun main(args: Array<String>) {
     val logs = Collections.synchronizedList(mutableListOf<String>())
     val done = CountDownLatch(1)
     val runtime = DshProcess(context, RuntimeManifest(launchArgv = listOf(launcher.path)), root, object : DshProcess.Listener {
-        override fun onLog(line: String, stream: String) { logs += line }
+        override fun onLog(line: String, stream: String, storageLine: String) { logs += line }
         override fun onReady(source: DshProcess, baseUrl: String, token: String) {}
         override fun onExit(source: DshProcess, code: Int, expected: Boolean) { check(code == 0); done.countDown() }
     })

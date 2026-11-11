@@ -39,7 +39,7 @@ data class RunFailure(
     val at: Long,
     /** The failed run was a safe-mode run. */
     val safeMode: Boolean,
-    /** First fatal or launch error line, without the `dsh: ` prefix and with tokens masked. */
+    /** First fatal or launch error line, without the `dsh: ` prefix and with credentials masked. */
     val summary: String?,
     /** Required rows the startup audit names (`agent-loop (required)`): broken, not necessarily the culprit. */
     val requiredRows: List<String>,
@@ -191,7 +191,7 @@ object CrashClassifier {
     }
 
     private fun summarize(line: String): String {
-        var text = redact(line.trim())
+        var text = LogRedactor.redact(line.trim())
         text = text.removePrefix("dsh: ")
         text = text.replaceFirst(Regex("^[A-Za-z]*Error: dsh: "), "")
         return if (text.length > SUMMARY_MAX) text.take(SUMMARY_MAX - 1) + "…" else text

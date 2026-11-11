@@ -21,7 +21,7 @@ final _maskedAuthorization = RegExp(r'^(?:Bearer|Basic)\s+•••$', caseSensi
 /// Assignments whose value is a secret whatever it looks like:
 /// `password=…`, `"secret": "…"`, `Cookie: …`, `Authorization: Basic …`.
 final _secretAssignment = RegExp(
-  r'''\b([A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization)[A-Za-z0-9_.-]*)("?\s*[:=]\s*)(?:(["'])((?:\\.|(?!\3)[^\\\r\n])*)\3|(["']?)(?!•)(?!(?:Bearer|Basic)\b)([^\s"',;&]+))''',
+  r'''\b([A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization)[A-Za-z0-9_.-]*)("?\s*[:=]\s*)(?:(["'])((?:\\[^\r\n]|(?!\3)[^\\\r\n])*(?:\\(?=[\r\n]|$))?)(\3|(?=[\r\n]|$))|(?!•)(?!(?:Bearer|Basic)\b)([^\s"',;&]+))''',
   caseSensitive: false,
 );
 
@@ -112,12 +112,11 @@ String redactDiagnostics(String text) {
   out = out.replaceAllMapped(_bearer, (m) => '${m[1]} $redactionMark');
   out = out.replaceAllMapped(_secretAssignment, (m) {
     final quote = m[3];
-    if (quote == null) return '${m[1]}${m[2]}${m[5]}$redactionMark';
+    if (quote == null) return '${m[1]}${m[2]}$redactionMark';
     final value = m[4]!;
-    // A closed quoted value can contain spaces, separators and escaped quotes.
-    // Keep an empty value and an already masked auth scheme readable.
+    // A quoted value may lose its closing quote at the line limit.
     final masked = value.isEmpty || _maskedAuthorization.hasMatch(value) ? value : redactionMark;
-    return '${m[1]}${m[2]}$quote$masked$quote';
+    return '${m[1]}${m[2]}$quote$masked${m[5]}';
   });
   out = out.replaceAllMapped(_keyAssignment, (m) => '${m[1]}${m[2]}$redactionMark');
   return out;
