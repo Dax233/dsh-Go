@@ -17021,7 +17021,7 @@ class L10nEn extends L10n {
 
   @override
   String get shellDeleteWarning =>
-      'The selected chat history will be permanently deleted from this host. This cannot be undone and is not archive.\n\nWorking directories, generated files, forks, shared attachments and published cloud shares are kept. Cloud shares must be removed separately. Active or related chats may be refused by the host.';
+      'The selected chat history will be permanently deleted from this host. This cannot be undone and is not archive.\n\nWorking directories, generated files, forks, shared attachments and published cloud shares are kept. Cloud shares must be removed separately. Subagent chats are deleted along with the chat. The host refuses a running chat or one with scheduled tasks.';
 
   @override
   String get shellDeleteOwnerChanged =>
@@ -17058,7 +17058,7 @@ class L10nEn extends L10n {
       'Stop running work before deleting. The host also checks active tasks and schedules.';
 
   @override
-  String get shellDeleteRelated => 'This chat has related subagent work. The host refused deletion to protect it.';
+  String get shellDeleteRelated => 'This chat still has scheduled tasks. The host refused deletion to protect them.';
 
   @override
   String get shellDeleteWriterHeld => 'Another process is using this chat. Close it there and try again.';

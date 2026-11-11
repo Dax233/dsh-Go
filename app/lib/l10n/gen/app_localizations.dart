@@ -29591,7 +29591,7 @@ abstract class L10n {
   /// No description provided for @shellDeleteWarning.
   ///
   /// In zh, this message translates to:
-  /// **'将从此主机永久删除所选对话记录，无法撤销，与归档不同。\n\n工作目录、生成的文件、分叉对话、共享附件和已发布的云端分享都会保留。云端分享需另行删除。主机会拒绝删除仍有任务或关联工作的对话。'**
+  /// **'将从此主机永久删除所选对话记录，无法撤销，与归档不同。\n\n工作目录、生成的文件、分叉对话、共享附件和已发布的云端分享都会保留。云端分享需另行删除。子代理对话会随所选对话一起删除。运行中或有定时任务的对话会被主机拒绝。'**
   String get shellDeleteWarning;
 
   /// No description provided for @shellDeleteOwnerChanged.
@@ -29627,7 +29627,7 @@ abstract class L10n {
   /// No description provided for @shellDeleteRelated.
   ///
   /// In zh, this message translates to:
-  /// **'此对话有关联的子代理工作，主机为保护它们拒绝删除。'**
+  /// **'此对话仍有关联的定时任务，主机为保护它们拒绝删除。'**
   String get shellDeleteRelated;
 
   /// No description provided for @shellDeleteWriterHeld.
