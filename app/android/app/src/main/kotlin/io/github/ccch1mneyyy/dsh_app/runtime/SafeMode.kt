@@ -641,8 +641,12 @@ function withLock (file, fn) {
 }
 function writeAtomic (file, text) {
   const tmp = file + '.' + process.pid + '.' + Date.now() + '.tmp'
-  fs.writeFileSync(tmp, text)
-  fs.renameSync(tmp, file)
+  try {
+    fs.writeFileSync(tmp, text)
+    fs.renameSync(tmp, file)
+  } finally {
+    fs.rmSync(tmp, { force: true })
+  }
 }
 function updateBundles (change) {
   const file = manifestPath()
