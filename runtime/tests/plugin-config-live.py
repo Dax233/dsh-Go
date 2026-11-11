@@ -127,9 +127,11 @@ try:
  print(json.dumps({'result':'PASS','extraCases':['20 GET/POST real route guard refusals','simultaneous POST one winner','same UID restart conflict','external disk change conflict','recovery failure 500'],'cases':['list and two instances','schema graph and secret redaction','mixed persist','stale revision','secret-parent-expression-prototype-root denial','invalid config','unset default','array remove','apply rollback']}))
 
 finally:
- if 'results' in locals(): (root/'results.partial.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
- p.terminate()
- try:p.wait(timeout=10)
- except subprocess.TimeoutExpired:p.kill();p.wait()
- f.close()
- (root/'host.log').write_text(redact(logpath.read_text()))
+ try:
+  if 'results' in locals(): (root/'results.partial.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
+ finally:
+  p.terminate()
+  try:p.wait(timeout=10)
+  except subprocess.TimeoutExpired:p.kill();p.wait()
+  f.close()
+  (root/'host.log').write_text(redact(logpath.read_text()))
