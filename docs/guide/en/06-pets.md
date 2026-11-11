@@ -35,7 +35,7 @@ On Android 13 and later, if the switch still won't turn on after visiting system
 
 ## Action wheel and screenshot questions
 
-Touch and hold the floating pet without lifting your finger. A half-wheel opens toward the inside of the screen. Slide toward an action to highlight and slightly lift it, then release to choose it. Slide back to the center or outside the wheel before releasing to cancel. The wheel mirrors at the opposite screen edge; tapping and ordinary dragging are unchanged. Accessibility users can also long-press and tap an action directly. Small screens or large fonts use a scrollable list when the wheel will not fit; in that case, release without sliding, then scroll and tap.
+Touch and hold the floating pet. A fan of round buttons opens toward the inside of the screen, each with its name on the outer side. Keep your finger down and slide toward an action: it grows and its name is highlighted; release to choose it. Slide back onto the pet or outside the fan before releasing to cancel. If you release without sliding, the fan stays open: tap an action, or tap anywhere else to close it. The fan mirrors at the opposite screen edge; tapping and ordinary dragging are unchanged. Small screens or large fonts use a scrollable list when the fan will not fit; release without sliding, then scroll and tap.
 
 Choose **Screenshot & ask DSH-Go** to hide the pet and wheel, capture the current screen and automatically return to the app with the image as a pending attachment in a new chat. Type your question, then tap Send. Nothing is sent to AI automatically, and the previous conversation's draft is not overwritten. Existing text and attachments in the new-chat draft are kept; attachment limits are reported if the image cannot be added.
 
