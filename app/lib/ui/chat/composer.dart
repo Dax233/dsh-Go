@@ -168,6 +168,8 @@ const double _fontSize = 15.0;
 
 class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin {
   Duration? _lastEscape;
+  // Keep the editor and its input connection when the footer changes the layout.
+  final _fieldKey = GlobalKey();
   late final _draftEmpty = ValueNotifier(widget.controller.text.trim().isEmpty);
 
   void _draftChanged() {
@@ -442,6 +444,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
                     child: KeyedSubtree(key: ValueKey(dictating), child: leading),
                   );
             final field = Focus(
+              key: _fieldKey,
               canRequestFocus: false,
               skipTraversal: true,
               onKeyEvent: _hardwareKey,
