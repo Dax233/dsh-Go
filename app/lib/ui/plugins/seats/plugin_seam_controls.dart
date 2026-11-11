@@ -59,7 +59,7 @@ class _PluginSeamControlsState extends ConsumerState<PluginSeamControls> {
     final overlayInfo = slotInfo(Slots.shellOverlay);
     final overlayPolicy = seatPolicyOf(Slots.shellOverlay);
     final overlay = reported(Slots.shellOverlay).any((o) {
-      final spec = SeatPlanner.islandSpecFor(
+      final spec = SlotAdapterRegistry.islandSpecFor(
         overlayInfo,
         overlayPolicy,
         o,
@@ -100,7 +100,7 @@ class _PluginSeamControlsState extends ConsumerState<PluginSeamControls> {
                 title: l10n.seamsOverlay,
                 subtitle: l10n.seamsOverlayNote,
                 subtitleMaxLines: 2,
-                badge: FromUiJsonBadge(setting: setting),
+                badge: FromUiJsonBadge(setting),
                 onTap: canToggle ? () => unawaited(_setOverlay(host, !enabled)) : null,
                 trailing: Switch(
                   key: const ValueKey('plugin-overlay-switch'),

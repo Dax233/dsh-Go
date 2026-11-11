@@ -55,7 +55,7 @@ void main() {
     var taps = 0;
     final container = ProviderContainer(
       overrides: [
-        seatInventoryProvider.overrideWithValue(_inventory),
+        seatInventoryProvider.overrideWith((ref) => _inventory),
         seatPlanProvider(PluginOverlayLayer.request).overrideWith((ref) => SeatPlan(_seat, ref.watch(_itemsProvider))),
         seatRenderersProvider.overrideWithValue(
           SeatRenderers(
@@ -105,9 +105,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         chatProvider('s').overrideWith(() => _Chat('s')),
-        seatInventoryProvider.overrideWithValue(_inventory),
+        seatInventoryProvider.overrideWith((ref) => _inventory),
         seatPlanProvider(PluginOverlayLayer.request)
-            .overrideWithValue(const SeatPlan(_seat, [SeatItem.island(_first, _spec)])),
+            .overrideWith((ref) => const SeatPlan(_seat, [SeatItem.island(_first, _spec)])),
         seatRenderersProvider.overrideWithValue(
           SeatRenderers(island: (_, spec, items, fallback) => const Text('web overlay')),
         ),
@@ -146,8 +146,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          seatInventoryProvider.overrideWithValue(
-            const SeatInventory(packages: {'first': PluginClientInfo(package: 'first', enabled: false)}),
+          seatInventoryProvider.overrideWith(
+            (ref) => const SeatInventory(packages: {'first': PluginClientInfo(package: 'first', enabled: false)}),
           ),
           seatPlanProvider(PluginOverlayLayer.request)
               .overrideWithValue(const SeatPlan(_seat, [SeatItem.island(_first, _spec)])),

@@ -64,7 +64,7 @@ class SeatPreferencesController extends Notifier<SeatPreferences> {
       if (ref.mounted) state = next;
     });
     // The caller receives the failure; it must not poison later user retries.
-    _writes = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _writes = write.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return write;
   }
 }

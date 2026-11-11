@@ -17,6 +17,10 @@
     "README.en.md",
     "LICENSE"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
   "engines": {
     "dsh": ">=0.2.2-rc.1 <0.3.0-0"
   },
