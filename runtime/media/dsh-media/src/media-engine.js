@@ -110,7 +110,9 @@ export async function generateMedia(request, context) {
         total += bytes.length;
         if (bytes.length > context.limits.maxImageBytes || total > context.limits.maxTotalImageBytes) fail('too_large');
         const info = inspectImage(bytes);
-        const path = await store.stage(bytes, info.extension);
+        const path = await store.stage(bytes, info.extension).catch(error => {
+          throw error instanceof MediaError ? error : new MediaError('storage');
+        });
         meta.items.push({ path, mime: info.mime, width: info.width, height: info.height, bytes: bytes.length });
       }
     } else {

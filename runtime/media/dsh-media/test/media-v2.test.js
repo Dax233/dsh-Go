@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, writeFile, rm, rename, readdir } from 'node:fs/promises';
+import fs, { mkdtemp, mkdir, readFile, writeFile, rm, rename, readdir } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join, sep } from 'node:path';
 import { CATALOG, HARD_LIMITS, Config, runtimeSnapshot, catalogModel } from '../src/config.js';
 import { createMediaClient, createDescriptor } from '../src/adapters.js';
 import { createHttpTransport } from '../src/http.js';
@@ -73,6 +74,36 @@ async function fixture(t, profile, behavior = {}) {
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); });
   return { directory, workspace, wires, controller, context, origin, setState(value) { state = value; } };
 }
+test('image stage partial write failure preserves storage classification and submitted hold', async t => {
+  const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
+  f.context.admission = await admitGeneration(req, f.context);
+  const outputDirectory = join(f.workspace, 'generated', f.context.admission.outputDate);
+  const originalOpen = fs.open;
+  let failures = 0;
+  const injected = t.mock.method(fs, 'open', async function (path, ...args) {
+    const handle = await originalOpen.call(this, path, ...args);
+    if (String(path).startsWith(outputDirectory + sep) && basename(String(path)) === '1.png') {
+      const write = handle.writeFile.bind(handle);
+      handle.writeFile = async bytes => {
+        await write(bytes.subarray(0, 5));
+        assert.equal((await handle.stat()).size, 5);
+        failures++;
+        throw Object.assign(new Error('controlled image write ENOSPC'), { code: 'ENOSPC' });
+      };
+    }
+    return handle;
+  });
+  syncBuiltinESMExports();
+  try { await assert.rejects(generateMedia(req, f.context), { code: 'storage' }); }
+  finally { injected.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(failures, 1);
+  assert.equal(f.wires.length, 1);
+  assert.equal(f.wires[0].method, 'POST');
+  const ledger = await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot();
+  assert.equal(ledger.requests[0].state, 'submission_unknown');
+  assert.deepEqual(await readdir(outputDirectory), []);
+  assert.deepEqual(await readdir(join(f.context.hostStateDir, 'works', f.context.admission.outputDate)), []);
+});
 for (const profile of ['openai-gpt-image', 'ark-image', 'ali-wan-image', 'silicon-image']) {
   test(`${profile}: real HTTP generation saves exact original and private index with budget`, async t => {
     const f = await fixture(t, profile), req = request(profile);
