@@ -17,7 +17,7 @@ const { establishCatalogChild, subagentCatalogProjectionDefinition: catalog } =
   await load('dsh-subagent', 'lib/types/catalog.js');
 const { teamProjectionDefinition: team } = await load('dsh-experimental-agent-team', 'lib/types/projection.js');
 
-const hooks = () => ({ prepare: async () => {}, inspectTasks: async () => false, cleanup: async () => {} });
+const hooks = () => ({ validate: async () => {}, dispose: async () => {}, inspectTasks: async () => false, cleanup: async () => {} });
 const related = error => error.code === 'session-related';
 function record(session, kind, child) {
   if (kind === 'catalog') establishCatalogChild(session, child.header, { mode: 'continuable', label: 'Synthetic child' });
@@ -102,23 +102,36 @@ for (const compression of ['none', 'zstd']) for (const kind of ['catalog', 'team
       const reader = await f.storage.open(id, 'read');
       try { assert.equal(reader.header.id, id); await reader.read(); }
       finally { await reader.close(); }
-      await assert.rejects(f.storage.dshGoDeletion.delete(id, hooks()), related);
+    }
+    // A subagent session is still not deletable on its own...
+    await assert.rejects(f.storage.dshGoDeletion.delete(f.child.id, hooks()), related);
+    assert.equal(f.storage.dshGoDeletion.deleted(f.child.id), false);
+    // ...but the source's own catalog/team history no longer blocks the chat, and
+    // deleting the source takes its persisted subagent session with it.
+    await f.storage.dshGoDeletion.delete(f.source.id, hooks());
+    for (const id of [f.source.id, f.child.id]) {
+      assert.equal(f.storage.dshGoDeletion.deleted(id), true, id);
+      await assert.rejects(readFile(f.paths.get(id)), { code: 'ENOENT' });
     }
   });
 }
 for (const kind of ['catalog', 'team']) {
-  test(`a fork's own ${kind} still blocks deletion`, async t => {
+  test(`a fork's own ${kind} no longer blocks deletion`, async t => {
     const f = await fixture(t, { kind, own: true });
-    await assert.rejects(f.storage.dshGoDeletion.delete(f.fork.id, hooks()), related);
-    assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), false);
-    await f.unchanged();
+    await f.storage.dshGoDeletion.delete(f.fork.id, hooks());
+    assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), true);
+    await assert.rejects(readFile(f.paths.get(f.fork.id)), { code: 'ENOENT' });
+    await f.unchanged([f.source.id, f.child.id]);
   });
 }
-test('a persisted child whose parent is the fork still blocks deletion', async t => {
+test('a persisted child is deleted together with its fork', async t => {
   const f = await fixture(t, { realChild: true });
-  await assert.rejects(f.storage.dshGoDeletion.delete(f.fork.id, hooks()), related);
-  assert.equal(f.storage.dshGoDeletion.deleted(f.fork.id), false);
-  await f.unchanged();
+  await f.storage.dshGoDeletion.delete(f.fork.id, hooks());
+  for (const id of [f.fork.id, 'synthetic-fork-child']) {
+    assert.equal(f.storage.dshGoDeletion.deleted(id), true, id);
+    await assert.rejects(readFile(f.paths.get(id)), { code: 'ENOENT' });
+  }
+  await f.unchanged([f.source.id, f.child.id]);
 });
 test('the schedule inspection gate still blocks an otherwise independent fork', async t => {
   const f = await fixture(t);
