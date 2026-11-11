@@ -974,6 +974,69 @@ class HashingWriter:
         self.sink.flush()
 
 
+def write_archive(entries, out, args):
+    """Write a normalized entry tree and return its archive statistics."""
+    def sort_key(p):
+        return p.split("/")
+
+    out_tmp = out + ".tmp"
+    if args.compress == "xz":
+        comp = subprocess.Popen(["xz", "-T%d" % args.threads, "-%s" % args.xz_preset, "-c"],
+                                stdin=subprocess.PIPE, stdout=open(out_tmp, "wb"))
+        sink = comp.stdin
+    else:
+        comp = None
+        raw = open(out_tmp, "wb")
+        sink = gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=args.gzip_level, mtime=0)
+    hw = HashingWriter(sink)
+    counts = {"dir": 0, "file": 0, "symlink": 0}
+    file_bytes = 0
+    with tarfile.open(fileobj=hw, mode="w|", format=tarfile.GNU_FORMAT) as tar:
+        for p in sorted(entries, key=sort_key):
+            e = entries[p]
+            ti = tarfile.TarInfo(p)
+            ti.uid = ti.gid = 0
+            ti.uname = ti.gname = "root"
+            ti.mtime = args.epoch
+            ti.mode = e.mode
+            counts[e.kind] += 1
+            if e.kind == "dir":
+                ti.type = tarfile.DIRTYPE
+                tar.addfile(ti)
+            elif e.kind == "symlink":
+                ti.type = tarfile.SYMTYPE
+                ti.linkname = e.link
+                tar.addfile(ti)
+            else:
+                data = e.read()
+                ti.size = len(data)
+                file_bytes += len(data)
+                tar.addfile(ti, io.BytesIO(data))
+    if comp is not None:
+        comp.stdin.close()
+        if comp.wait() != 0:
+            raise SystemExit("xz failed")
+    else:
+        sink.close()
+        raw.close()
+    os.replace(out_tmp, out)
+
+    with open(out, "rb") as f:
+        archive_sha = hashlib.file_digest(f, "sha256").hexdigest() if hasattr(hashlib, "file_digest") \
+            else hashlib.sha256(f.read()).hexdigest()
+    return {
+        "archive": os.path.basename(out),
+        "archiveBytes": os.path.getsize(out),
+        "archiveSha256": archive_sha,
+        "tarBytes": hw.n,
+        "tarSha256": hw.h.hexdigest(),
+        "uncompressedBytes": file_bytes,
+        "counts": counts,
+        "origins": {o: sum(1 for e in entries.values() if e.origin == o)
+                    for o in ("ubuntu", "deb", "python", "node", "dsh", "pnpm", "bridge", "overlay", "implicit")},
+    }
+
+
 def cmd_assemble(args):
     abi = args.abi
     machine = ABI[abi]["machine"]
@@ -1284,65 +1347,9 @@ def cmd_assemble(args):
             e.mode = (e.mode & 0o777) | 0o600
 
     # 7. Write the tar (GNU format, sorted, root-owned, fixed mtime) through the compressor
-    def sort_key(p):
-        return p.split("/")
-
-    out_tmp = args.out + ".tmp"
-    if args.compress == "xz":
-        comp = subprocess.Popen(["xz", "-T%d" % args.threads, "-%s" % args.xz_preset, "-c"],
-                                stdin=subprocess.PIPE, stdout=open(out_tmp, "wb"))
-        sink = comp.stdin
-    else:
-        comp = None
-        raw = open(out_tmp, "wb")
-        sink = gzip.GzipFile(filename="", mode="wb", fileobj=raw, compresslevel=args.gzip_level, mtime=0)
-    hw = HashingWriter(sink)
-    counts = {"dir": 0, "file": 0, "symlink": 0}
-    file_bytes = 0
-    with tarfile.open(fileobj=hw, mode="w|", format=tarfile.GNU_FORMAT) as tar:
-        for p in sorted(entries, key=sort_key):
-            e = entries[p]
-            ti = tarfile.TarInfo(p)
-            ti.uid = ti.gid = 0
-            ti.uname = ti.gname = "root"
-            ti.mtime = args.epoch
-            ti.mode = e.mode
-            counts[e.kind] += 1
-            if e.kind == "dir":
-                ti.type = tarfile.DIRTYPE
-                tar.addfile(ti)
-            elif e.kind == "symlink":
-                ti.type = tarfile.SYMTYPE
-                ti.linkname = e.link
-                tar.addfile(ti)
-            else:
-                data = e.read()
-                ti.size = len(data)
-                file_bytes += len(data)
-                tar.addfile(ti, io.BytesIO(data))
-    if comp is not None:
-        comp.stdin.close()
-        if comp.wait() != 0:
-            raise SystemExit("xz failed")
-    else:
-        sink.close()
-        raw.close()
-    os.replace(out_tmp, args.out)
-
-    with open(args.out, "rb") as f:
-        archive_sha = hashlib.file_digest(f, "sha256").hexdigest() if hasattr(hashlib, "file_digest") \
-            else hashlib.sha256(f.read()).hexdigest()
-    report.update({
-        "archive": os.path.basename(args.out),
-        "archiveBytes": os.path.getsize(args.out),
-        "archiveSha256": archive_sha,
-        "tarBytes": hw.n,
-        "tarSha256": hw.h.hexdigest(),
-        "uncompressedBytes": file_bytes,
-        "counts": counts,
-        "origins": {o: sum(1 for e in entries.values() if e.origin == o)
-                    for o in ("ubuntu", "deb", "python", "node", "dsh", "pnpm", "bridge", "overlay", "implicit")},
-    })
+    report.update(write_archive(entries, args.out, args))
+    counts = report["counts"]
+    file_bytes = report["uncompressedBytes"]
     report["droppedBytes"] = sum(report["dropped"].values())
     with open(args.report, "w") as f:
         json.dump(report, f, indent=2, sort_keys=True)
