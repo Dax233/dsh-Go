@@ -267,23 +267,30 @@ class CachedImageReader implements WorkspaceImageReader {
     final key = (sessionId, path);
     final done = peek(sessionId, path);
     if (done != null) return SynchronousFuture(done);
-    return _pending[key] ??= inner
-        .read(sessionId, path)
-        .then(
-          (image) {
-            _pending.remove(key);
-            if (keeps?.call(image) == false) return image;
-            _done[key] = image;
-            while (_done.length > capacity) {
-              _done.remove(_done.keys.first);
-            }
-            return image;
-          },
-          onError: (Object error, StackTrace stack) {
-            _pending.remove(key);
-            Error.throwWithStackTrace(error, stack);
-          },
-        );
+    final pending = _pending[key];
+    if (pending != null) return pending;
+    final request = Completer<LoadedImage>();
+    _pending[key] = request.future;
+    request.complete(
+      Future.sync(() => inner.read(sessionId, path)).then(
+        (image) {
+          // Another tile can retry this path before the old read completes.
+          if (!identical(_pending[key], request.future)) return image;
+          _pending.remove(key);
+          if (keeps?.call(image) == false) return image;
+          _done[key] = image;
+          while (_done.length > capacity) {
+            _done.remove(_done.keys.first);
+          }
+          return image;
+        },
+        onError: (Object error, StackTrace stack) {
+          if (identical(_pending[key], request.future)) _pending.remove(key);
+          Error.throwWithStackTrace(error, stack);
+        },
+      ),
+    );
+    return request.future;
   }
 
   /// Forgets [path] so it is read again (a retry after a failure).
