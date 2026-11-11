@@ -8477,7 +8477,7 @@ abstract class L10n {
   /// No description provided for @chatErrContextLength.
   ///
   /// In zh, this message translates to:
-  /// **'对话太长，发送 /compact 压缩后再试'**
+  /// **'对话太长。若 /compact 也失败，请新建对话或换模型'**
   String get chatErrContextLength;
 
   /// No description provided for @chatErrModelUnavailable.

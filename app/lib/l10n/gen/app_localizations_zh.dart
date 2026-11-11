@@ -4601,7 +4601,7 @@ class L10nZh extends L10n {
   String get chatErrRateLimit => '请求太频繁，稍后再试';
 
   @override
-  String get chatErrContextLength => '对话太长，发送 /compact 压缩后再试';
+  String get chatErrContextLength => '对话太长。若 /compact 也失败，请新建对话或换模型';
 
   @override
   String get chatErrModelUnavailable => '模型服务暂时不可用';

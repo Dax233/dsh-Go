@@ -1298,12 +1298,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// 对话停在出错、被打断或输出到上限的一轮上:提示行尾给一个「重试」
   /// (这一轮什么都还没做、问的是纯文字,原样再发)或「继续」。
   /// 引擎拒绝这个模型时给去处:本机引擎太旧就「检查更新」(引擎随 App
-  /// 更新),其余「换模型」。
+  /// 更新),其余「换模型」。上下文超限也先换模型,不原样重发。
   NoticeAction? _noticeAction(NoticeChatItem notice) {
     final s = ref.read(chatProvider(widget.sessionId));
     if (s.running) return null;
     final code = notice.failure?.code ?? '';
-    final refused = notice.kind == 'error' && modelRefusalCodes.contains(code);
+    final refused = notice.kind == 'error' && (modelRefusalCodes.contains(code) || code == 'CONTEXT_WINDOW_EXCEEDED');
     final repeatable = switch (notice.kind) {
       // 换个说法、再发一次都没用的:Key、余额、账号额度、模型本身用不了。
       'error' =>

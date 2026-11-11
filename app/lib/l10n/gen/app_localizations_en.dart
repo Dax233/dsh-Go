@@ -4895,7 +4895,7 @@ class L10nEn extends L10n {
   String get chatErrRateLimit => 'Too many requests. Try again later.';
 
   @override
-  String get chatErrContextLength => 'Chat too long. Send /compact, then try again.';
+  String get chatErrContextLength => 'Chat too long. If /compact fails, try a new chat or model.';
 
   @override
   String get chatErrModelUnavailable => 'Model service temporarily unavailable';

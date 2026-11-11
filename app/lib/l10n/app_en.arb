@@ -1397,7 +1397,7 @@
   "chatErrBalance": "Insufficient balance",
   "chatErrAccountQuota": "Account quota used up",
   "chatErrRateLimit": "Too many requests. Try again later.",
-  "chatErrContextLength": "Chat too long. Send /compact, then try again.",
+  "chatErrContextLength": "Chat too long. If /compact fails, try a new chat or model.",
   "chatErrModelUnavailable": "Model service temporarily unavailable",
   "chatErrModelTimeout": "Model response timed out",
   "chatErrModelConnection": "Couldn’t reach the model service",

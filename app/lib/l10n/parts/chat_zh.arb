@@ -669,7 +669,7 @@
   "chatErrBalance": "余额不足",
   "chatErrAccountQuota": "账号额度已用完",
   "chatErrRateLimit": "请求太频繁，稍后再试",
-  "chatErrContextLength": "对话太长，发送 /compact 压缩后再试",
+  "chatErrContextLength": "对话太长。若 /compact 也失败，请新建对话或换模型",
   "chatErrModelUnavailable": "模型服务暂时不可用",
   "chatErrModelTimeout": "模型响应超时",
   "chatErrModelConnection": "没能连上模型服务",
