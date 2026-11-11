@@ -369,7 +369,7 @@ final activeHostProvider = NotifierProvider<ActiveHostController, HostRef>(Activ
 // ── DSH Remote (relay) account ───────────────────────────────────────────────
 
 /// The DSH Remote server: null for the hosted dsh.r2049.cn, else a
-/// self-hosted origin (an advanced option; it signs in with email + password).
+/// self-hosted origin with its own sign-in methods.
 class RelayServerController extends Notifier<String?> {
   static const prefsKey = 'remote_relay_server';
   bool _touched = false;
@@ -402,7 +402,7 @@ class RelayServerController extends Notifier<String?> {
   /// Back to dsh.r2049.cn (each server keeps its own sign-in).
   Future<void> useDefault() => ref.read(_relayServerActionsProvider).useDefault();
 
-  /// Switches to [server] (a pairing code's Server, once the person agreed);
+  /// Switches to [server] after the person selects it or agrees to a pairing code;
   /// each Server keeps its own sign-in. Throws [HostLinkError] when invalid.
   Future<void> useServer(String server) => ref.read(_relayServerActionsProvider).useServer(server);
 

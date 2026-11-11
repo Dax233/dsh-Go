@@ -27197,8 +27197,14 @@ abstract class L10n {
   /// No description provided for @remoteSelfHostedSignInHelp.
   ///
   /// In zh, this message translates to:
-  /// **'用邮箱和密码登录自己部署的 liguobao/ds-harness-remote'**
+  /// **'填写服务器地址，可用邮箱密码登录，也可先使用此服务器再选择其他登录方式。'**
   String get remoteSelfHostedSignInHelp;
+
+  /// No description provided for @remoteUseServer.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用此服务器'**
+  String get remoteUseServer;
 
   /// No description provided for @remoteServerAddress.
   ///

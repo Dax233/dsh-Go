@@ -7,9 +7,8 @@ import '../common/app_sheet.dart';
 import '../common/sheet_title_bar.dart';
 import '../theme/theme.dart';
 
-/// Password sign-in for a self-hosted DSH Remote server (ds-harness-remote
-/// `apps/server`) or an invited account on the hosted server.
-/// Returns true after password sign-in; closing the sheet is not a sign-in.
+/// Select a self-hosted DSH Remote server or sign in with email and password.
+/// Returns true only after password sign-in, not after selecting a server.
 Future<bool?> showSelfHostedLogin(BuildContext context, {String? initialServer}) {
   return showAppSheet<bool>(
     context,
@@ -43,10 +42,10 @@ class _SelfHostedLoginSheetState extends ConsumerState<SelfHostedLoginSheet> {
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _login({bool withPassword = true}) async {
     if (_busy) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    if (_server.text.trim().isEmpty || _email.text.trim().isEmpty || _password.text.isEmpty) {
+    if (withPassword && (_server.text.trim().isEmpty || _email.text.trim().isEmpty || _password.text.isEmpty)) {
       setState(() => _error = context.l10n.remoteRelayLoginRequired);
       return;
     }
@@ -55,10 +54,13 @@ class _SelfHostedLoginSheetState extends ConsumerState<SelfHostedLoginSheet> {
       _error = null;
     });
     try {
-      await ref
-          .read(relayServerProvider.notifier)
-          .loginWithPassword(server: _server.text, email: _email.text, password: _password.text);
-      if (mounted) Navigator.of(context).pop(true);
+      final server = ref.read(relayServerProvider.notifier);
+      if (withPassword) {
+        await server.loginWithPassword(server: _server.text, email: _email.text, password: _password.text);
+      } else {
+        await server.useServer(_server.text);
+      }
+      if (mounted) Navigator.of(context).pop(withPassword);
     } on HostLinkError catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
@@ -133,6 +135,10 @@ class _SelfHostedLoginSheetState extends ConsumerState<SelfHostedLoginSheet> {
                       child: _busy
                           ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(l10n.commonSignIn),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : () => _login(withPassword: false),
+                      child: Text(l10n.remoteUseServer),
                     ),
                     if (custom != null)
                       TextButton(

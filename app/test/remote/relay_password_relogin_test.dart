@@ -154,6 +154,18 @@ void main() {
     expect(f.container.read(relayAccountProvider).value?.signedIn, isTrue);
   });
 
+  testWidgets('choosing the server alone is not a successful password relogin', (tester) async {
+    final f = await _openFailedHost(tester);
+    final backend = f.backend;
+    await _openPasswordSheet(tester);
+    await tester.tap(find.widgetWithText(TextButton, '使用此服务器'));
+    await _frames(tester);
+    expect(find.byType(SelfHostedLoginSheet), findsNothing);
+    expect(f.container.read(relayServerProvider), _server);
+    expect(backend.passwordLogins, isEmpty);
+    expect(f.retries, isEmpty);
+  });
+
   testWidgets('password rejection stays visible without retrying', (tester) async {
     final f = await _openFailedHost(tester);
     final backend = f.backend..passwordError = const HostLinkError(HostLinkErrorKind.notLoggedIn, '测试密码错误');

@@ -14890,7 +14890,10 @@ class L10nZh extends L10n {
   String get remoteSelfHostedServer => '自建服务器';
 
   @override
-  String get remoteSelfHostedSignInHelp => '用邮箱和密码登录自己部署的 liguobao/ds-harness-remote';
+  String get remoteSelfHostedSignInHelp => '填写服务器地址，可用邮箱密码登录，也可先使用此服务器再选择其他登录方式。';
+
+  @override
+  String get remoteUseServer => '使用此服务器';
 
   @override
   String get remoteServerAddress => '服务器地址';

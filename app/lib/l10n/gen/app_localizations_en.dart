@@ -15645,7 +15645,11 @@ class L10nEn extends L10n {
   String get remoteSelfHostedServer => 'Self-hosted server';
 
   @override
-  String get remoteSelfHostedSignInHelp => 'Sign in to your own liguobao/ds-harness-remote with email and password';
+  String get remoteSelfHostedSignInHelp =>
+      'Enter your server address. Sign in with email and password, or use this server to choose another sign-in method.';
+
+  @override
+  String get remoteUseServer => 'Use this server';
 
   @override
   String get remoteServerAddress => 'Server address';
