@@ -134,7 +134,9 @@ class ChatRowsCache {
     for (var i = rows.length - 1; i >= 0; i--) {
       if (rows[i] case final ToolGroupRow group) {
         final j = group.tools.indexWhere((tool) => tool.key == before.key);
-        if (j < 0 || !_sameDraft(group.tools[j], before)) return null;
+        // Another group (an earlier run of calls) may hold the draft.
+        if (j < 0) continue;
+        if (!_sameDraft(group.tools[j], before)) return null;
         final tools = [...group.tools]..[j] = after;
         return [...rows]..[i] = ToolGroupRow(tools, live: group.live);
       }

@@ -1209,7 +1209,8 @@ class ChatController extends Notifier<ChatState> {
   /// here may move it.
   List<PendingPrompt> _placePending() {
     final inbox = _transcript.inbox;
-    _inboxSeen.removeWhere((id, _) => !inbox.any((q) => q.id == id));
+    final inboxIds = {for (final q in inbox) q.id};
+    _inboxSeen.removeWhere((id, _) => !inboxIds.contains(id));
     if (inbox.isEmpty && _moving.isEmpty) return _pending;
     final byRequest = {for (final q in inbox) ?q.requestId: q};
     final ours = {for (final p in _pending) p.requestId};

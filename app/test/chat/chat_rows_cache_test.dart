@@ -155,6 +155,37 @@ void main() {
     }
   });
 
+  test('a draft call in an earlier group is replaced although a later group has other drafts', () {
+    ToolChatItem call(String id, String args, {ToolStatus status = ToolStatus.streaming}) =>
+        ToolChatItem(callId: id, name: 'bash', arguments: args, status: status);
+    // The transcript hands the same durable items to every read.
+    final durable = [
+      user(1, 'Question'),
+      tool('d0', 'read', {'path': '0'}),
+      tool('d1', 'read', {'path': '1'}),
+    ];
+    // Two groups of calls, split by a streaming reply: the first ends in the
+    // draft being written, the second is made of drafts too.
+    List<ChatItem> items(int n) => [
+      ...durable,
+      call('a', '{"command": "${'x' * n}'),
+      assistant(2, 'Between', streaming: true),
+      call('c1', '{"command": "1"}', status: ToolStatus.running),
+      call('c2', '{"command": "2"}', status: ToolStatus.running),
+      call('c3', '{"command": "3"'),
+    ];
+    final cache = ChatRowsCache();
+    final first = check(cache, ChatState(running: true, items: items(0)));
+    expect(first.whereType<ToolGroupRow>().length, 2, reason: 'one group per run of calls');
+    final derived = debugDeriveRowsCount;
+    for (var n = 1; n <= 5; n++) {
+      check(cache, ChatState(running: true, items: items(n)));
+      expect(cache.onlyDraftChanged, isTrue, reason: 'delta $n changes only the earlier draft');
+    }
+    // check() itself derives once per update to compare against.
+    expect(debugDeriveRowsCount - derived, 5, reason: 'the cache derived no rows');
+  });
+
   test('a finished draft, a result or an approval on a draft call still derive', () {
     final cache = ChatRowsCache();
     final prompt = user(1, 'Question');

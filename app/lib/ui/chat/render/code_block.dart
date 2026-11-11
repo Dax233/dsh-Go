@@ -467,6 +467,10 @@ class _CodeBlockState extends State<CodeBlock> {
         _cooldown?.cancel();
         _cooldown = grows ? Timer(_highlightEvery, _cooled) : null;
       }
+    } else if (!identical(_shown, _span)) {
+      // Back to exactly what was highlighted (a resync): drop the plain tail
+      // the cooldown was showing after it.
+      _shown = _span;
     }
 
     final diff = !widget.showLineNumbers && normalizedLanguage(widget.language) == 'diff';

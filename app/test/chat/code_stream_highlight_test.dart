@@ -67,6 +67,52 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('code that goes back to what was highlighted drops the plain tail', (tester) async {
+    final code = ValueNotifier('final a = 1;\n');
+    addTearDown(code.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<String>(
+            valueListenable: code,
+            builder: (_, value, _) => CodeBlock(code: value, language: 'dart', replyActions: true),
+          ),
+        ),
+      ),
+    );
+    List<TextSpan> leaves() => _leaves(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byType(CodeBlock),
+              matching: find.byWidgetPredicate((w) => w is Text && w.textSpan != null),
+            ),
+          )
+          .textSpan!,
+    ).toList();
+    int keywords() => leaves().where((leaf) => leaf.text == 'final' && leaf.style?.color != null).length;
+
+    code.value += 'final b = 2;\n';
+    await tester.pump();
+    final highlighted = code.value;
+    expect(keywords(), 2);
+
+    // Within the cooldown more arrives: plain tail.
+    code.value += 'final c = 3;';
+    await tester.pump(const Duration(milliseconds: 32));
+    expect(leaves().last.text, '\nfinal c = 3;');
+
+    // Then the code is exactly what was highlighted again (a resync).
+    code.value = highlighted;
+    await tester.pump(const Duration(milliseconds: 32));
+    expect(leaves().map((leaf) => leaf.text).join(), highlighted.trimRight());
+    expect(keywords(), 2);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(leaves().map((leaf) => leaf.text).join(), highlighted.trimRight());
+    expect(keywords(), 2);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('code that changes rather than grows is highlighted at once', (tester) async {
     final code = ValueNotifier('final a = 1;\n');
     addTearDown(code.dispose);
