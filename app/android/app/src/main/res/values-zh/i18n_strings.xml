@@ -121,6 +121,7 @@
     <!-- pet -->
     <string name="pet_open_chat">打开对话</string>
     <string name="pet_more">更多</string>
+    <string name="pet_tap_hint">连点两下打开对话</string>
     <string name="pet_snooze">今天不再显示</string>
     <string name="pet_settings">宠物设置</string>
     <string name="pet_channel">悬浮宠物</string>

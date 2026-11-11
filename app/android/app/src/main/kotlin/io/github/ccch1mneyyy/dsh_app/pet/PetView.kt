@@ -27,8 +27,9 @@ import kotlin.math.roundToInt
  * packs. Software drawn (the window asks for no hardware acceleration): a small view redrawn only
  * when the frame changes.
  *
- * Touch, on the body ([PetFrames.hit]): drag moves the window, a tap opens the conversation, a
- * long press opens the menu. A touch that starts elsewhere in a grown window does nothing.
+ * Touch, on the body ([PetFrames.hit]): drag moves the window, one tap plays with the pet, two in a
+ * row open the conversation, a long press opens the menu. A touch that starts elsewhere in a grown
+ * window does nothing.
  */
 @SuppressLint("ViewConstructor")
 internal class PetView(context: Context, private val listener: Listener) : FrameLayout(context) {
@@ -43,6 +44,10 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
         fun onDrag(dx: Int, dy: Int)
         fun onDragEnd(velocityX: Float)
         fun onDragCancel()
+        /** One tap: play. ([x], [y]) is where, in 0–1 of the companion's viewport when she is shown. */
+        fun onPoke(leftHalf: Boolean, x: Float, y: Float)
+
+        /** The second tap of a quick pair, or the accessibility click: open the conversation. */
         fun onTap(leftHalf: Boolean)
         fun onLongPress(rawX: Float?, rawY: Float?)
         fun onMenuMove(rawX: Float, rawY: Float)
@@ -202,9 +207,14 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
     private var lastX = 0f
     private var lastY = 0f
     private var tracker: VelocityTracker? = null
+    private val taps = PetTaps(
+        ViewConfiguration.getDoubleTapTimeout().toLong(),
+        ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat(),
+    )
     private val longPress = Runnable {
         if (touching && !dragging) {
             longPressed = true
+            taps.clear()
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             listener.onLongPress(lastX, lastY)
         }
@@ -237,6 +247,7 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
                 val dy = event.rawY - downY
                 if (!dragging && !longPressed && (abs(dx) > slop || abs(dy) > slop)) {
                     dragging = true
+                    taps.clear()
                     removeCallbacks(longPress)
                     listener.onDragStart()
                 }
@@ -250,11 +261,19 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
                 when {
                     longPressed -> listener.onMenuEnd(event.rawX, event.rawY, false)
                     dragging -> listener.onDragEnd(velocity())
-                    // Left and right halves split at the body's centre line (anchor.x), not the window's.
-                    !longPressed -> listener.onTap(
-                        event.x + frame.left < if (companionGeometry != null) width / 2f else
-                            (sprites?.let { (it.pack.anchorX - it.window.x) * it.screenScale } ?: (width / 2f)),
-                    )
+                    else -> {
+                        val size = companionGeometry
+                        // Left and right halves split at the body's centre line (anchor.x), not the window's.
+                        val left = event.x + frame.left < if (size != null) width / 2f else
+                            (sprites?.let { (it.pack.anchorX - it.window.x) * it.screenScale } ?: (width / 2f))
+                        if (taps.second(event.downTime, event.eventTime, event.rawX, event.rawY)) listener.onTap(left)
+                        else if (size == null) listener.onPoke(left, 0.5f, 0.5f)
+                        else listener.onPoke(
+                            left,
+                            (event.x + companionBounds.left) / size.width,
+                            (event.y + companionBounds.top) / size.height,
+                        )
+                    }
                 }
                 reset()
             }
@@ -278,6 +297,7 @@ internal class PetView(context: Context, private val listener: Listener) : Frame
     fun cancelInteraction() = cancelGesture()
 
     private fun cancelGesture() {
+        taps.clear()
         val held = touching && longPressed
         val dragged = touching && dragging
         reset()

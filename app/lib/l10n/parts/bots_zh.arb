@@ -723,7 +723,7 @@
   "botsPetOverlayNoPack": "先去伙伴小屋里请一位角色",
   "botsPetOverlayPackBroken": "角色包不完整，去伙伴小屋里重新导入",
   "botsPetOverlayUnavailable": "这台手机暂时请不出她",
-  "botsPetOverlayCompanionHint": "比像素宠物更耗电，熄屏和隐藏时会停下来",
+  "botsPetOverlayCompanionHint": "点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来",
   "botsPetOverlayLoading": "正在请她出来…",
   "botsPetOverlayFallback": "她没能出来，先由像素宠物顶班",
   "botsPetOverlayFraming": "取景",

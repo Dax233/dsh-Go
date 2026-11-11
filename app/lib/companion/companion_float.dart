@@ -26,7 +26,7 @@ class CompanionFloatOptions {
   final double y;
 
   Map<String, String> get query => {
-    'mode': 'float', 'maxTexture': '1024', 'maskSize': '512', 'antialias': '0',
+    'mode': 'float', 'maxTexture': '2048', 'maskSize': '1024', 'antialias': '0',
     'floatZoom': '$zoom', 'floatY': '$y',
   };
 

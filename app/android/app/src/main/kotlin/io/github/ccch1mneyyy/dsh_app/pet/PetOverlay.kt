@@ -90,6 +90,8 @@ internal object PetOverlay {
     private const val K_ENABLED = "enabled"
     private const val K_ALWAYS = "alwaysShow"
     private const val K_SNOOZE = "snoozedUntil"
+    private const val K_TAP_HINTS = "tapHints"
+    private const val TAP_HINTS = 3
     private const val K_SIDE = "dockSide"
     private const val K_Y = "dockY"
     private const val EDGE_DP = 8f
@@ -1126,12 +1128,26 @@ internal object PetOverlay {
             slide(v, p, EdgeSnap.position(dock, v.reach, safeArea(), edge(v.context))) { evaluate() }
         }
 
+        override fun onPoke(leftHalf: Boolean, x: Float, y: Float) {
+            if (!alive(ticket)) return
+            machine.onTouch(now())
+            if (dimmed) evaluate()
+            dismissMenu()
+            companionView?.tap(x, y) ?: react(if (leftHalf) "tapLeft" else "tapRight", loop = false)
+            // One tap used to open the conversation: say where that went, a few times.
+            val told = prefs.getInt(K_TAP_HINTS, 0)
+            if (told < TAP_HINTS) {
+                prefs.edit().putInt(K_TAP_HINTS, told + 1).apply()
+                Toast.makeText(app, AppStrings.get(app, R.string.pet_tap_hint), Toast.LENGTH_SHORT).show()
+            }
+        }
+
         override fun onTap(leftHalf: Boolean) {
             if (!alive(ticket)) return
             machine.onTouch(now())
             if (dimmed) evaluate()
             dismissMenu()
-            react(if (leftHalf) "tapLeft" else "tapRight", loop = false)
+            prefs.edit().putInt(K_TAP_HINTS, TAP_HINTS).apply()
             val push = machine.last
             open(push?.sessionId, push?.host, null)
         }

@@ -113,14 +113,14 @@ void main() {
     await settlePhone(tester);
     await tester.pumpAndSettle();
     expect(_prefs(tester).overlayRenderer, PetOverlayRenderer.companion);
-    expect(find.text('比像素宠物更耗电，熄屏和隐藏时会停下来'), findsOneWidget);
+    expect(find.text('点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来'), findsOneWidget);
     expect(_framing, findsOneWidget);
 
     await tester.tap(find.text('像素宠物'));
     await settlePhone(tester);
     await tester.pumpAndSettle();
     expect(_prefs(tester).overlayRenderer, PetOverlayRenderer.pixel);
-    expect(find.text('比像素宠物更耗电，熄屏和隐藏时会停下来'), findsNothing);
+    expect(find.text('点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来'), findsNothing);
     expect(_framing, findsNothing);
   });
 
@@ -174,7 +174,7 @@ void main() {
     FakeOverlayNative(permission: 'granted', enabled: true).install();
     await _pump(tester, companionProblem: null, float: _QuietFloatController(const CompanionFloatState(loading: true)));
     expect(find.text('正在请她出来…'), findsOneWidget);
-    expect(find.text('比像素宠物更耗电，熄屏和隐藏时会停下来'), findsNothing);
+    expect(find.text('点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来'), findsNothing);
   });
 
   testWidgets('fallen back to the pixel pet: the row says so, and 重试 after it asks for her again', (tester) async {
@@ -203,7 +203,7 @@ void main() {
     _companionChosen();
     FakeOverlayNative(permission: 'granted', enabled: true).install();
     await _pump(tester, companionProblem: null, float: _QuietFloatController(const CompanionFloatState(configured: true)));
-    expect(find.text('比像素宠物更耗电，熄屏和隐藏时会停下来'), findsOneWidget);
+    expect(find.text('点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来'), findsOneWidget);
     expect(find.descendant(of: _renderer, matching: find.byType(TextButton)), findsNothing);
   });
 

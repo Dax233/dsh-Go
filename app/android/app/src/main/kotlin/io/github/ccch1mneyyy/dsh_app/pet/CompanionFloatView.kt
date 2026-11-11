@@ -123,6 +123,11 @@ internal class CompanionFloatView(
         if (ready) command(JSONObject().put("type", "petState").put("state", next).put("reduceMotion", reduced))
     }
 
+    /** A tap at ([x], [y]) in 0–1 of the viewport. */
+    fun tap(x: Float, y: Float) {
+        if (ready) command(JSONObject().put("type", "tap").put("x", x.toDouble()).put("y", y.toDouble()))
+    }
+
     fun freeze(next: Boolean) {
         freezeCommand(freezing.request(next))
     }

@@ -563,6 +563,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final lines = switch ((zone, kind)) {
       (_, 'hug') => [l10n.companionHug1, l10n.companionHug2, l10n.companionHug3, if (close) l10n.companionHugClose],
       (_, 'tease') => [l10n.companionTease1, l10n.companionTease2, l10n.companionTease3],
+      (_, 'shake') => [l10n.companionShake1, l10n.companionShake2, l10n.companionShake3],
       (_, 'pat') => [l10n.companionPat1, l10n.companionPat2, l10n.companionPat3, if (close) l10n.companionPatClose],
       ('head', _) => [l10n.companionTapHead1, l10n.companionTapHead2],
       ('face', _) => [l10n.companionTapFace1, l10n.companionTapFace2, l10n.companionTapFace3],
@@ -575,6 +576,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _remember('pet', switch ((zone, kind)) {
       (_, 'hug') => '对方刚才抱了抱你',
       (_, 'tease') => '对方刚才连着戳你',
+      (_, 'shake') => '对方刚才摇晃手机，把你晃晕了',
       (_, 'pat') => '对方刚才摸了摸你的头',
       ('tail', _) => '对方刚才碰了你的尾巴',
       ('face', _) => '对方刚才戳了戳你的脸',

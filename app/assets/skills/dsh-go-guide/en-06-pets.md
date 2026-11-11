@@ -29,9 +29,11 @@ The pet, size and Quiet mode apply both in and outside the app.
 
 The floating pet hides while the app is in the foreground and during phone control tasks.
 
-Floating pet: tap to open the chat that needs you most (approvals and questions first); drag it and it snaps to the edge and stays there; drag it onto the × or touch and hold and choose **Hide for today** to hide it for the day. Tap **Restore** on the pet page to bring it back.
+Floating pet: tap to play with it, tap twice to open the chat that needs you most (approvals and questions first); drag it and it snaps to the edge and stays there; drag it onto the × or touch and hold and choose **Hide for today** to hide it for the day. Tap **Restore** on the pet page to bring it back.
 
 The floating window can show the companion from the Companion room instead: with **Show outside the app** on, choose **Room companion** under **Show in the floating window** (**Pixel pet** by default; if you gave her a name, the option shows it). You need a character in the Companion room first; until then the option can't be chosen. She uses more battery than the pixel pet, and stops when the screen is off or the window is hidden. If this phone can't show her, the window goes back to the pixel pet. Once she is chosen, **Framing** below offers **Full body** or **Half body**.
+
+While she is in the floating window, one tap plays with her: her head, face and body each get a different reaction, and her eyes go to where you tapped. Tapping twice opens the chat, and dragging and touch and hold work as they do for the pixel pet.
 
 On Android 13 and later, if the switch still won't turn on after visiting system settings, **Switch disabled** appears on the pet page. Tap it for brand-specific steps to **Allow restricted settings**.
 
@@ -60,6 +62,7 @@ Open the **Switch host** panel and tap **Companion room**. The first time, impor
 What you can do:
 
 - Touch her: stroke her head to pat it, and tap her face, body or tail for different reactions. Three quick pokes make her dizzy. None of this calls a model or spends tokens.
+- Move the phone: tilt it to one side and she drifts that way with the water, tips over a little, then finds her balance. Shake it hard a few times and she gets dizzy and lets out a stream of bubbles. None of this happens when the phone has reduced motion turned on, and shaking does nothing on phones without a motion sensor.
 - Talk to her: type or use voice in the bar at the bottom. Choose how in **How she talks** in the menu at the top right:
   - **Light**: chat only. The phone uses the DeepSeek API key you saved in Settings to talk to the model directly, with no engine and no host. The chat stays on this phone, and **Start over** deletes it. Not available when you signed in with a DeepSeek account and saved no key.
   - **Full**: uses DSH on the current host, in its own conversation that stays out of the chat list. **View chat history** in the menu opens it, and **Start over** begins a new conversation while the old record stays on the host. She can use the host's tools, and the phone too when phone control is on; anything that acts asks you first, and only a tap on the screen counts as yes.

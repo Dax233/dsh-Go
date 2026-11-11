@@ -63,11 +63,11 @@ test('float scene does not allocate a 2D context or seed particles', () => {
 });
 
 function stage(float = true, fetcher, devices = {}) {
-  const canvasEvents = new Map(), documentEvents = new Map();
+  const canvasEvents = new Map(), documentEvents = new Map(), windowEvents = new Map();
   const posts = [], frames = new Map();
   let nextFrame = 1, releases = 0, lost = 0, reads = 0, draws = 0, reloads = 0, initialized = 0, textures = 0;
   let now = 0;
-  const scene = { clear() {}, resize() {}, configure() {}, busy: () => false, step() {}, marks: {} };
+  const scene = { clear() {}, resize() {}, configure() {}, busy: () => false, step() {}, marks: new Proxy({}, { get: () => () => {} }) };
   const element = () => ({ style: {}, classList: { add() {}, remove() {} },
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 5, height: 4 }) });
   const canvas = { ...element(), clientWidth: 5, clientHeight: 4, width: 5, height: 4,
@@ -83,7 +83,7 @@ function stage(float = true, fetcher, devices = {}) {
   canvas.getContext = () => gl;
   const model = { release() { releases++; if (devices.releaseError) throw new Error('synthetic release failure'); }, stopMotions() {}, startExpression() {},
     tick() {}, draw() { draws++; }, setRenderTargetSize() {}, moving: false, masks: null,
-    expressions: new Map(), motions: new Map(),
+    expressions: new Map(), motions: new Map(), hitZones: [], tailIds: [],
     getRenderer: () => ({ setModelColor() {} }),
     core: { getDrawableCount: () => 0 },
   };
@@ -92,7 +92,8 @@ function stage(float = true, fetcher, devices = {}) {
     CubismFramework: { startUp() { initialized++; }, initialize() {} }, Option: class {} };
   const window = { CubismFw: Fw, CompanionFloat: { FrameGate, opaqueBounds, stateEffect },
     companionScene: float ? null : scene, devicePixelRatio: 3,
-    DshCompanion: { postMessage: value => posts.push(JSON.parse(value)) }, addEventListener() {} };
+    DshCompanion: { postMessage: value => posts.push(JSON.parse(value)) },
+    addEventListener: (name, fn) => windowEvents.set(name, fn) };
   const source = fs.readFileSync(path.join(assets, 'stage.js'), 'utf8');
   // Keep all production methods; replace only the automatic entry point with
   // controllable device boundaries. The boot cancellation test calls boot.
@@ -114,13 +115,16 @@ function stage(float = true, fetcher, devices = {}) {
   globalThis.harness = { boot, render,
     texture(url) { return loadTexture(gl, url, []); },
     install(m, g) { model = m; gl = g; },
-    mappings(e, a) { emotions = e; actions = a; },
+    mappings(e, a) { emotions = e; actions = a; authored = { emotions: e, actions: a }; },
+    character(c) { character = c; adapter = null; applyCharacter(); },
     actionStart(name) { return life.actions.get(name)?.start; },
+    relax(now) { relaxEmotion(now); },
     state() { return { mood: life.mood, emotion: life.emotion, actions: [...life.actions.keys()], disposed: floatDisposed }; }
   };
 })();`), context, { timeout: 1000 });
   return { api: context.harness, command: value => window.stage.command(value),
-    install: () => context.harness.install(model, gl), document, documentEvents, canvasEvents, posts, frames,
+    install: () => context.harness.install(model, gl), document, documentEvents, canvasEvents, windowEvents, posts, frames,
+    at(time) { now = time; },
     render(time) { now = time; context.harness.render(time); },
     next(time) { const [id, fn] = frames.entries().next().value; frames.delete(id); now = time; fn(time); },
     counts: () => ({ releases, lost, reads, draws, reloads, initialized, textures }),
@@ -133,8 +137,9 @@ test('real float render path has a hard ceiling, reports buffer bounds and no ro
   assert.ok(s.counts().draws <= 31);
   assert.equal(s.counts().reads, s.counts().draws);
   assert.equal(s.posts.length, 1, 'unchanged bounds need no new native geometry');
-  assert.deepEqual(s.posts[0], { type: 'floatBounds', width: 5, height: 4,
-    bounds: { left: 1, top: 2, right: 2, bottom: 3 } });
+  // The 5×4 CSS canvas on a 3× screen: the buffer is drawn at device density.
+  assert.deepEqual(s.posts[0], { type: 'floatBounds', width: 15, height: 12,
+    bounds: { left: 1, top: 10, right: 2, bottom: 11 } });
   assert.equal(s.canvasEvents.has('pointerdown'), false);
   s.command({ type: 'pause' });
   assert.equal(s.frames.size, 0);
@@ -159,6 +164,39 @@ test('float native state accepts only its own command and does not replay an unc
   assert.equal(s.api.state().mood, 'idle');
   s.command({ type: 'petState', state: 'thinking' });
   assert.deepEqual(copy(s.api.state()), { mood: 'idle', emotion: 'calm', actions: [], disposed: false });
+});
+
+test('a native tap plays the room reaction, then gives her face back to the pet state', () => {
+  const s = stage(); s.install();
+  s.api.mappings({ calm: {}, happy: {}, shy: {}, surprised: {}, confused: {} },
+    { nod: { ms: 100, tracks: {} }, nodSmall: { ms: 100, tracks: {} }, recoil: { ms: 100, tracks: {} },
+      duck: { ms: 100, tracks: {} }, tilt: { ms: 100, tracks: {} } });
+  s.command({ type: 'petState', state: 'attention' });
+  s.command({ type: 'tap', x: NaN, y: 0.5 });
+  assert.deepEqual(copy(s.api.state()), { mood: 'idle', emotion: 'happy', actions: ['nod'], disposed: false });
+  // Dead centre of the viewport is her body: surprised, and she ducks.
+  s.command({ type: 'tap', x: 0.5, y: 0.5 });
+  assert.equal(s.api.state().emotion, 'surprised');
+  assert.ok(s.api.state().actions.includes('duck'));
+  assert.deepEqual(s.posts.at(-1), { type: 'touch', zone: 'body', kind: 'tap' });
+  s.api.relax(1499);
+  assert.equal(s.api.state().emotion, 'surprised');
+  s.api.relax(1501);
+  assert.equal(s.api.state().emotion, 'happy', 'back to the attention face, not calm');
+  s.api.relax(1e9);
+  assert.equal(s.api.state().emotion, 'happy', 'the state face has no deadline');
+});
+
+test('a character with nothing authored still reacts to a tap, and wears no state it was not given', () => {
+  const s = stage(); s.install();
+  s.api.character({});
+  s.command({ type: 'petState', state: 'attention' });
+  assert.deepEqual(copy(s.api.state()), { mood: 'idle', emotion: 'calm', actions: [], disposed: false });
+  s.command({ type: 'tap', x: 0.5, y: 0.5 });
+  assert.equal(s.api.state().emotion, 'surprised');
+  assert.deepEqual(copy(s.api.state().actions), ['duck']);
+  s.api.relax(1e6);
+  assert.equal(s.api.state().emotion, 'calm');
 });
 
 test('native reduced-motion updates stop gestures without replacing the page or replaying a state', () => {
@@ -217,6 +255,26 @@ test('room mode keeps its pointer handlers, pause/resume and context restore beh
   assert.equal(s.counts().releases, 0);
   s.command({ type: 'resume' }); assert.equal(s.frames.size, 1);
   s.canvasEvents.get('webglcontextrestored')(); assert.equal(s.counts().reloads, 1);
+});
+
+test('shaking the phone makes her dizzy once; a bump, a still hand and the float window do not', () => {
+  const s = stage(false); s.install(); s.render(100);
+  s.api.mappings({ calm: {}, dizzy: {} }, { shake: { ms: 100, tracks: {} } });
+  const move = (time, x) => { s.at(time); s.windowEvents.get('devicemotion')({ acceleration: { x, y: 0, z: 0 } }); };
+  move(1000, 16); move(1040, -16); // The second is the same jolt still ringing.
+  move(1200, 3); move(1300, -16);
+  assert.equal(s.api.state().emotion, 'calm', 'two jolts are a bump');
+  move(1500, 16);
+  assert.equal(s.api.state().emotion, 'dizzy');
+  assert.ok(s.api.state().actions.includes('shake'));
+  assert.deepEqual(s.posts.at(-1), { type: 'touch', zone: 'body', kind: 'shake' });
+  const told = s.posts.length;
+  move(1700, -16); move(1900, 16); move(2100, -16);
+  assert.equal(s.posts.length, told, 'still dizzy: no second round straight away');
+  move(6000, 16); move(8000, -16); move(10000, 16);
+  assert.equal(s.posts.length, told, 'jolts far apart are not a shake');
+  s.windowEvents.get('devicemotion')({ acceleration: null });
+  assert.equal(stage().windowEvents.has('devicemotion'), false);
 });
 
 test('dimmed float freezes without disposing; actual hidden state still releases the GL context', () => {

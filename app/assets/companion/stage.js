@@ -26,7 +26,9 @@
   const SHADERS = `${PACK}runtime/shaders/`;
   const MAX_TEXTURE = Number(query.get('maxTexture')) || 4096;
   let REDUCED = query.get('reduceMotion') === '1';
-  const DPR_CAP = FLOAT ? 1 : 2;
+  // Float draws at the screen's own density: its viewport is at most 640 view px tall, and a
+  // 1x buffer stretched over a 3x screen reads as out of focus.
+  const DPR_CAP = FLOAT ? 4 : 2;
   // Clip masks: the renderer packs them into textures of four channels, at
   // most 36 different masks in one texture, 32 each when there are several.
   // A model that needs more (a detailed one: 49 for 大肥鱼 4096) gets more
@@ -725,6 +727,8 @@
     head: { x: new Spring(34, 9), y: new Spring(34, 9) },
     body: { x: new Spring(14, 6.5), y: new Spring(14, 6.5) },
     poke: { x: new Spring(70, 7), z: new Spring(70, 7) },
+    // The phone tilting or being shaken: she tips with the water, then finds her balance.
+    sway: new Spring(26, 5),
     hop: new Spring(95, 11),
     face: new Map(),
     actions: new Map(),
@@ -760,6 +764,7 @@
 
   let character = {};
   let emotions = DEFAULT_EMOTIONS;
+  let authored = { emotions: {}, actions: {} };
   // adapter.json beside character.json: what the person's AI worked out for
   // this model (companion_adapt.dart checks it before it's written).
   let adapter = null;
@@ -778,9 +783,14 @@
 
   /** character.json, the rules' findings, then the adapter: the latest word wins. */
   function applyCharacter() {
-    const authoredEmotions = { ...(character.emotions ?? {}), ...(adapter?.emotions ?? {}) };
-    emotions = FLOAT ? { calm: {}, ...authoredEmotions } : mergeEmotions(authoredEmotions);
-    actions = { ...(FLOAT ? {} : ACTIONS), ...(character.actions ?? {}), ...(adapter?.actions ?? {}) };
+    // What the character itself says, kept apart: a pet state in the float window only
+    // wears what was authored for it, while a tap there reacts as it does in the room.
+    authored = {
+      emotions: { ...(character.emotions ?? {}), ...(adapter?.emotions ?? {}) },
+      actions: { ...(character.actions ?? {}), ...(adapter?.actions ?? {}) },
+    };
+    emotions = mergeEmotions(authored.emotions);
+    actions = { ...ACTIONS, ...authored.actions };
     if (Array.isArray(adapter?.zones) && adapter.zones.length) {
       zones = adapter.zones;
       zonesFrom = 'adapter';
@@ -875,6 +885,13 @@
     life.gazeHold = def.gaze ?? null;
     model?.startExpression(def.expression ?? null);
     if (changed && model && !own && !FLOAT) emotionMark(name);
+  }
+
+  /** Emotions relax on their own: to calm in the room, to the pet state's in the float window. */
+  function relaxEmotion(now) {
+    if (!life.emotionUntil || now <= life.emotionUntil) return;
+    if (FLOAT) setEmotion(floatEmotion, Infinity);
+    else setEmotion('calm');
   }
 
   /** A few notes, one after another, while she hums. */
@@ -1019,7 +1036,7 @@
       life.sleep = ease(life.sleep, life.mood === 'sleeping' ? 1 : 0, 1.6, dt);
 
       // Emotions relax on their own.
-      if (life.emotionUntil && now > life.emotionUntil) setEmotion('calm');
+      relaxEmotion(now);
 
       const [gx, gy] = gazeTarget(now);
       const eyeX = life.eye.x.step(gx, dt);
@@ -1031,6 +1048,7 @@
 
       const pokeX = life.poke.x.step(0, dt);
       const pokeZ = life.poke.z.step(0, dt);
+      const sway = swayStep(dt);
 
       // Head pat: she leans into the hand and melts a little.
       life.pat = ease(life.pat, life.patting ? 1 : 0, life.patting ? 3.5 : 1.8, dt);
@@ -1049,6 +1067,13 @@
       m.set('ParamBodyAngleX', bodyX * 9 + Math.sin(t * 0.37) * 1.1 * drift);
       m.set('ParamBodyAngleY', bodyY * 7 - asleep * 4);
       m.set('ParamBodyAngleZ', bodyX * -3 + Math.sin(t * 0.41 + 1) * 1.3 * drift);
+      if (sway) {
+        // Her body goes with the water; her head lags behind it.
+        m.add('ParamBodyAngleZ', sway * 8);
+        m.add('ParamBodyAngleX', sway * 4);
+        m.add('ParamAngleZ', sway * 5);
+        m.add('ParamAngleX', sway * -6);
+      }
       if (life.hug > 0.01) {
         // Leaning into the hug, head a little down.
         m.add('ParamAngleZ', life.hug * life.hugSide * 9);
@@ -1412,11 +1437,16 @@
     return life.hop.x * 0.12 + float - home.rest * 0.025;
   }
 
+  /** Where she is sideways: at home, reaching, and carried a little by the water. */
+  function modelShift() {
+    return home.rest * 0.07 + home.reach + life.sway.x * 0.05;
+  }
+
   function projection() {
     const aspect = canvas.height / canvas.width;
     // She floats: a slow lift and drift, on top of any hop.
     const hopY = modelLift();
-    const lean = home.rest * 0.07 + home.reach;
+    const lean = modelShift();
     const m = new Fw.CubismMatrix44();
     const sx = camera.zoom * aspect;
     const sy = camera.zoom;
@@ -1431,7 +1461,7 @@
     const cy = 1 - ((clientY - rect.top) / rect.height) * 2;
     const aspect = canvas.height / canvas.width;
     return {
-      x: cx / (camera.zoom * aspect) + camera.x - (home.rest * 0.07 + home.reach),
+      x: cx / (camera.zoom * aspect) + camera.x - modelShift(),
       y: (cy - modelLift()) / camera.zoom + camera.y,
     };
   }
@@ -1440,7 +1470,7 @@
   function toScreen(x, y) {
     const rect = canvas.getBoundingClientRect();
     const aspect = canvas.height / (canvas.width || 1);
-    const cx = (x - camera.x + home.rest * 0.07 + home.reach) * camera.zoom * aspect;
+    const cx = (x - camera.x + modelShift()) * camera.zoom * aspect;
     const cy = (y - camera.y) * camera.zoom + modelLift();
     return [((cx + 1) / 2) * rect.width, ((1 - cy) / 2) * rect.height];
   }
@@ -1840,6 +1870,8 @@
   let floatPixels = null;
   let floatBoundsKey = '';
   let floatState = null;
+  let floatEmotion = 'calm';
+  let floatGazeUntil = 0;
 
   function setFloatState(state, reduced) {
     if (typeof reduced === 'boolean' && reduced !== REDUCED) {
@@ -1851,10 +1883,11 @@
     }
     if (state === floatState) return;
     floatState = state;
-    const effect = window.CompanionFloat.stateEffect(state, emotions, actions);
+    const effect = window.CompanionFloat.stateEffect(state, authored.emotions, authored.actions);
     life.actions.clear();
     model.stopMotions();
     life.mood = effect.mood;
+    floatEmotion = effect.emotion;
     setEmotion(effect.emotion, Infinity);
     if (effect.action) playAction(effect.action);
   }
@@ -1867,6 +1900,7 @@
       const dt = clamp((ts - last) / 1000, 0.001, 0.05);
       last = ts;
       resize();
+      if (floatGazeUntil && ts > floatGazeUntil) { floatGazeUntil = 0; life.pointer = null; }
       model.tick(dt, animate);
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0, 0, 0, 0);
@@ -1874,8 +1908,8 @@
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       model.draw(projection(), [0, 0, canvas.width, canvas.height]);
-      // Read in this draw task; preserveDrawingBuffer is unnecessary. Float
-      // uses CSS-resolution pixels and a fixed, small native viewport.
+      // Read in this draw task; preserveDrawingBuffer is unnecessary. The native
+      // viewport is fixed and small, so the buffer stays small at device density.
       const length = canvas.width * canvas.height * 4;
       if (floatPixels?.length !== length) floatPixels = new Uint8Array(length);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1887,6 +1921,19 @@
       drawn++;
       if (ts - fpsAt >= 1000) { fps = drawn * 1000 / (ts - fpsAt); drawn = 0; fpsAt = ts; }
     } catch (_) { floatFailed('companion_render_failed'); }
+  }
+
+  /** A tap from the native window, in 0–1 of the viewport: the room's tap, without its marks. */
+  function floatTap(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = rect.left + clamp(x, 0, 1) * rect.width;
+    const clientY = rect.top + clamp(y, 0, 1) * rect.height;
+    const point = toModel(clientX, clientY);
+    // Her eyes stay on where the finger was for a moment.
+    life.pointer = toGaze(clientX, clientY);
+    floatGazeUntil = performance.now() + 700;
+    tap(zoneAt(point.x, point.y) ?? 'body', clientX);
   }
 
   function releaseFloat() {
@@ -1949,6 +1996,48 @@
     tilt.x = clamp((e.gamma - tilt.gamma) / 20, -1, 1);
     tilt.y = clamp((e.beta - tilt.beta) / 20, -1, 1);
   });
+
+  // Moving the phone moves the water she floats in. `devicemotion` gives the push
+  // (gravity already taken out where the phone can); three hard ones close together
+  // are a shake, and that makes her dizzy.
+  const motion = { push: 0, jolts: [], last: 0, shookAt: -Infinity };
+  const JOLT = 14; // m/s²: a deliberate shake, well past walking or setting the phone down.
+  if (!FLOAT) window.addEventListener('devicemotion', (e) => {
+    if (REDUCED || paused || !model) return;
+    const a = e.acceleration?.x != null ? e.acceleration : null;
+    if (!a) return;
+    // Below this it is a hand that isn't quite still.
+    motion.push = Math.abs(a.x) < 1.5 ? 0 : clamp(a.x, -20, 20);
+    const now = performance.now();
+    if (Math.hypot(a.x, a.y ?? 0, a.z ?? 0) < JOLT || now - motion.last < 80) return;
+    motion.last = now;
+    motion.jolts.push(now);
+    while (now - motion.jolts[0] > 900) motion.jolts.shift();
+    if (motion.jolts.length < 3 || now - motion.shookAt < 2600) return;
+    motion.jolts.length = 0;
+    motion.shookAt = now;
+    shaken();
+  });
+
+  /** How far the water has tipped her, about -1.5 to 1.5; zero with reduced motion. */
+  function swayStep(dt) {
+    if (FLOAT || REDUCED) return 0;
+    // The phone goes one way and she is left behind: the push is against the motion.
+    life.sway.v -= motion.push * 3 * dt;
+    motion.push *= Math.max(0, 1 - dt * 12); // A sensor that stops reporting must not push forever.
+    const x = life.sway.step(tilt.x, dt);
+    if (Math.abs(x) > 1.5) { life.sway.x = clamp(x, -1.5, 1.5); life.sway.v = 0; }
+    return life.sway.x;
+  }
+
+  function shaken() {
+    touched();
+    setEmotion('dizzy', 2400);
+    playAction('shake');
+    const [x, y] = headOnScreen();
+    scene.marks.bubbles(x, y - 10, 5);
+    post({ type: 'touch', zone: 'body', kind: 'shake' });
+  }
 
   /** The far water moves a touch less than she does: depth, not a parallax show. */
   function parallax(dt) {
@@ -2144,6 +2233,7 @@
           last = performance.now();
           frame = requestAnimationFrame(render);
         } else if (!floatDisposed && model && message?.type === 'petState') setFloatState(message.state, message.reduceMotion);
+        else if (!floatDisposed && model && message?.type === 'tap') floatTap(message.x, message.y);
         return;
       }
       const run = commands[message?.type];

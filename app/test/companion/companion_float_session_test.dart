@@ -286,7 +286,7 @@ void main() {
   test('framing is explicit while motion preferences arrive with the native pet state', () {
     const options = CompanionFloatOptions(enabled: true, zoom: 1.3, y: 0.2);
     expect(options.query, {
-      'mode': 'float', 'maxTexture': '1024', 'maskSize': '512', 'antialias': '0',
+      'mode': 'float', 'maxTexture': '2048', 'maskSize': '1024', 'antialias': '0',
       'floatZoom': '1.3', 'floatY': '0.2',
     });
     expect(const CompanionFloatOptions().query.containsKey('reduceMotion'), isFalse);

@@ -2809,7 +2809,7 @@ class L10nZh extends L10n {
   String get botsPetOverlayUnavailable => '这台手机暂时请不出她';
 
   @override
-  String get botsPetOverlayCompanionHint => '比像素宠物更耗电，熄屏和隐藏时会停下来';
+  String get botsPetOverlayCompanionHint => '点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来';
 
   @override
   String get botsPetOverlayLoading => '正在请她出来…';
@@ -5111,6 +5111,15 @@ class L10nZh extends L10n {
 
   @override
   String get companionTease3 => '你是不是很闲？';
+
+  @override
+  String get companionShake1 => '哇啊，别摇啦！';
+
+  @override
+  String get companionShake2 => '头好晕……水都晃起来了。';
+
+  @override
+  String get companionShake3 => '再摇我要吐泡泡了！';
 
   @override
   String get companionStatusIdle => '在发呆';

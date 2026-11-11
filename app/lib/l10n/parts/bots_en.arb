@@ -303,7 +303,7 @@
   "botsPetOverlayNoPack": "Invite a character in the Companion Room first",
   "botsPetOverlayPackBroken": "The character pack is incomplete. Import it again in the Companion Room",
   "botsPetOverlayUnavailable": "This phone can't show your companion right now",
-  "botsPetOverlayCompanionHint": "Uses more battery than the pixel pet. It stops when the screen is off or the window is hidden",
+  "botsPetOverlayCompanionHint": "Tap to play with her, tap twice to open the chat. Uses more battery than the pixel pet. It stops when the screen is off or the window is hidden",
   "botsPetOverlayLoading": "Bringing your companion out…",
   "botsPetOverlayFallback": "Your companion couldn't come out. The pixel pet is filling in",
   "botsPetOverlayFraming": "Framing",

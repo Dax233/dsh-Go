@@ -5201,7 +5201,7 @@ abstract class L10n {
   /// No description provided for @botsPetOverlayCompanionHint.
   ///
   /// In zh, this message translates to:
-  /// **'比像素宠物更耗电，熄屏和隐藏时会停下来'**
+  /// **'点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来'**
   String get botsPetOverlayCompanionHint;
 
   /// No description provided for @botsPetOverlayLoading.
@@ -9433,6 +9433,24 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'你是不是很闲？'**
   String get companionTease3;
+
+  /// No description provided for @companionShake1.
+  ///
+  /// In zh, this message translates to:
+  /// **'哇啊，别摇啦！'**
+  String get companionShake1;
+
+  /// No description provided for @companionShake2.
+  ///
+  /// In zh, this message translates to:
+  /// **'头好晕……水都晃起来了。'**
+  String get companionShake2;
+
+  /// No description provided for @companionShake3.
+  ///
+  /// In zh, this message translates to:
+  /// **'再摇我要吐泡泡了！'**
+  String get companionShake3;
 
   /// No description provided for @companionStatusIdle.
   ///

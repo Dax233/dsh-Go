@@ -126,6 +126,7 @@
     <!-- pet -->
     <string name="pet_open_chat">Open chat</string>
     <string name="pet_more">More</string>
+    <string name="pet_tap_hint">Tap twice to open the chat</string>
     <string name="pet_snooze">Hide for today</string>
     <string name="pet_settings">Pet settings</string>
     <string name="pet_channel">Floating pet</string>
