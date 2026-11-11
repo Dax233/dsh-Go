@@ -158,7 +158,7 @@ aapt2=$(command -v aapt2 || true)
 if [[ -z $aapt2 ]]; then
   sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
   [[ -n $sdk ]] || sdk=$(sed -n 's/^sdk\.dir=//p' "$APP/android/local.properties" 2>/dev/null || true)
-  aapt2=$(ls -1d "$sdk"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -n 1 || true)
+  aapt2=$(ls -1d "$sdk"/build-tools/*/aapt2{,.exe} 2>/dev/null | sort -V | tail -n 1 || true)
 fi
 [[ -n $aapt2 ]] || echo "build-apk: aapt2 not found; the APKs' versionCode won't be read back" >&2
 
