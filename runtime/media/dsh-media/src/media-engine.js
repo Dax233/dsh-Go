@@ -127,8 +127,8 @@ export async function generateMedia(request, context) {
           context.job?.updateProgress('正在保存视频原件');
           const staged = await (context.stageDownload ?? createStreamStager())(task.url, {
             directory: store.stagingDirectory, signal, maxBytes: context.limits.maxVideoBytes,
+            ownDownload: store.ownDownload,
           });
-          await store.ownDownload(staged);
           const info = await inspectVideo(staged.path, signal);
           const path = await store.stageDownloaded(staged, info.extension);
           meta.items.push({ path, mime: info.mime, width: info.width, height: info.height,
