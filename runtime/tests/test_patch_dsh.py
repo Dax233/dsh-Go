@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.dont_write_bytecode = True   # runtime/lib/__pycache__ is tracked; do not rewrite it
@@ -156,6 +157,37 @@ class PatchDsh(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("broken patch hash chain", result.stdout)
         self.assertEqual(read(self.target), ORIGINAL)
+
+    def test_three_stage_chain_resumes_after_interrupted_third_replace(self):
+        _, second = self.chain_fixture()
+        final = second.replace("later reviewed patch\n", "final reviewed patch\n", 1)
+        name = "zzz-final.diff"
+        Path(self.patches, name).write_text(
+            "--- a/%s\n+++ b/%s\n@@ -1,1 +1,1 @@\n-later reviewed patch\n+final reviewed patch\n" % (REL, REL))
+        pins_path = Path(self.patches, "pins.json")
+        pins = load(pins_path)
+        pins["patches"][name] = {"1.0.0": {REL: {"before": sha(second), "after": sha(final)}}}
+        pins_path.write_text(json.dumps(pins))
+        self.write_series(["guard.diff", "zz-later.diff", name])
+        replace = os.replace
+        replacements = 0
+
+        def interrupt_third(source, target):
+            nonlocal replacements
+            replacements += 1
+            if replacements == 3:
+                raise OSError("interrupted third patch replace")
+            replace(source, target)
+
+        args = SimpleNamespace(prefix=self.prefix, patches=self.patches, dsh_version="1.0.0", record=False, out=None)
+        with mock.patch.object(rtbuild.os, "replace", side_effect=interrupt_third):
+            with self.assertRaisesRegex(OSError, "interrupted third patch replace"):
+                rtbuild.cmd_patch_dsh(args)
+        self.assertEqual(replacements, 3)
+        self.assertEqual(read(self.target), second)
+        result = self.run_cli("--dsh-version", "1.0.0")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(read(self.target), final)
 
     def test_unknown_hash_is_not_accepted_by_chain_idempotency(self):
         _, final = self.chain_fixture()
