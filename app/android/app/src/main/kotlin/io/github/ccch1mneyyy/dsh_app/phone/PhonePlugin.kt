@@ -26,9 +26,7 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
-import java.util.concurrent.Executor
 import java.util.concurrent.Executors
-import java.util.concurrent.FutureTask
 
 /**
  * Flutter bridge for phone control: MethodChannel `dsh/phone`, EventChannel `dsh/phone/events`.
@@ -281,11 +279,10 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                     controlIo.execute { control.background.saveKeep(cleared) }
                     control.background.cancelRootSelection()
                 }
-                dispatchPhoneSwitch(enabled, controlIo, io,
-                    change = { (!enabled || control.background.preparePhoneEnable()) && control.setEnabled(enabled) },
-                    backgroundOff = { control.background.setBackgroundMode("off")["ok"] == true },
-                    complete = { complete(result, it) },
-                )
+                async(result) {
+                    val ok = (!enabled || control.background.preparePhoneEnable()) && control.setEnabled(enabled)
+                    if (ok && !enabled) control.background.setBackgroundMode("off")["ok"] == true else ok
+                }
             }
             "openAccessibilitySettings" -> result.success(startActivity(control.accessibilitySettingsIntent()))
             "openAppDetails" -> result.success(startActivity(control.appDetailsIntent()))
@@ -576,25 +573,4 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         sink = null
     }
 
-}
-
-/** Keep both switch directions ordered, while transport cleanup stays on its original queue. */
-internal fun dispatchPhoneSwitch(
-    enabled: Boolean,
-    controlIo: Executor,
-    io: Executor,
-    change: () -> Boolean,
-    backgroundOff: () -> Boolean,
-    complete: (Result<Boolean>) -> Unit,
-) {
-    val changed = FutureTask { runCatching(change) }
-    controlIo.execute(changed)
-    // Enqueue here, before a later mode request can enter io. Posting from controlIo would
-    // let that later request overtake this off cleanup. Only io waits; main/control do not.
-    io.execute {
-        complete(runCatching {
-            val ok = changed.get().getOrThrow()
-            if (ok && !enabled) backgroundOff() else ok
-        })
-    }
 }
