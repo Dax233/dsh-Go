@@ -138,6 +138,33 @@ class SetupToolchainTest(unittest.TestCase):
         with self.fixture(scenario) as (root, script, env):
             return self.invoke(root, script, env)
 
+    def test_install_root_survives_working_directory_changes(self):
+        for kind in ("relative", "absolute", "default"):
+            with self.subTest(kind=kind), self.fixture("success") as (root, script, env):
+                program(root / "dev/jdk-17/bin/java")
+                dev = root / "dev"
+                if kind == "default":
+                    env.pop("DEV_ROOT")
+                    env["HOME"] = str(root)
+                else:
+                    dev = root / "dev tools"
+                    (root / "dev").rename(dev)
+                    env["DEV_ROOT"] = dev.name if kind == "relative" else str(dev)
+                result = self.invoke(root, script, env)
+                self.assertEqual(result["exit"], 0, result["stderr"])
+                app = root / "repo/app"
+                app.mkdir()
+                probe = subprocess.run(
+                    ["bash", "-e", "-c", 'source "$1"; cd "$2"; command -v java; '
+                     'command -v flutter; command -v sdkmanager; '
+                     'printf "%s\\n" "$JAVA_HOME" "$ANDROID_HOME" "$ANDROID_SDK_ROOT"',
+                     "probe", str(script.parent / "env.sh"), str(app)],
+                    cwd=root, env=dict(env, PATH=os.defpath), text=True, capture_output=True, timeout=10)
+                self.assertEqual(probe.returncode, 0, probe.stdout + probe.stderr)
+                self.assertEqual(probe.stdout.splitlines(), [str(dev / suffix) for suffix in (
+                    "jdk-17/bin/java", "flutter/bin/flutter", "android-sdk/cmdline-tools/latest/bin/sdkmanager",
+                    "jdk-17", "android-sdk", "android-sdk")])
+
     def assert_download_retry(self, target):
         with self.fixture("cache-" + target) as (root, script, env):
             cache = root / "dev/.downloads" / CACHE_NAMES[target]
