@@ -18,7 +18,7 @@ const { createUserMessage } = await load('dsh-llm');
 const { releasedV3SessionFormatCodec } = await load('dsh-session-format-v2-to-v3');
 const { apply } = await load('dsh-session-persistence-jsonl');
 
-const hooks = () => ({ prepare: async () => {}, inspectTasks: async () => false, cleanup: async () => {} });
+const hooks = () => ({ validate: async () => {}, dispose: async () => {}, inspectTasks: async () => false, cleanup: async () => {} });
 const message = 'historical transcript retained by the actual migration publisher';
 
 async function fixture(t, compression) {

@@ -106,8 +106,65 @@ export function createDeletionSeam(storage, { acquire, parseGeneration, notFound
     }
     return files;
   };
+  const isSubagent = (header) => header.origin === 'subagent' || (header.delegationDepth ?? 0) > 0;
+  // Delete one stored session that is already fenced: no agent, no pending input.
+  // "cascade" marks a descendant removed together with the requested chat, so the
+  // never-delete-a-subagent-directly guard is skipped for it.
+  const deleteOne = async (id, hooks, cascade) => {
+    const retry = deleted(id);
+    let identity;
+    let artifact;
+    let claimed = false;
+    try {
+      if (storage.ctx.get('sessions')?.get(id) !== undefined) throw failure('writer-held');
+      storage.tracker.claimWrite(id);
+      claimed = true;
+      identity = await acquire(slot(id), id);
+      let dir;
+      if (retry) dir = savedDirectory(id);
+      else {
+        const selected = await storage.findLog(id);
+        if (selected === undefined) throw failure('not-found');
+        dir = dirname(selected.currentPath);
+      }
+      await safeDirectory(dir);
+      artifact = await acquire(dir, id);
+      await mutation(async () => {
+        if (!retry) {
+          // Re-read under both leases and the shared mutation fence. Migration reads are
+          // observation-only; no old generation is ever resumed or published by delete.
+          const metadata = await storage.readGenerationHeader(await storage.findLog(id), id);
+          if (metadata === undefined) throw failure('failed');
+          if (!cascade && isSubagent(metadata.header)) throw failure('session-related');
+          // Descendants are removed before their parent; a child here means another
+          // writer raced the planned tree, so the tree this call planned is incomplete.
+          const corpus = await storage.list();
+          if (corpus.some(({ header }) => header.origin === 'subagent' && header.parentSession === id)) throw failure('session-related');
+          if (await hooks.inspectTasks?.(id)) throw failure('session-related');
+          const goal = (await storage.requireStoredLog(id)).events.filter((event) => event.type === 'goal/change').at(-1)?.data?.goal;
+          if (goal?.phase === 'active') throw failure('session-active');
+        }
+        const files = await logFiles(dir);
+        if (!retry) await writeMarker(id, dir); // Durable point of no return; retry completes cleanup.
+        else await syncMarkerDirectories(id); // A previous attempt may have failed after linking the marker.
+        storage.coldLogMemo.delete(id);
+        storage.migrationPreparations.get(id)?.controller.abort();
+        storage.migrationPreparations.delete(id);
+        for (const path of files) await rm(path, { force: true });
+        await syncDir(dir);
+        await hooks.cleanup?.(id);
+        storage.ctx.emit('dsh-go/session-deleted', id);
+      });
+    } finally {
+      try { await artifact?.release(); }
+      finally {
+        try { await identity?.release(); }
+        finally { if (claimed) storage.tracker.releaseClaim(id); }
+      }
+    }
+  };
   return {
-    version: 1, pending, deleted, assertAdmit, assertParent, withMutation: mutation,
+    version: 2, pending, deleted, assertAdmit, assertParent, withMutation: mutation,
     // Global identity lease closes the alternate-cwd create race; the original directory
     // lease also excludes older runtime writers. Neither inode is ever unlinked.
     async acquireWriter(id, dir, header) {
@@ -133,69 +190,58 @@ export function createDeletionSeam(storage, { acquire, parseGeneration, notFound
     async delete(id, hooks) {
       if (pending.has(id)) throw failure('writer-held');
       pending.add(id); // Synchronous fence precedes the first await and every prompt admission.
-      const writer = storage.tracker.writers.get(id);
-      if (writer) draining.set(id, writer);
-      let identity;
-      let artifact;
-      let claimed = false;
+      // The requested session plus every subagent session under it, parents before leaves.
+      const nodes = [id];
+      const children = [];
       try {
-        let retry;
-        try {
-          retry = deleted(id);
-          if (!retry) {
-            const live = storage.ctx.get('sessions')?.list() ?? [];
-            const corpus = [...await storage.list(), ...live.map((session) => ({ header: session.header }))];
-            if (corpus.some(({ header }) => header.id === id && (header.origin === 'subagent' || (header.delegationDepth ?? 0) > 0)
-              || header.origin === 'subagent' && header.parentSession === id)) throw failure('session-related');
-            await hooks.prepare();
+        const retry = deleted(id);
+        if (!retry) {
+          const live = storage.ctx.get('sessions')?.list() ?? [];
+          const corpus = [...await storage.list(), ...live.map((session) => ({ header: session.header }))];
+          const target = corpus.find(({ header }) => header.id === id);
+          if (target !== undefined && isSubagent(target.header)) throw failure('session-related');
+          // Subagent sessions belong to the chat that started them: deleting the chat
+          // removes the whole tree instead of refusing forever. The fence above already
+          // stops new members from being admitted while the tree is collected.
+          const seen = new Set([id]);
+          let frontier = [id];
+          while (frontier.length) {
+            const next = [];
+            for (const parent of frontier) {
+              for (const { header } of corpus) {
+                if (header.origin !== 'subagent' || header.parentSession !== parent || seen.has(header.id)) continue;
+                seen.add(header.id);
+                children.push(header.id);
+                next.push(header.id);
+              }
+            }
+            frontier = next;
           }
-        } finally { draining.delete(id); }
-        if (storage.ctx.get('sessions')?.get(id) !== undefined) throw failure('writer-held');
-        storage.tracker.claimWrite(id);
-        claimed = true;
-        identity = await acquire(slot(id), id);
-        let dir;
-        if (retry) dir = savedDirectory(id);
-        else {
-          const selected = await storage.findLog(id);
-          if (selected === undefined) throw failure('not-found');
-          dir = dirname(selected.currentPath);
+          for (const child of children) {
+            if (pending.has(child)) throw failure('writer-held');
+            pending.add(child);
+            nodes.push(child);
+          }
+          // Only the already-owned handles may finish their buffered writes during teardown.
+          for (const node of nodes) {
+            const writer = storage.tracker.writers.get(node);
+            if (writer) draining.set(node, writer);
+          }
+          // Validate the whole tree before disposing anything: one active member must
+          // leave every session intact and usable. Disposal tears down leaves first and
+          // the requested chat last, so a failure can never brick the chat itself.
+          for (const node of nodes) if (await hooks.inspectTasks?.(node)) throw failure('session-related');
+          for (const node of nodes) await hooks.validate?.(node);
+          for (const node of [...children].reverse()) await hooks.dispose?.(node, { cascade: true });
+          await hooks.dispose?.(id, { cascade: false });
+          for (const node of nodes) draining.delete(node);
         }
-        await safeDirectory(dir);
-        artifact = await acquire(dir, id);
-        await mutation(async () => {
-          if (!retry) {
-            // Re-read under both leases and the shared mutation fence. Migration reads are
-            // observation-only; no old generation is ever resumed or published by delete.
-            const metadata = await storage.readGenerationHeader(await storage.findLog(id), id);
-            if (metadata === undefined) throw failure('failed');
-            if (metadata.header.origin === 'subagent' || (metadata.header.delegationDepth ?? 0) > 0) throw failure('session-related');
-            const corpus = await storage.list();
-            if (corpus.some(({ header }) => header.origin === 'subagent' && header.parentSession === id)) throw failure('session-related');
-            if (await hooks.inspectTasks()) throw failure('session-related');
-            const stored = await storage.requireStoredLog(id);
-            // The validated inherited prefix belongs to the source, not this fork.
-            if (stored.events.slice(stored.inheritedEventCount).some((event) => event.type === 'team/task' || event.type === 'subagent/catalog')) throw failure('session-related');
-            const goal = stored.events.filter((event) => event.type === 'goal/change').at(-1)?.data?.goal;
-            if (goal?.phase === 'active') throw failure('session-active');
-          }
-          const files = await logFiles(dir);
-          if (!retry) await writeMarker(id, dir); // Durable point of no return; retry completes cleanup.
-          else await syncMarkerDirectories(id); // A previous attempt may have failed after linking the marker.
-          storage.coldLogMemo.delete(id);
-          storage.migrationPreparations.get(id)?.controller.abort();
-          storage.migrationPreparations.delete(id);
-          for (const path of files) await rm(path, { force: true });
-          await syncDir(dir);
-          await hooks.cleanup();
-          storage.ctx.emit('dsh-go/session-deleted', id);
-        });
+        // Fenced and disposed; leaves go first so each parent's remaining-children
+        // recheck holds by construction, and the requested chat is tombstoned last.
+        for (const node of [...children].reverse()) await deleteOne(node, hooks, true);
+        await deleteOne(id, hooks, false);
       } finally {
-        try { await artifact?.release(); }
-        finally {
-          try { await identity?.release(); }
-          finally { if (claimed) storage.tracker.releaseClaim(id); pending.delete(id); }
-        }
+        for (const node of nodes) { draining.delete(node); pending.delete(node); }
       }
     },
   };

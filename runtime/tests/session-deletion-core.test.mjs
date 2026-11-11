@@ -1,5 +1,6 @@
-// The bundled deletion seam: durable tombstones, generation cleanup, fences.
-// In-memory storage over a throwaway temp directory; no engine, no user data.
+// The bundled deletion seam: durable tombstones, generation cleanup, fences and
+// subagent-tree cascade. In-memory storage over a throwaway temp directory; no
+// engine, no user data.
 //   node --test runtime/tests/session-deletion-core.test.mjs
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
@@ -23,12 +24,17 @@ const notFound = (id) => Object.assign(new Error(`missing ${id}`), { code: 'not-
 let root;
 let seam;
 let files;
+let headers;
 let live;
 let header;
 let corpus;
 let taskRows;
 let storedEvents;
 let cleanups;
+let validations;
+let disposals;
+let taskChecks;
+let emitted;
 let writers;
 
 function storage() {
@@ -38,7 +44,7 @@ function storage() {
       get: (name) => (name === 'sessions'
         ? { get: (id) => live.get(id), list: () => [...live.values()] }
         : undefined),
-      emit: () => {},
+      emit: (_name, id) => emitted.push(id),
     },
     tracker: { writers, claimWrite() {}, releaseClaim() {} },
     coldLogMemo: new Map(),
@@ -47,11 +53,12 @@ function storage() {
       const dir = join(root, 'aa', id);
       return files[id] === undefined ? undefined : { currentPath: join(dir, files[id][0]) };
     },
-    async readGenerationHeader() {
-      return { header };
+    async readGenerationHeader(id) {
+      const current = headers[id] ?? header;
+      return current === undefined ? undefined : { header: current };
     },
     async list() {
-      return corpus.map((entry) => ({ header: entry }));
+      return corpus.filter((entry) => !seam.deleted(entry.id)).map((entry) => ({ header: entry }));
     },
 
     async requireStoredLog() {
@@ -61,27 +68,41 @@ function storage() {
 }
 
 const directory = (id) => join(root, 'aa', id);
-const hooks = () => ({
-  prepare: async () => {},
-  inspectTasks: async () => taskRows,
-  cleanup: async () => { cleanups++; },
+const HEADER = (id, extra = {}) => ({ id, ...extra });
+const hooks = (overrides = {}) => ({
+  validate: async (id) => { validations.push(id); },
+  dispose: async (id, options) => { disposals.push([id, options?.cascade === true]); },
+  inspectTasks: async (id) => { taskChecks.push(id); return typeof taskRows === 'function' ? taskRows(id) : taskRows; },
+  cleanup: async (id) => { cleanups.push(id); },
+  ...overrides,
 });
+
+async function addSession(id, extra = {}, names = ['session.jsonl']) {
+  headers[id] = HEADER(id, extra);
+  corpus.push(headers[id]);
+  await mkdir(directory(id), { recursive: true });
+  for (const name of names) await writeFile(join(directory(id), name), '{}\n');
+  files[id] = names;
+}
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'dsh-del-'));
   leases.clear();
   files = {};
+  headers = {};
   live = new Map();
-  header = { id: 's1' };
+  header = HEADER('s1');
   corpus = [];
   taskRows = false;
   storedEvents = [];
-  cleanups = 0;
+  cleanups = [];
+  validations = [];
+  disposals = [];
+  taskChecks = [];
+  emitted = [];
   writers = new Map();
   seam = createDeletionSeam(storage(), { acquire, parseGeneration, notFound });
-  await mkdir(join(root, 'aa', 's1'), { recursive: true });
-  await writeFile(join(root, 'aa', 's1', 'session.jsonl'), '{}\n');
-  files.s1 = ['session.jsonl'];
+  await addSession('s1');
 });
 
 afterEach(async () => {
@@ -95,7 +116,7 @@ test('removes every stored generation, clears derived state, and leaves a durabl
   files.s1 = ['session.v2.jsonl', 'session.v3.jsonl.zstd', 'session.v4.jsonl.deadbeef.tmp'];
   await seam.delete('s1', hooks());
   assert.deepEqual(await readdir(directory('s1')), []);
-  assert.equal(cleanups, 1);
+  assert.deepEqual(cleanups, ['s1']);
   assert.equal(seam.deleted('s1'), true);
   assert.throws(() => seam.assertAdmit('s1'), (error) => error.code === 'not-found');
   // The tombstone records where the logs were so a retry can finish safely.
@@ -110,23 +131,102 @@ test('unrelated files beside the logs are left alone', async () => {
   assert.deepEqual(await readdir(directory('s1')), ['notes.md']);
 });
 
-test('a live agent, a related subagent and reminder rows are refused', async () => {
+test('a live agent, a subagent target and reminder rows are refused', async () => {
   live.set('s1', { header: { id: 's1' } });
+  // A live agent the disposal hook fails to remove is still a writer: delete refuses.
   await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'writer-held');
   live.clear();
+  disposals = [];
 
-  header = { id: 's1', origin: 'subagent', parentSession: 'p' };
+  const setHeader = (next) => {
+    header = next;
+    headers.s1 = next;
+    corpus.splice(corpus.findIndex((entry) => entry.id === 's1'), 1, next);
+  };
+  setHeader(HEADER('s1', { origin: 'subagent', parentSession: 'p' }));
   await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'session-related');
-  header = { id: 's1', delegationDepth: 2 };
+  setHeader(HEADER('s1', { delegationDepth: 2 }));
   await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'session-related');
-  header = { id: 's1' };
-  corpus = [{ id: 'kid', origin: 'subagent', parentSession: 's1' }];
-  await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'session-related');
-  corpus = [];
+  setHeader(HEADER('s1'));
   taskRows = true;
   await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'session-related');
   assert.equal(seam.deleted('s1'), false);
-  assert.equal(cleanups, 0);
+  assert.deepEqual(cleanups, []);
+  assert.deepEqual(disposals, []);
+});
+
+test('a chat with subagent history is deletable: log-local catalog/team events no longer block', async () => {
+  storedEvents = [{ type: 'subagent/catalog' }, { type: 'team/task' }];
+  await seam.delete('s1', hooks());
+  assert.equal(seam.deleted('s1'), true);
+  assert.deepEqual(cleanups, ['s1']);
+});
+
+test('deletes the whole subagent tree, leaves first, and cleans every session', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+  await addSession('g1', { origin: 'subagent', parentSession: 'c1', delegationDepth: 2 });
+  await seam.delete('s1', hooks());
+  for (const id of ['s1', 'c1', 'c2', 'g1']) {
+    assert.equal(seam.deleted(id), true, id);
+    assert.deepEqual(await readdir(directory(id)), [], id);
+  }
+  assert.deepEqual([...cleanups].sort(), ['c1', 'c2', 'g1', 's1']);
+  assert.deepEqual(emitted, ['g1', 'c2', 'c1', 's1']);
+  // Every node is validated before anything is disposed; the requested chat is last.
+  assert.deepEqual([...validations].sort(), ['c1', 'c2', 'g1', 's1']);
+  assert.deepEqual(disposals, [['g1', true], ['c2', true], ['c1', true], ['s1', false]]);
+  // The whole tree is fenced synchronously before the first await.
+  assert.deepEqual([...seam.pending], []);
+});
+
+test('one active member refuses the whole tree and disposes nothing', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+  const active = Object.assign(new Error('busy'), { code: 'session-active' });
+  await assert.rejects(seam.delete('s1', hooks({ validate: async (id) => {
+    validations.push(id);
+    if (id === 'c2') throw active;
+  } })), (e) => e.code === 'session-active');
+  assert.deepEqual(disposals, []);
+  assert.deepEqual(cleanups, []);
+  // The user-visible chat was not touched, and every fence is released for a retry.
+  assert.equal(seam.deleted('s1'), false);
+  assert.equal(seam.pending.size, 0);
+  assert.deepEqual(await readdir(directory('s1')), ['session.jsonl']);
+  await seam.delete('s1', hooks());
+  assert.equal(seam.deleted('s1'), true);
+  assert.equal(seam.deleted('c1'), true);
+  assert.equal(seam.deleted('c2'), true);
+});
+
+test('a reminder on any member refuses the tree before disposal', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  taskRows = (id) => id === 'c1';
+  await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'session-related');
+  assert.deepEqual(disposals, []);
+  assert.equal(seam.deleted('s1'), false);
+  assert.equal(seam.deleted('c1'), false);
+});
+
+test('a failed child cleanup is retried and the tree still completes', async () => {
+  await addSession('c1', { origin: 'subagent', parentSession: 's1' });
+  await addSession('c2', { origin: 'subagent', parentSession: 's1' });
+  let failed = false;
+  const cleanup = async (id) => {
+    cleanups.push(id);
+    if (id === 'c2' && !failed) {
+      failed = true;
+      throw Object.assign(new Error('cache down'), { code: 'failed' });
+    }
+  };
+  await assert.rejects(seam.delete('s1', hooks({ cleanup })), (e) => e.code === 'failed');
+  assert.equal(seam.deleted('s1'), false);
+  assert.equal(seam.deleted('c2'), true);
+  assert.equal(seam.deleted('c1'), false);
+  // Retry resumes from the tombstoned child and finishes the requested chat.
+  await seam.delete('s1', hooks());
+  for (const id of ['s1', 'c1', 'c2']) assert.equal(seam.deleted(id), true, id);
 });
 
 test('a symlinked session directory is refused instead of deleting elsewhere', async () => {
@@ -144,22 +244,20 @@ test('a symlinked session directory is refused instead of deleting elsewhere', a
 });
 
 test('a failed cleanup still leaves the durable tombstone so a retry completes', async () => {
-  await seam.delete('s1', {
-    prepare: async () => {},
-    inspectTasks: async () => false,
+  await seam.delete('s1', hooks({
     cleanup: async () => { throw Object.assign(new Error('cache down'), { code: 'failed' }); },
-  }).catch((error) => assert.equal(error.code, 'failed'));
+  })).catch((error) => assert.equal(error.code, 'failed'));
   assert.equal(seam.deleted('s1'), true);
   assert.deepEqual(await readdir(directory('s1')), []);
-  assert.equal(cleanups, 0);
+  assert.deepEqual(cleanups, []);
   await seam.delete('s1', hooks());
-  assert.equal(cleanups, 1);
+  assert.deepEqual(cleanups, ['s1']);
 });
 
 test('concurrent deletion of one id cannot run twice, and the fence clears', async () => {
   let release;
   const gate = new Promise((done) => { release = done; });
-  const blocked = seam.delete('s1', { prepare: async () => gate, inspectTasks: async () => false, cleanup: async () => {} });
+  const blocked = seam.delete('s1', hooks({ dispose: async () => gate }));
   await new Promise((done) => setImmediate(done));
   assert.equal(seam.pending.has('s1'), true);
   await assert.rejects(seam.delete('s1', hooks()), (e) => e.code === 'writer-held');
@@ -207,34 +305,34 @@ test('only the captured writer header can drain while deletion admission stays c
   const gate = new Promise((resolve) => { release = resolve; });
   let entered;
   const ready = new Promise((resolve) => { entered = resolve; });
-  const deleting = seam.delete('s1', { ...hooks(), prepare: async () => {
+  const deleting = seam.delete('s1', hooks({ dispose: async () => {
     entered();
     await gate;
     writers.delete('s1');
-  } });
+  } }));
   await ready;
   assert.throws(() => seam.assertAdmit('s1'), (e) => e.code === 'not-found');
-  await assert.rejects(seam.materialize({ ...header }, async () => {}), (e) => e.code === 'not-found');
-  await assert.rejects(seam.acquireWriter('s1', directory('s1')), (e) => e.code === 'not-found');
-  await assert.rejects(seam.acquireWriter('s1', directory('s1'), { ...header }), (e) => e.code === 'not-found');
+  await assert.rejects(() => seam.materialize({ ...header }, async () => {}), (e) => e.code === 'not-found');
+  await assert.rejects(() => seam.acquireWriter('s1', directory('s1')), (e) => e.code === 'not-found');
+  await assert.rejects(() => seam.acquireWriter('s1', directory('s1'), { ...header }), (e) => e.code === 'not-found');
   const lease = await seam.acquireWriter('s1', directory('s1'), header);
   await seam.materialize(header, async () => {});
   await lease.release();
   writers.delete('s1');
-  await assert.rejects(seam.materialize(header, async () => {}), (e) => e.code === 'not-found');
+  await assert.rejects(() => seam.materialize(header, async () => {}), (e) => e.code === 'not-found');
   release();
   await deleting;
   assert.equal(seam.deleted('s1'), true);
   writers.set('s1', writer);
-  await assert.rejects(seam.materialize(header, async () => {}), (e) => e.code === 'not-found');
+  await assert.rejects(() => seam.materialize(header, async () => {}), (e) => e.code === 'not-found');
 });
 
-test('prepare failure clears the captured drain allowance and deletion can retry', async () => {
+test('dispose failure clears the captured drain allowance and deletion can retry', async () => {
   writers.set('s1', { header });
-  await assert.rejects(seam.delete('s1', { ...hooks(), prepare: async () => {
+  await assert.rejects(seam.delete('s1', hooks({ dispose: async () => {
     await seam.materialize(header, async () => {});
-    throw new Error('prepare failed');
-  } }), /prepare failed/);
+    throw new Error('dispose failed');
+  } })), /dispose failed/);
   assert.equal(seam.pending.has('s1'), false);
   assert.equal(seam.deleted('s1'), false);
   await seam.delete('s1', hooks());
@@ -243,8 +341,8 @@ test('prepare failure clears the captured drain allowance and deletion can retry
 
 test('a constructing claim does not gain a drain allowance', async () => {
   writers.set('s1', null);
-  await seam.delete('s1', { ...hooks(), prepare: async () => {
+  await seam.delete('s1', hooks({ dispose: async () => {
     await assert.rejects(seam.materialize(header, async () => {}), (e) => e.code === 'not-found');
     await assert.rejects(seam.acquireWriter('s1', directory('s1'), header), (e) => e.code === 'not-found');
-  } });
+  } }));
 });
