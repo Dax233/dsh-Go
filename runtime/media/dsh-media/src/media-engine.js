@@ -63,7 +63,7 @@ export async function generateMedia(request, context) {
   const signal = AbortSignal.any([context.signal, timeout]);
   const client = context.client ?? createMediaClient({ transport: context.transport ?? requestBytes });
   const transport = context.transport ?? requestBytes;
-  let store, secret, providerTask, submitted = false, cancelledRemote;
+  let store, secret, providerTask, submitted = false, remoteSucceeded = false, cancelledRemote;
   const meta = mediaMeta(request, rid, 'done', context.job?.id);
   try {
     checkAbort(signal);
@@ -124,6 +124,7 @@ export async function generateMedia(request, context) {
         if (task.state === 'unknown') fail('remote_may_continue');
         if (task.state === 'cancelled') { cancelledRemote = 'cancelled'; fail('cancelled'); }
         if (task.state === 'succeeded') {
+          remoteSucceeded = true; // Later download/storage failures do not make this outcome unknown.
           context.job?.updateProgress('正在保存视频原件');
           const staged = await (context.stageDownload ?? createStreamStager())(task.url, {
             directory: store.stagingDirectory, signal, maxBytes: context.limits.maxVideoBytes,
@@ -159,7 +160,7 @@ export async function generateMedia(request, context) {
     if (cancelledRemote === 'cancelled') fail('cancelled');
     if (signal.aborted && providerTask && cancelledRemote !== 'cancelled') fail('remote_may_continue');
     if (signal.aborted && submitted && !providerTask) fail('submission_unknown');
-    if (providerTask && !['generation_failed', 'policy', 'cancelled'].includes(error?.code)) fail('remote_may_continue');
+    if (providerTask && !remoteSucceeded && !['generation_failed', 'policy', 'cancelled'].includes(error?.code)) fail('remote_may_continue');
     if (timeout.aborted) fail('timeout');
     throw safeFailure(error, signal);
   } finally { secret = undefined; }
