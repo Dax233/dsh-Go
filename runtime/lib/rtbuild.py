@@ -19,6 +19,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import zlib
 
 EM_NAMES = {3: "i386", 40: "arm", 62: "x86-64", 183: "aarch64"}
 NPMMIRROR = "https://registry.npmmirror.com/"
@@ -974,15 +975,22 @@ class HashingWriter:
         self.sink.flush()
 
 
-def write_archive(entries, out, args):
+def write_archive(entries, out, args, *, layered=False):
     """Write a normalized entry tree and return its archive statistics."""
     def sort_key(p):
         return p.split("/")
 
     out_tmp = out + ".tmp"
     if args.compress == "xz":
-        comp = subprocess.Popen(["xz", "-T%d" % args.threads, "-%s" % args.xz_preset, "-c"],
-                                stdin=subprocess.PIPE, stdout=open(out_tmp, "wb"))
+        command = ["xz", "-T%d" % args.threads, "-%s" % args.xz_preset, "-c"]
+        environment = None
+        if layered:
+            command += ["--check=crc64", "--block-size=25165824"]
+            # Cache identity must describe every compression option. Preserve
+            # legacy single-archive behavior, but ignore ambient xz options here.
+            environment = {k: v for k, v in os.environ.items() if k not in ("XZ_OPT", "XZ_DEFAULTS")}
+        with open(out_tmp, "wb") as compressed:
+            comp = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=compressed, env=environment)
         sink = comp.stdin
     else:
         comp = None
@@ -1037,8 +1045,190 @@ def write_archive(entries, out, args):
     }
 
 
+def partition_entries(entries):
+    """Split the final normalized tree; shared ancestors are identical dirs."""
+    def owned(path):
+        return any(path == root or path.startswith(root + "/") for root in ENGINE_PATHS)
+
+    base = {p: e for p, e in entries.items() if not owned(p)}
+    engine = {p: e for p, e in entries.items() if owned(p)}
+    for path in list(engine):
+        parent = posixpath.dirname(path)
+        while parent:
+            engine[parent] = entries[parent]
+            parent = posixpath.dirname(parent)
+    return base, engine
+
+
+def archive_file(entries, path):
+    """Resolve a file using only normalized archive entries, including parent links."""
+    pending, resolved, links = path.split("/"), [], 0
+    while pending:
+        part = pending.pop(0)
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not resolved:
+                raise SystemExit("archive link escapes root while resolving " + path)
+            resolved.pop()
+            continue
+        resolved.append(part)
+        entry = entries.get("/".join(resolved))
+        if entry is None:
+            return None
+        if entry.kind == "symlink":
+            links += 1
+            if links > 40:
+                raise SystemExit("too many archive links while resolving " + path)
+            resolved.pop()
+            pending = entry.link.split("/") + pending
+        elif pending and entry.kind != "dir":
+            raise SystemExit("non-directory in archive path " + path)
+    entry = entries.get("/".join(resolved))
+    if entry is not None and entry.kind != "file":
+        raise SystemExit("not a regular archive file: " + path)
+    return entry
+
+
+def base_compatibility(entries, *, with_python):
+    release = archive_file(entries, "etc/os-release")
+    if release is None:
+        raise SystemExit("base layer has no etc/os-release")
+    rows = release.read().decode().splitlines()
+    identity = {}
+    for key in ("ID", "VERSION_ID"):
+        values = [row.split("=", 1)[1].strip().strip("\"'")
+                  for row in rows if row.startswith(key + "=")]
+        if len(values) != 1 or not values[0]:
+            raise SystemExit("base layer needs exactly one nonempty os-release " + key)
+        identity[key] = values[0]
+    python = archive_file(entries, "opt/python/bin/python3")
+    if with_python and python is None:
+        raise SystemExit("Python input has no opt/python/bin/python3 in the base layer")
+    return {"schema": 1, "osRelease": identity,
+            "python3Sha256": hashlib.sha256(python.read()).hexdigest() if python else None}
+
+
+def entry_statistics(entries):
+    return {
+        "counts": {kind: sum(e.kind == kind for e in entries.values())
+                   for kind in ("dir", "file", "symlink")},
+        "uncompressedBytes": sum(e.size() for e in entries.values() if e.kind == "file"),
+        "origins": {origin: sum(e.origin == origin for e in entries.values())
+                    for origin in ("ubuntu", "deb", "python", "node", "dsh", "pnpm", "bridge", "overlay", "implicit")},
+    }
+
+
+def base_cache_identity(entries, args, sources):
+    tree = hashlib.sha256()
+    for path in sorted(entries, key=lambda p: p.split("/")):
+        entry = entries[path]
+        row = [path, entry.kind, entry.mode,
+               entry.link if entry.kind == "symlink" else None,
+               hashlib.sha256(entry.read()).hexdigest() if entry.kind == "file" else None]
+        tree.update((json.dumps(row, separators=(",", ":")) + "\n").encode())
+    compression = {"format": args.compress}
+    if args.compress == "xz":
+        compression.update(preset=args.xz_preset, threads=args.threads,
+                           check="crc64", blockBytes=25165824)
+    else:
+        compression.update(level=args.gzip_level, mtime=0, filename="")
+    # Version the serialization policy, not this whole script or host tool versions:
+    # engine-only edits and compressor upgrades must retain valid cached bytes.
+    identity = {"schema": 1, "abi": args.abi, "sources": sources,
+                "treeSha256": tree.hexdigest(), "epoch": args.epoch,
+                "tar": {"policy": 1, "format": "gnu", "order": "path-components"},
+                "compression": compression}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return key, identity
+
+
+def stream_digest(source):
+    digest, size = hashlib.sha256(), 0
+    while chunk := source.read(1024 * 1024):
+        digest.update(chunk)
+        size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def copy_archive(source, out):
+    shutil.copyfile(source, out + ".tmp")
+    os.replace(out + ".tmp", out)
+
+
+def write_base_archive(entries, out, args, sources):
+    key, identity = base_cache_identity(entries, args, sources)
+    os.makedirs(args.base_cache, exist_ok=True)
+    cached = os.path.join(args.base_cache, key + ".tar." + args.compress)
+    record_path = os.path.join(args.base_cache, key + ".json")
+    try:
+        with open(record_path) as source:
+            record = json.load(source)
+        if record["schema"] != 1 or record["key"] != key or record["identity"] != identity:
+            raise ValueError("cache metadata identity differs")
+        previous = record["archive"]
+        with open(cached, "rb") as source:
+            archive_sha, archive_bytes = stream_digest(source)
+        if (archive_sha, archive_bytes) != (previous["archiveSha256"], previous["archiveBytes"]):
+            raise ValueError("compressed SHA256 or size differs")
+        decoder = lzma.open if args.compress == "xz" else gzip.open
+        with decoder(cached, "rb") as source:
+            tar_sha, tar_bytes = stream_digest(source)
+        if (tar_sha, tar_bytes) != (previous["tarSha256"], previous["tarBytes"]):
+            raise ValueError("tar SHA256 or size differs")
+        provenance = record["compressor"]
+    except FileNotFoundError:
+        reason = "missing cache archive or metadata"
+    except (json.JSONDecodeError, UnicodeError, KeyError, TypeError):
+        reason = "invalid cache metadata"
+    except ValueError as exc:
+        reason = str(exc)
+    except (OSError, EOFError, lzma.LZMAError, zlib.error) as exc:
+        reason = "unreadable or undecodable cache (%s)" % type(exc).__name__
+    else:
+        copy_archive(cached, out)
+        stats = {"archive": os.path.basename(out), "archiveBytes": archive_bytes,
+                 "archiveSha256": archive_sha, "tarBytes": tar_bytes, "tarSha256": tar_sha,
+                 **entry_statistics(entries)}
+        return stats, {"status": "reused", "key": key, "compressor": provenance}
+
+    stats = write_archive(entries, out, args, layered=True)
+    provenance = {"python": sys.version.split()[0]}
+    if args.compress == "xz":
+        environment = {k: v for k, v in os.environ.items() if k not in ("XZ_OPT", "XZ_DEFAULTS")}
+        provenance["xz"] = subprocess.check_output(["xz", "--version"], text=True,
+                                                    env=environment).splitlines()[0]
+    else:
+        provenance["zlib"] = zlib.ZLIB_RUNTIME_VERSION
+    record = {"schema": 1, "key": key, "identity": identity, "archive": stats, "compressor": provenance}
+    # Existing build scripts assume one writer. Publish archive then metadata;
+    # an interrupted pair is a miss next time, never a validated hit.
+    copy_archive(out, cached)
+    with open(record_path + ".tmp", "w") as target:
+        json.dump(record, target, indent=2, sort_keys=True)
+        target.write("\n")
+    os.replace(record_path + ".tmp", record_path)
+    return stats, {"status": "rebuilt", "reason": reason, "key": key, "compressor": provenance}
+
+
+def layer_descriptor(stats):
+    return {"asset": stats["archive"], "sha256": stats["archiveSha256"],
+            "bytes": stats["archiveBytes"], "uncompressedBytes": stats["uncompressedBytes"],
+            "tarBytes": stats["tarBytes"], "tarSha256": stats["tarSha256"]}
+
+
 def cmd_assemble(args):
     abi = args.abi
+    layered = args.base_out is not None or args.engine_out is not None
+    if layered:
+        if args.out or not (args.base_out and args.engine_out and args.base_cache):
+            raise SystemExit("use --base-out, --engine-out and --base-cache together, without --out")
+        for kind, out in (("base", args.base_out), ("engine", args.engine_out)):
+            expected = "%s-%s.tar.%s" % (kind, abi, args.compress)
+            if os.path.basename(out) != expected:
+                raise SystemExit("layer output must use basename " + expected)
+    elif not args.out or args.base_cache:
+        raise SystemExit("use --out for a single archive, or the paired layer outputs with --base-cache")
     machine = ABI[abi]["machine"]
     entries = {}
     report = {"abi": abi, "dropped": {}, "droppedSamples": {}, "elf": [], "warnings": [],
@@ -1054,9 +1244,10 @@ def cmd_assemble(args):
     def digest(path):
         with open(path, "rb") as source:
             return hashlib.file_digest(source, "sha256").hexdigest()
-    upgrade = upgrade_descriptor(abi, runtime_info["ubuntuVersion"], digest(args.base),
-                                 [digest(p) for p in args.deb or []],
-                                 digest(args.python) if args.python else None)
+    sources = {"ubuntu": digest(args.base), "debs": [digest(p) for p in args.deb or []],
+               "python": digest(args.python) if args.python else None}
+    upgrade = upgrade_descriptor(abi, runtime_info["ubuntuVersion"], sources["ubuntu"],
+                                 sources["debs"], sources["python"])
     runtime_info["upgrade"] = upgrade
     report["upgrade"] = upgrade
 
@@ -1346,8 +1537,21 @@ def cmd_assemble(args):
         elif e.kind == "file":
             e.mode = (e.mode & 0o777) | 0o600
 
-    # 7. Write the tar (GNU format, sorted, root-owned, fixed mtime) through the compressor
-    report.update(write_archive(entries, args.out, args))
+    # 7. The same normalized tree feeds either the legacy archive or both layers.
+    if layered:
+        base, engine = partition_entries(entries)
+        compatibility = base_compatibility(base, with_python=bool(args.python))
+        runtime_info["baseCompatibility"] = compatibility
+        entries["etc/dsh-app/runtime.json"].data = (json.dumps(runtime_info, indent=2, sort_keys=True) + "\n").encode()
+        base_stats, cache = write_base_archive(base, args.base_out, args, sources)
+        engine_stats = write_archive(engine, args.engine_out, args, layered=True)
+        report.update(entry_statistics(entries))
+        report.update(layers={"base": layer_descriptor(base_stats), "engine": layer_descriptor(engine_stats)},
+                      baseCompatibility=compatibility, baseCache=cache,
+                      archiveBytes=base_stats["archiveBytes"] + engine_stats["archiveBytes"],
+                      tarBytes=base_stats["tarBytes"] + engine_stats["tarBytes"])
+    else:
+        report.update(write_archive(entries, args.out, args))
     counts = report["counts"]
     file_bytes = report["uncompressedBytes"]
     report["droppedBytes"] = sum(report["dropped"].values())
@@ -1355,8 +1559,12 @@ def cmd_assemble(args):
         json.dump(report, f, indent=2, sort_keys=True)
         f.write("\n")
     print("rootfs %s: %d files, %d dirs, %d symlinks, %.1f MiB unpacked, %.1f MiB archive" % (
-        args.out, counts["file"], counts["dir"], counts["symlink"], file_bytes / 2**20,
+        (args.base_out + " + " + args.engine_out) if layered else args.out,
+        counts["file"], counts["dir"], counts["symlink"], file_bytes / 2**20,
         report["archiveBytes"] / 2**20))
+    if layered:
+        print("base cache %s: %s%s" % (cache["status"], cache["key"],
+                                      " (" + cache["reason"] + ")" if "reason" in cache else ""))
     if report["warnings"]:
         print("warnings: %d (see %s)" % (len(report["warnings"]), args.report))
 
@@ -1456,17 +1664,27 @@ def cmd_manifest(args):
     report = json.load(open(args.report))
     jni = json.load(open(args.jnilibs))
     v = json.loads(args.versions)
+    layered = "layers" in report
+    if layered:
+        if set(report["layers"]) != {"base", "engine"} or "archive" in report or "archiveSha256" in report:
+            raise SystemExit("layer report must contain only base and engine, without a single archive")
+        for kind, layer in report["layers"].items():
+            names = {"%s-%s.tar.%s" % (kind, args.abi, suffix) for suffix in ("xz", "gz")}
+            if layer["asset"] not in names:
+                raise SystemExit("invalid %s asset name for ABI %s" % (kind, args.abi))
     m = {
-        "schema": 1,
+        "schema": 2 if layered else 1,
         "runtimeVersion": v["runtimeVersion"],
         "upgrade": report.get("upgrade"),
         "abi": args.abi,
-        "rootfs": report["archive"],
-        "rootfsFormat": "tar.xz" if report["archive"].endswith(".xz") else "tar.gz",
-        "rootfsSha256": report["archiveSha256"],
+        **({"layers": report["layers"], "baseCompatibility": report["baseCompatibility"]} if layered else {
+            "rootfs": report["archive"],
+            "rootfsFormat": "tar.xz" if report["archive"].endswith(".xz") else "tar.gz",
+            "rootfsSha256": report["archiveSha256"],
+        }),
         "rootfsBytes": report["archiveBytes"],
         "tarBytes": report["tarBytes"],
-        "tarSha256": report["tarSha256"],
+        **({} if layered else {"tarSha256": report["tarSha256"]}),
         "uncompressedBytes": report["uncompressedBytes"],
         "entries": report["counts"],
         "archiveNotes": "GNU tar; names relative (no ./); only dirs, regular files and symlinks; "
@@ -1559,7 +1777,10 @@ def main():
     p.add_argument("--node", required=True)
     p.add_argument("--dsh-prefix", required=True)
     p.add_argument("--pnpm-prefix", help="npm --prefix tree holding node_modules/pnpm -> /usr/local/lib/node_modules/pnpm")
-    p.add_argument("--out", required=True)
+    p.add_argument("--out", help="legacy single rootfs archive")
+    p.add_argument("--base-out", help="base-<abi>.tar.xz or .tar.gz; paired with --engine-out")
+    p.add_argument("--engine-out", help="engine-<abi>.tar.xz or .tar.gz; paired with --base-out")
+    p.add_argument("--base-cache", help="explicit directory for validated base archive reuse")
     p.add_argument("--report", required=True)
     p.add_argument("--runtime-info", required=True)
     p.add_argument("--compress", choices=("xz", "gz"), default="xz")
