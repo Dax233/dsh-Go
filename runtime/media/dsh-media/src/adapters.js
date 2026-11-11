@@ -62,7 +62,7 @@ export function createDescriptor(request, refs = []) {
 function errorStatus(status, value, failedTaskReceipt = false) {
   if (status === 401 || status === 403) fail('authentication');
   if (status === 429) fail('rate_limit');
-  if (['DataInspectionFailed', 'content_policy_violation', 'moderation_blocked'].includes(value?.code ?? value?.error?.code)) fail('policy');
+  if (['DataInspectionFailed', 'OutputVideoSensitiveContentDetected', 'content_policy_violation', 'moderation_blocked'].includes(value?.code ?? value?.error?.code)) fail('policy');
   if (status < 200 || status >= 300 || (value?.error && !failedTaskReceipt) || value?.code) fail('provider');
 }
 export function normalizeImages(profile, value, n) {

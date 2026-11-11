@@ -4,7 +4,7 @@ import { createMediaClient } from '../src/adapters.js';
 import { CATALOG } from '../src/config.js';
 
 const id = 'task-local-fixture';
-const error = { code: 'OutputVideoSensitiveContentDetected', message: 'synthetic private detail' };
+const error = { code: 'InternalError', message: 'synthetic private detail' };
 const failed = { id, status: 'failed', error };
 const request = {
   service: { profile: 'ark-video', baseUrl: 'https://ark.cn-beijing.volces.com' },
@@ -54,6 +54,7 @@ test('Ark query error exemption stays within the matching failed receipt and kee
     ['rate limit', failed, 429, 'rate_limit'],
     ['top-level code', { ...failed, code: 'QueryFailure' }, 200, 'provider'],
     ['nested policy', { ...failed, error: { code: 'DataInspectionFailed' } }, 200, 'policy'],
+    ['Ark output policy', { ...failed, error: { code: 'OutputVideoSensitiveContentDetected' } }, 200, 'policy'],
     ['top-level policy', { ...failed, code: 'content_policy_violation' }, 200, 'policy'],
     ['policy before generic HTTP failure', { ...failed, error: { code: 'DataInspectionFailed' } }, 503, 'policy'],
   ]) {
