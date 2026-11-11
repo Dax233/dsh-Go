@@ -133,6 +133,36 @@ class DeltaTest(unittest.TestCase):
         self.assertIn("left out", out.getvalue())
         self.assertEqual(list((self.dir / "out").iterdir()), [])
 
+    def add_base_layer(self, path, data):
+        asset = "base-arm64-v8a.tar.xz"
+        with zipfile.ZipFile(path, "a") as archive:
+            # This diagnostic compares the actual asset, not a possibly stale declared digest.
+            archive.writestr("assets/runtime/manifest.json", json.dumps({"schema": 2, "layers": {
+                "base": {"asset": asset, "sha256": "a" * 64}}}))
+            archive.writestr("assets/runtime/" + asset, data)
+
+    def test_base_warning_compares_actual_bytes_and_does_not_reject_patch(self):
+        old, new = apk(self.dir / "old.apk", 1), apk(self.dir / "new.apk", 2, libapp_seed=1)
+        self.add_base_layer(old, b"old base bytes")
+        self.add_base_layer(new, b"new base bytes")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            patch = patch_from(old, "1.0.7+10311844", new, "1.0.8", self.dir / "out")
+        self.assertIsNotNone(patch)
+        self.assertEqual(output.getvalue().count("WARNING: base layer SHA-256 changed"), 1)
+        apk_delta.apply(old, self.dir / "out" / patch["name"], self.dir / "again.apk")
+        self.assertEqual((self.dir / "again.apk").read_bytes(), new.read_bytes())
+
+    def test_unchanged_base_and_legacy_transition_do_not_claim_a_changed_base(self):
+        for legacy in [False, True]:
+            with self.subTest(legacy=legacy):
+                old, new = apk(self.dir / "old.apk", 1), apk(self.dir / "new.apk", 2, libapp_seed=1)
+                if not legacy:
+                    self.add_base_layer(old, b"same base bytes")
+                self.add_base_layer(new, b"same base bytes")
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    self.assertIsNotNone(patch_from(old, "1.0.7+10311844", new, "1.0.8", self.dir / "out"))
+                self.assertNotIn("WARNING: base layer", output.getvalue())
+
 
 class PublishedTest(unittest.TestCase):
     """The earlier releases' APKs, from GitHub through a fake gh."""
