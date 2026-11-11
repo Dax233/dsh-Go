@@ -131,6 +131,50 @@ test('store preparation failure rolls back staging and releases the unsent hold'
   assert.deepEqual(await readdir(outputDirectory), []);
   await assert.rejects(fs.stat(target), { code: 'ENOENT' });
 });
+for (const destination of ['workspace', 'index']) {
+  test(`${destination} hard-link refusal releases the unsent hold and permits a fresh admission`, async t => {
+    const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
+    f.context.admission = await admitGeneration(req, f.context);
+    const firstRid = f.context.admission.rid;
+    const outputDirectory = join(f.workspace, 'generated', f.context.admission.outputDate);
+    const indexDirectory = join(f.context.hostStateDir, 'works', f.context.admission.outputDate);
+    const target = destination === 'workspace' ? outputDirectory : indexDirectory;
+    const originalLink = fs.link;
+    let failures = 0;
+    const injected = t.mock.method(fs, 'link', async function (source, path) {
+      if (String(path).startsWith(target + sep)) {
+        failures++;
+        throw Object.assign(new Error('controlled hard-link EACCES'), { code: 'EACCES' });
+      }
+      return originalLink.call(this, source, path);
+    });
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(generateMedia(req, f.context), error => {
+        assert.equal(f.wires.length, 0);
+        assert.equal(error.code, 'storage');
+        return true;
+      });
+    } finally { injected.mock.restore(); syncBuiltinESMExports(); }
+    assert.equal(failures, 1);
+    const ledger = createBudgetLedger(join(f.context.hostStateDir, 'budget'));
+    assert.equal((await ledger.snapshot()).requests.find(row => row.rid === firstRid).state, 'released');
+    assert.deepEqual(await readdir(outputDirectory), []);
+    assert.deepEqual(await readdir(indexDirectory), []);
+    // One reservation fills the daily budget: success requires the first release.
+    assert.equal(f.context.budget.dailyMicros, f.context.budget.unknownHoldMicros);
+    f.context.admission = await admitGeneration(req, f.context);
+    const result = await generateMedia(req, f.context);
+    assert.equal(f.wires.length, 1);
+    assert.equal(f.wires[0].method, 'POST');
+    assert.deepEqual(await readFile(result.meta.items[0].path), PNG);
+    assert.deepEqual(await readdir(outputDirectory), [f.context.admission.rid + '-1.png']);
+    assert.deepEqual(await readdir(indexDirectory), [f.context.admission.rid + '.json']);
+    const states = await ledger.snapshot();
+    assert.equal(states.requests.find(row => row.rid === firstRid).state, 'released');
+    assert.equal(states.requests.find(row => row.rid === f.context.admission.rid).state, 'settled');
+  });
+}
 for (const profile of ['openai-gpt-image', 'ark-image', 'ali-wan-image', 'silicon-image']) {
   test(`${profile}: real HTTP generation saves exact original and private index with budget`, async t => {
     const f = await fixture(t, profile), req = request(profile);

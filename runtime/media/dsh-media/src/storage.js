@@ -182,6 +182,20 @@ export async function prepareImageStore({
     indexDir = join(works, date);
     indexDirectories.push({ path: indexDir, identity: await directory(indexDir) });
     await guard();
+    // Both publication filesystems must support hard links before a paid request.
+    for (const path of [dated, indexDir]) {
+      const owned = [];
+      try {
+        const entry = await writeNew(join(path, '.' + randomUUID() + '.probe'), Buffer.alloc(0),
+          signal, entry => owned.push(entry));
+        const target = entry.path + '.link';
+        await link(entry.path, target);
+        owned.push({ path: target, identity: entry.identity });
+      } finally {
+        const removed = await Promise.all(owned.map(entry => removeOwned(entry).catch(() => false)));
+        if (removed.includes(false)) fail('cleanup_failed');
+      }
+    }
     // Probe directory-sync support BEFORE any provider call, and persist the
     // newly created parent chain. Unsupported backends fail closed.
     for (const path of [dated, generated, cwd, indexDir, works, ...indexSyncParents]) {
