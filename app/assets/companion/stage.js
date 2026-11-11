@@ -17,12 +17,16 @@
 
   const Fw = window.CubismFw;
   const query = new URLSearchParams(location.search);
+  const FLOAT = query.get('mode') === 'float';
+  const floatAbort = FLOAT ? new AbortController() : null;
+  let floatDisposed = false;
+  let loadingModel = null;
   const PACK = new URL('../pack/', location.href).href;
   const CHARACTER = `${PACK}character/`;
   const SHADERS = `${PACK}runtime/shaders/`;
   const MAX_TEXTURE = Number(query.get('maxTexture')) || 4096;
-  const REDUCED = query.get('reduceMotion') === '1';
-  const DPR_CAP = 2;
+  let REDUCED = query.get('reduceMotion') === '1';
+  const DPR_CAP = FLOAT ? 1 : 2;
   // Clip masks: the renderer packs them into textures of four channels, at
   // most 36 different masks in one texture, 32 each when there are several.
   // A model that needs more (a detailed one: 49 for 大肥鱼 4096) gets more
@@ -394,16 +398,19 @@
 
     async load(gl, config) {
       const file = await resolveModelFile(config);
+      if (floatDisposed) throw new Error('float_disposed');
       const home = new URL('.', new URL(encodePath(file), CHARACTER)).href;
       const bytes = (name) => fetchBytes(new URL(encodePath(name), home).href);
 
       const settingBytes = await fetchBytes(new URL(encodePath(file), CHARACTER).href);
+      if (floatDisposed) throw new Error('float_disposed');
       const setting = new Fw.CubismModelSettingJson(settingBytes, settingBytes.byteLength);
 
       // A model exported by a newer Cubism than the runtime knows can't load
       // at all: say which, rather than a bare failure.
       this.mocFile = decodeURIComponent(new URL(encodePath(setting.getModelFileName()), home).href.slice(CHARACTER.length));
       const moc = await bytes(setting.getModelFileName());
+      if (floatDisposed) throw new Error('float_disposed');
       const head = new Uint8Array(moc, 0, Math.min(5, moc.byteLength));
       if (String.fromCharCode(...head.slice(0, 4)) !== 'MOC3') throw new Error('moc');
       this.mocVersion = head[4];
@@ -431,6 +438,7 @@
         for (let i = 0; i < setting.getMotionCount(group); i++) own(setting.getMotionFileName(group, i));
       }
       const files = await packIndex();
+      if (floatDisposed) throw new Error('float_disposed');
       const extra = (ending) =>
         files
           .filter((f) => f.toLowerCase().endsWith(ending) && !listed.has(new URL(encodePath(f), CHARACTER).href))
@@ -442,7 +450,7 @@
         expressions.push(
           load
             .then((buffer) => {
-              if (this.expressions.has(name)) return;
+              if (floatDisposed || this.expressions.has(name)) return;
               const motion = this.loadExpression(buffer, buffer.byteLength, name);
               if (motion) {
                 motion.setFadeInTime(0.25);
@@ -456,8 +464,10 @@
         addExpression(setting.getExpressionName(i), bytes(setting.getExpressionFileName(i)));
       }
       await Promise.all(expressions);
+      if (floatDisposed) throw new Error('float_disposed');
       for (const { url, name } of extra('.exp3.json')) addExpression(name, fetchBytes(url));
       await Promise.all(expressions);
+      if (floatDisposed) throw new Error('float_disposed');
 
       // Its own motions, for the AI and the person to call by name. One that
       // won't load is left out, not fatal.
@@ -479,6 +489,7 @@
           motions.push(
             bytes(setting.getMotionFileName(group, i))
               .then((buffer) => {
+                if (floatDisposed) return;
                 const motion = this.loadMotion(buffer, buffer.byteLength, name);
                 if (!motion) return;
                 motion.setEffectIds(blinkIds, lipIds);
@@ -494,11 +505,13 @@
         }
       }
       await Promise.all(motions);
+      if (floatDisposed) throw new Error('float_disposed');
       for (const { url, name } of extra('.motion3.json')) {
         if (this.motions.has(name)) continue;
         motions.push(
           fetchBytes(url)
             .then((buffer) => {
+              if (floatDisposed) return;
               const motion = this.loadMotion(buffer, buffer.byteLength, name);
               if (!motion) return;
               motion.setEffectIds(blinkIds, lipIds);
@@ -510,6 +523,7 @@
         );
       }
       await Promise.all(motions);
+      if (floatDisposed) throw new Error('float_disposed');
       // Relaxing a face is fading to an expression with nothing in it.
       const empty = new TextEncoder().encode('{"Type":"Live2D Expression","Parameters":[]}').buffer;
       this.neutral = this.loadExpression(empty, empty.byteLength, 'neutral');
@@ -517,10 +531,12 @@
 
       if (setting.getPhysicsFileName()) {
         const buffer = await bytes(setting.getPhysicsFileName());
+        if (floatDisposed) throw new Error('float_disposed');
         this.loadPhysics(buffer, buffer.byteLength);
       }
       if (setting.getPoseFileName()) {
         const buffer = await bytes(setting.getPoseFileName());
+        if (floatDisposed) throw new Error('float_disposed');
         this.loadPose(buffer, buffer.byteLength);
       }
 
@@ -641,7 +657,7 @@
   /** The character's files, as the app listed them when it unpacked the pack. */
   let packFiles = null;
   function packIndex() {
-    packFiles ??= fetch(`${CHARACTER}index.json`)
+    packFiles ??= fetch(`${CHARACTER}index.json`, { signal: floatAbort?.signal })
       .then((response) => (response.ok ? response.json() : []))
       .then((files) => (Array.isArray(files) ? files.filter((f) => typeof f === 'string') : []))
       .catch(() => []);
@@ -649,7 +665,7 @@
   }
 
   async function fetchBytes(url) {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: floatAbort?.signal });
     if (!response.ok) throw new Error(`${response.status} ${url}`);
     return response.arrayBuffer();
   }
@@ -664,8 +680,9 @@
   }
 
   async function loadTexture(gl, url, sizes) {
-    const blob = await (await fetch(url)).blob();
+    const blob = await (await fetch(url, { signal: floatAbort?.signal })).blob();
     const size = await createImageBitmap(blob);
+    if (floatDisposed) { size.close(); throw new Error('float_disposed'); }
     sizes?.push([size.width, size.height]);
     const limit = Math.min(MAX_TEXTURE, gl.getParameter(gl.MAX_TEXTURE_SIZE));
     const scale = Math.min(1, limit / Math.max(size.width, size.height));
@@ -679,6 +696,7 @@
       premultiplyAlpha: 'premultiply',
       colorSpaceConversion: 'none',
     });
+    if (floatDisposed) { bitmap.close(); throw new Error('float_disposed'); }
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
@@ -750,7 +768,7 @@
 
   async function loadAdapter() {
     try {
-      const response = await fetch(`${CHARACTER}adapter.json`, { cache: 'no-store' });
+      const response = await fetch(`${CHARACTER}adapter.json`, { cache: 'no-store', signal: floatAbort?.signal });
       const json = response.ok ? await response.json() : null;
       return json && typeof json === 'object' && !Array.isArray(json) ? json : null;
     } catch {
@@ -760,8 +778,9 @@
 
   /** character.json, the rules' findings, then the adapter: the latest word wins. */
   function applyCharacter() {
-    emotions = mergeEmotions({ ...(character.emotions ?? {}), ...(adapter?.emotions ?? {}) });
-    actions = { ...ACTIONS, ...(character.actions ?? {}), ...(adapter?.actions ?? {}) };
+    const authoredEmotions = { ...(character.emotions ?? {}), ...(adapter?.emotions ?? {}) };
+    emotions = FLOAT ? { calm: {}, ...authoredEmotions } : mergeEmotions(authoredEmotions);
+    actions = { ...(FLOAT ? {} : ACTIONS), ...(character.actions ?? {}), ...(adapter?.actions ?? {}) };
     if (Array.isArray(adapter?.zones) && adapter.zones.length) {
       zones = adapter.zones;
       zonesFrom = 'adapter';
@@ -779,6 +798,13 @@
     defaultZoom ??= camera.zoom;
     camera.zoom = Number(adapter?.framing?.zoom) || Number(character.framing?.zoom) || defaultZoom;
     camera.y = Number(adapter?.framing?.y ?? character.framing?.y) || 0;
+    if (FLOAT) {
+      // Separate, explicit float framing; never write it into the room's adapter.
+      const zoom = Number(query.get('floatZoom'));
+      const y = Number(query.get('floatY'));
+      camera.zoom = zoom > 0 && zoom <= 4 ? zoom : 0.9;
+      camera.y = Number.isFinite(y) ? clamp(y, -1, 1) : 0;
+    }
   }
 
   /** What the model is, for the app's check and the person's AI (companion_adapt.dart). */
@@ -848,7 +874,7 @@
     life.emotionUntil = key === 'calm' ? 0 : performance.now() + hold;
     life.gazeHold = def.gaze ?? null;
     model?.startExpression(def.expression ?? null);
-    if (changed && model && !own) emotionMark(name);
+    if (changed && model && !own && !FLOAT) emotionMark(name);
   }
 
   /** A few notes, one after another, while she hums. */
@@ -989,7 +1015,7 @@
       // Falling asleep and waking.
       // Late at night she drifts off sooner.
       const sleepAfter = document.documentElement.dataset.tod === 'night' ? SLEEP_AFTER_MS / 2 : SLEEP_AFTER_MS;
-      if (life.mood === 'idle' && now - life.lastTouch > sleepAfter) setMood('sleeping');
+      if (!FLOAT && life.mood === 'idle' && now - life.lastTouch > sleepAfter) setMood('sleeping');
       life.sleep = ease(life.sleep, life.mood === 'sleeping' ? 1 : 0, 1.6, dt);
 
       // Emotions relax on their own.
@@ -1066,7 +1092,7 @@
         m.add('ParamMouthForm', life.pat);
       }
 
-      homePose(m, now, dt);
+      if (!FLOAT) homePose(m, now, dt);
 
       // Actions add on top of all that.
       for (const [name, run] of life.actions) {
@@ -1079,7 +1105,7 @@
       }
 
       // Idle flourishes, only when nothing else is going on.
-      if (!REDUCED && life.mood === 'idle' && !life.pointer && now > life.flourishAt && life.emotion === 'calm') {
+      if (!FLOAT && !REDUCED && life.mood === 'idle' && !life.pointer && now > life.flourishAt && life.emotion === 'calm') {
         // The first morning visit: a stretch, then a yawn, before anything else.
         const name = life.waking.length ? life.waking.shift() : pick(idleChoices());
         if (name === 'tail') {
@@ -1462,7 +1488,7 @@
     return { distance: Math.hypot(a.x - b.x, a.y - b.y), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
   }
 
-  canvas.addEventListener('pointerdown', (e) => {
+  if (!FLOAT) canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     touched();
@@ -1559,7 +1585,7 @@
     }
   }
 
-  canvas.addEventListener('pointermove', (e) => {
+  if (!FLOAT) canvas.addEventListener('pointermove', (e) => {
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     touched();
@@ -1627,9 +1653,9 @@
       if (!press) life.pointer = null;
     }, 700);
   }
-  canvas.addEventListener('pointerup', endPointer);
-  canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('lostpointercapture', endPointer);
+  if (!FLOAT) canvas.addEventListener('pointerup', endPointer);
+  if (!FLOAT) canvas.addEventListener('pointercancel', endPointer);
+  if (!FLOAT) canvas.addEventListener('lostpointercapture', endPointer);
 
   function tap(zone, clientX) {
     const now = performance.now();
@@ -1761,6 +1787,7 @@
   }
 
   function render(ts) {
+    if (FLOAT) return renderFloat(ts);
     if (paused || document.hidden) return;
     frame = requestAnimationFrame(render);
     // Thirty frames while she idles, sixty while something's happening, and
@@ -1809,6 +1836,81 @@
     }
   }
 
+  const floatGate = FLOAT ? new window.CompanionFloat.FrameGate() : null;
+  let floatPixels = null;
+  let floatBoundsKey = '';
+  let floatState = null;
+
+  function setFloatState(state, reduced) {
+    if (typeof reduced === 'boolean' && reduced !== REDUCED) {
+      REDUCED = reduced;
+      if (reduced) {
+        life.actions.clear();
+        model.stopMotions();
+      }
+    }
+    if (state === floatState) return;
+    floatState = state;
+    const effect = window.CompanionFloat.stateEffect(state, emotions, actions);
+    life.actions.clear();
+    model.stopMotions();
+    life.mood = effect.mood;
+    setEmotion(effect.emotion, Infinity);
+    if (effect.action) playAction(effect.action);
+  }
+
+  function renderFloat(ts) {
+    if (paused || floatDisposed || document.hidden || !model) return;
+    frame = requestAnimationFrame(render);
+    if (!floatGate.take(ts)) return;
+    try {
+      const dt = clamp((ts - last) / 1000, 0.001, 0.05);
+      last = ts;
+      resize();
+      model.tick(dt, animate);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      model.draw(projection(), [0, 0, canvas.width, canvas.height]);
+      // Read in this draw task; preserveDrawingBuffer is unnecessary. Float
+      // uses CSS-resolution pixels and a fixed, small native viewport.
+      const length = canvas.width * canvas.height * 4;
+      if (floatPixels?.length !== length) floatPixels = new Uint8Array(length);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, floatPixels);
+      const bounds = window.CompanionFloat.opaqueBounds(floatPixels, canvas.width, canvas.height);
+      const message = { type: 'floatBounds', width: canvas.width, height: canvas.height, bounds };
+      const key = JSON.stringify(message);
+      if (key !== floatBoundsKey) { floatBoundsKey = key; post(message); }
+      drawn++;
+      if (ts - fpsAt >= 1000) { fps = drawn * 1000 / (ts - fpsAt); drawn = 0; fpsAt = ts; }
+    } catch (_) { floatFailed('companion_render_failed'); }
+  }
+
+  function releaseFloat() {
+    if (floatDisposed) return;
+    floatDisposed = true;
+    floatAbort.abort();
+    const current = model;
+    try { pause(); }
+    finally {
+      model = null;
+      floatPixels = null;
+      try { current?.release(); }
+      finally {
+        try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); }
+        finally { gl = null; }
+      }
+    }
+  }
+
+  function floatFailed(code) {
+    try { releaseFloat(); } catch (_) { /* Native still destroys the page. */ }
+    post({ type: 'floatError', code });
+  }
+
   let moodMarkAt = 0;
   let thoughtStep = 0;
 
@@ -1836,7 +1938,7 @@
   // Tilting the phone shifts the water a little, then it settles back to
   // however the phone is being held: a window into the water, not a level.
   const tilt = { x: 0, y: 0, sx: 0, sy: 0, beta: null, gamma: null };
-  window.addEventListener('deviceorientation', (e) => {
+  if (!FLOAT) window.addEventListener('deviceorientation', (e) => {
     if (REDUCED || e.beta == null || e.gamma == null) return;
     if (tilt.beta == null) {
       tilt.beta = e.beta;
@@ -1885,7 +1987,7 @@
     home.gaze = null;
     home.reach = 0;
     resetBall();
-    scene.clear();
+    if (!FLOAT) scene.clear();
     // One of the model's own motions doesn't carry on after she was out of sight.
     model?.stopMotions();
   }
@@ -1899,7 +2001,7 @@
   }
 
   function resume() {
-    if (!paused || document.hidden) return;
+    if (FLOAT || !paused || document.hidden) return;
     // Commands received out of sight must not replay an old short performance.
     discardTransient();
     paused = false;
@@ -1910,15 +2012,21 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pause();
+    if (FLOAT) {
+      if (document.hidden) releaseFloat();
+      else if (floatDisposed) post({ type: 'floatResume' });
+    } else if (document.hidden) pause();
     else if (!nativePaused) resume();
   });
+  if (FLOAT) window.addEventListener('pagehide', releaseFloat);
 
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
-    pause();
+    if (FLOAT) {
+      if (!floatDisposed) floatFailed('companion_context_lost');
+    } else pause();
   });
-  canvas.addEventListener('webglcontextrestored', () => location.reload());
+  canvas.addEventListener('webglcontextrestored', () => { if (!FLOAT) location.reload(); });
 
   /** The water follows the hour. */
   function timeOfDay(hour) {
@@ -1931,6 +2039,7 @@
   const TINTS = { dawn: [1, 0.98, 0.96], day: [1, 1, 1], dusk: [1, 0.95, 0.93], night: [0.92, 0.94, 1] };
 
   function applyTimeOfDay() {
+    if (FLOAT) return;
     const hour = Number(query.get('hour') ?? new Date().getHours());
     const tod = query.get('tod') ?? timeOfDay(hour);
     document.documentElement.dataset.tod = tod;
@@ -1945,13 +2054,16 @@
     const started = performance.now();
     if (REDUCED) document.documentElement.dataset.motion = 'reduced';
     applyTimeOfDay();
-    scene.resize();
-    window.addEventListener('resize', () => scene.resize());
+    if (!FLOAT) {
+      scene.resize();
+      window.addEventListener('resize', () => scene.resize());
+    }
     try {
-      const response = await fetch(`${CHARACTER}character.json`);
+      const response = await fetch(`${CHARACTER}character.json`, { signal: floatAbort?.signal });
       character = response.ok ? await response.json() : {};
       adapter = await loadAdapter();
       applyCharacter();
+      if (floatDisposed) return;
 
       Fw.CubismFramework.startUp(Object.assign(new Fw.Option(), { logFunction: () => {}, loggingLevel: Fw.LogLevel?.LogLevel_Off ?? 5 }));
       Fw.CubismFramework.initialize();
@@ -1961,30 +2073,34 @@
       const antialias = query.get('antialias') === '1' || (query.get('antialias') !== '0' && (window.devicePixelRatio || 1) < 1.5);
       const options = { alpha: true, premultipliedAlpha: true, antialias, preserveDrawingBuffer: query.get('capture') === '1' };
       gl = canvas.getContext('webgl2', options) || canvas.getContext('webgl', options);
-      if (!gl) throw new Error('webgl');
+      if (!gl || (FLOAT && !gl.getContextAttributes()?.alpha)) throw new Error('webgl');
       canvas.width = canvas.height = 0;
       resize();
 
       const next = new StageModel();
+      if (FLOAT) loadingModel = next;
       await next.load(gl, character);
+      if (floatDisposed) { loadingModel = null; next.release(); return; }
       next.adapt(character, adapter);
       model = next;
+      loadingModel = null;
       applyCharacter();
       applyTimeOfDay();
-      setInterval(applyTimeOfDay, 10 * 60 * 1000);
+      if (!FLOAT) setInterval(applyTimeOfDay, 10 * 60 * 1000);
       setEmotion('calm');
       // A hello, so opening the page is already a small event.
-      playAction('nodSmall');
+      if (!FLOAT) playAction('nodSmall');
       last = performance.now();
-      if (document.hidden) pause();
+      if (document.hidden) { if (FLOAT) releaseFloat(); else pause(); }
       if (!paused) frame = requestAnimationFrame(render);
       document.documentElement.dataset.ready = '1';
       // Early morning: she's only just up. A stretch, then a yawn, once the
       // greeting has settled.
-      if (document.documentElement.dataset.tod === 'dawn' && !REDUCED) {
+      if (!FLOAT && document.documentElement.dataset.tod === 'dawn' && !REDUCED) {
         life.waking = ['stretch', 'yawn'];
         life.flourishAt = performance.now() + 6000;
       }
+      if (FLOAT) { post({ type: 'floatReady' }); return; }
       post({
         type: 'ready',
         ms: Math.round(performance.now() - started),
@@ -1994,6 +2110,13 @@
         probe: probeReport(),
       });
     } catch (error) {
+      if (FLOAT) {
+        const unfinished = loadingModel;
+        loadingModel = null;
+        try { unfinished?.release(); } catch (_) { /* GL/page termination remains mandatory. */ }
+        if (!floatDisposed) floatFailed('companion_render_failed');
+        return;
+      }
       post({ type: 'error', message: String(error?.message ?? error) });
       document.documentElement.dataset.ready = 'error';
       document.documentElement.dataset.error = String(error?.stack ?? error);
@@ -2012,6 +2135,17 @@
 
   window.stage = {
     command(message) {
+      if (FLOAT) {
+        if (message?.type === 'dispose' || message?.type === 'pause') releaseFloat();
+        else if (!floatDisposed && model && message?.type === 'freeze') pause();
+        else if (!floatDisposed && model && message?.type === 'thaw' && paused && !document.hidden) {
+          paused = false;
+          delete document.documentElement.dataset.paused;
+          last = performance.now();
+          frame = requestAnimationFrame(render);
+        } else if (!floatDisposed && model && message?.type === 'petState') setFloatState(message.state, message.reduceMotion);
+        return;
+      }
       const run = commands[message?.type];
       if (run && model) run(message);
     },

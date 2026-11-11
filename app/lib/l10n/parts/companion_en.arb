@@ -27,6 +27,7 @@
   "companionSetupImport": "Import asset pack",
   "companionFailedTitle": "She couldn't come out",
   "companionFailedBody": "Loading failed on this phone ({reason}). You can import the asset pack again and retry.",
+  "companionFailedBodyPlain": "Your companion didn't load just now. Try again first; if that doesn't help, import the asset pack again.",
   "companionPackBroken": "This file can't be opened. It may not be an asset pack, or it may be damaged.",
   "companionPackRuntimeMismatch": "The runtime in this pack doesn't match this version of the app.",
   "companionPackNoRuntime": "This pack only has a character and there's no runtime on this phone yet. Import a full asset pack first.",

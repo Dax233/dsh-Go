@@ -2959,6 +2959,51 @@ class L10nEn extends L10n {
   String get botsPetAlways => 'Always';
 
   @override
+  String get botsPetOverlayShows => 'Show in the floating window';
+
+  @override
+  String get botsPetOverlayPixel => 'Pixel pet';
+
+  @override
+  String get botsPetOverlayCompanion => 'Room companion';
+
+  @override
+  String botsPetOverlayCompanionNamed(String name) {
+    return '$name from the Room';
+  }
+
+  @override
+  String get botsPetOverlayNoPack => 'Invite a character in the Companion Room first';
+
+  @override
+  String get botsPetOverlayPackBroken => 'The character pack is incomplete. Import it again in the Companion Room';
+
+  @override
+  String get botsPetOverlayUnavailable => 'This phone can\'t show your companion right now';
+
+  @override
+  String get botsPetOverlayCompanionHint =>
+      'Uses more battery than the pixel pet. It stops when the screen is off or the window is hidden';
+
+  @override
+  String get botsPetOverlayLoading => 'Bringing your companion out…';
+
+  @override
+  String get botsPetOverlayFallback => 'Your companion couldn\'t come out. The pixel pet is filling in';
+
+  @override
+  String get botsPetOverlayFraming => 'Framing';
+
+  @override
+  String get botsPetOverlayFramingFull => 'Full body';
+
+  @override
+  String get botsPetOverlayFramingHalf => 'Half body';
+
+  @override
+  String get botsPetOverlayFramingHint => 'Changing the framing reloads the character';
+
+  @override
   String get botsPetSwitchDisabled => 'Switch disabled';
 
   @override
@@ -5279,6 +5324,10 @@ class L10nEn extends L10n {
   String companionFailedBody(String reason) {
     return 'Loading failed on this phone ($reason). You can import the asset pack again and retry.';
   }
+
+  @override
+  String get companionFailedBodyPlain =>
+      'Your companion didn\'t load just now. Try again first; if that doesn\'t help, import the asset pack again.';
 
   @override
   String get companionPackBroken => 'This file can\'t be opened. It may not be an asset pack, or it may be damaged.';
@@ -16826,6 +16875,12 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwPetDisplayWhen => 'pet display,when to show';
+
+  @override
+  String get searchKwPetOverlayShows => 'floating companion,room companion,pixel pet,live2d';
+
+  @override
+  String get searchKwPetOverlayFraming => 'framing,full body,half body';
 
   @override
   String get searchKwBlur => 'blur,glass,frosted';

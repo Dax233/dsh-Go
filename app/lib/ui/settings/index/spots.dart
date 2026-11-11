@@ -777,6 +777,18 @@ abstract final class Spots {
     title: (l) => l.botsPetDisplayWhen,
     keywords: (l) => l.searchKwPetDisplayWhen,
   );
+  static final petOverlayShows = SettingSpot(
+    'pet-overlay-shows',
+    page: SettingsPageId.pets,
+    title: (l) => l.botsPetOverlayShows,
+    keywords: (l) => l.searchKwPetOverlayShows,
+  );
+  static final petOverlayFraming = SettingSpot(
+    'pet-overlay-framing',
+    page: SettingsPageId.pets,
+    title: (l) => l.botsPetOverlayFraming,
+    keywords: (l) => l.searchKwPetOverlayFraming,
+  );
 
   // 界面.
   static final uiMode = SettingSpot(
@@ -1092,6 +1104,8 @@ final _rows = <SettingSpot>[
   Spots.petQuiet,
   Spots.petOutsideApp,
   Spots.petDisplayWhen,
+  Spots.petOverlayShows,
+  Spots.petOverlayFraming,
   Spots.uiMode,
   Spots.hardwareEnterSends,
   Spots.quickPanel,
