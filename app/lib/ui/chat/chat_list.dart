@@ -169,6 +169,40 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     return _anchorPixels - rows - history - widget.topInset - AppSpace.sm;
   }
 
+  /// EditableText's reveal request includes its caret padding. The centered
+  /// viewport's getOffsetToReveal omits the anchor, so use the actual rectangle
+  /// in this viewport instead. Other reveal requests keep Flutter's behavior.
+  bool _revealInlineEditor(RenderObject target, Rect? rect, Duration duration, Curve curve) {
+    final focus = FocusManager.instance.primaryFocus?.context;
+    if (focus == null || !focus.mounted || focus.findAncestorStateOfType<_ChatListState>() != this) return false;
+    final editor = focus.findAncestorStateOfType<EditableTextState>();
+    if (editor == null || editor.widget.readOnly) return false;
+    RenderObject? ancestor = editor.renderEditable;
+    while (ancestor != null && ancestor != target) {
+      ancestor = ancestor.parent;
+    }
+    if (ancestor == null || !_scroll.hasClients) return false;
+    final viewport = _centerKey.currentContext?.findRenderObject()?.parent;
+    if (viewport is! RenderViewport || !viewport.hasSize) return false;
+    final position = _scroll.position;
+    // Do not interrupt a finger or the fling it started. A previous implicit
+    // caret animation has an idle user direction and may be superseded.
+    if (_fingers > 0 || position.userScrollDirection != ScrollDirection.idle || !position.allowImplicitScrolling) {
+      return true;
+    }
+    final revealed = MatrixUtils.transformRect(target.getTransformTo(viewport), rect ?? target.paintBounds);
+    final leading = revealed.top - widget.topInset;
+    final trailing = revealed.bottom - _anchorPixels;
+    // When the requested area is taller than the viewport and already spans
+    // it, neither edge is preferable (the same rule as showInViewport).
+    if (leading < 0 && trailing > 0) return true;
+    final shift = trailing > 0 ? trailing : math.min(0.0, leading);
+    if (shift.abs() > precisionErrorTolerance) {
+      unawaited(position.moveTo(position.pixels + shift, duration: duration, curve: curve));
+    }
+    return true;
+  }
+
   /// 视口贴在底部(决定流式时是否跟随)。
   bool _pinned = true;
 
@@ -1398,8 +1432,44 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       ArtifactCardRow(:final group) => ArtifactCard(sessionId: widget.sessionId, group: group),
       CommandNoticeRow(:final notice) => CommandRow(notice: notice),
       ApprovalRow(:final request) => ApprovalCard(request: request, onRespond: _respond, onAllowAll: _allowAll),
-      QuestionRow(:final request) => QuestionCard(request: request, onAnswer: _answer, onReject: _rejectQuestion),
+      QuestionRow(:final request) => _InlineEditorReveal(
+        onShow: _revealInlineEditor,
+        child: QuestionCard(request: request, onAnswer: _answer, onReject: _rejectQuestion),
+      ),
     };
+  }
+}
+
+/// Intercept only the focused question editor's original reveal request,
+/// before the centered scroll view can misclassify it as already visible.
+class _InlineEditorReveal extends SingleChildRenderObjectWidget {
+  const _InlineEditorReveal({required this.onShow, required super.child});
+
+  final bool Function(RenderObject, Rect?, Duration, Curve) onShow;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderInlineEditorReveal(onShow);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderInlineEditorReveal renderObject) {
+    renderObject.onShow = onShow;
+  }
+}
+
+class _RenderInlineEditorReveal extends RenderProxyBox {
+  _RenderInlineEditorReveal(this.onShow);
+
+  bool Function(RenderObject, Rect?, Duration, Curve) onShow;
+
+  @override
+  void showOnScreen({
+    RenderObject? descendant,
+    Rect? rect,
+    Duration duration = Duration.zero,
+    Curve curve = Curves.ease,
+  }) {
+    if (descendant != null && onShow(descendant, rect, duration, curve)) return;
+    super.showOnScreen(descendant: descendant, rect: rect, duration: duration, curve: curve);
   }
 }
 
