@@ -259,15 +259,16 @@
  		}
  		return {
  			exitCode,
-@@ -2714,6 +2859,7 @@
+@@ -2714,6 +2859,8 @@
  			const control = {
  				abort: new AbortController(),
  				phase: "installing",
 +				runs: [],
++				restoreFailure: void 0,
  				result: Promise.resolve(null)
  			};
  			const stopped = () => control.abort.signal.aborted || this.abort.signal.aborted;
-@@ -2789,7 +2935,10 @@
+@@ -2789,7 +2936,10 @@
  					let run;
  					let used = null;
  					for (const [index, registry] of plan.entries()) {
@@ -279,7 +280,7 @@
  						if (stopped()) throw new InstallCancelledError();
  						result.registries.push(registry);
  						used = registry;
-@@ -2803,7 +2952,7 @@
+@@ -2803,7 +2953,7 @@
  							installSpec,
  							...options?.saveExact === true ? ["--save-exact"] : [],
  							...registryArguments(registry)
@@ -288,17 +289,20 @@
  						result.packageResult = run;
  						if (stopped()) throw new InstallCancelledError();
  						if (run.incompatible !== void 0) throw new ManagementFailure("incompatible-version", run.incompatible);
-@@ -2845,12 +2994,20 @@
+@@ -2845,12 +2995,23 @@
  					for (const file of bundlePatchPaths(dir, manifest.dsh.bundle)) loadOverlayPatches("dsh", file);
  					version = manifest.version;
  					this.installedFrom.set(name, used);
 +					if (stopped()) throw new InstallCancelledError();
  				} catch (error) {
 -					await this.restoreFiles(files);
-+					// Private stop facts survive unrelated log/finalizer failures and result folding.
++					// Private stop and restore facts survive unrelated finalizer failures and result folding.
 +					await stopOwnedRuns(control.runs);
 +					try {
 +						await this.restoreFiles(files);
++					} catch (restoreError) {
++						control.restoreFailure = restoreError;
++						throw restoreError;
 +					} finally {
 +						for (const run of control.runs) await run.release();
 +					}
@@ -310,16 +314,17 @@
  				result.bundle = name;
  				if (version !== void 0) result.version = version;
  				result.target = name;
-@@ -2895,6 +3052,8 @@
+@@ -2895,6 +3056,9 @@
  			control.abort.abort();
  			/* v8 ignore next -- change() folds every failure into its result; only a lock or disposal error rejects */
  			await control.result.then(() => void 0, () => void 0);
 +			const stopFailure = ownedStopFailure(control.runs);
 +			if (stopFailure !== void 0) throw stopFailure;
++			if (control.restoreFailure !== void 0) throw control.restoreFailure;
  			return { status: "cancelled" };
  		}
  		/** Unload and remove a profile-owned bundle dependency through dsh plugin's pnpm path; a selected name no
-@@ -2969,7 +3128,7 @@
+@@ -2969,7 +3133,7 @@
  			};
  		}
  		/** Run one pnpm command in the profile, streaming its output as install-log chunks. */
@@ -328,7 +333,7 @@
  			const jobId = randomUUID();
  			// Log arguments are separate from execution arguments. Restrict userinfo
  			// matching to URL authority; support aliases and --registry=URL too.
-@@ -2987,6 +3146,7 @@
+@@ -2987,6 +3151,7 @@
  				activateNewBundles: false,
  				idleTimeoutMs: this.idleTimeoutMs,
  				lookupTimeoutMs: this.inspectTimeoutMs,
