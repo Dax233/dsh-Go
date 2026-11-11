@@ -167,6 +167,9 @@ internal fun activateRuntimeUpdate(
     } else {
         // Only first install (or an explicit user-confirmed reset) may activate
         // an entire rootfs. Never use this as an incompatible-upgrade fallback.
+        if (raw.optInt("schema", 1) == 2) {
+            checkLayeredFirstInstall(File(base, "staging"), raw, version, abi)
+        }
         activateRootfs(base, version, keep, dropKept, sync = sync)
     }
 }
