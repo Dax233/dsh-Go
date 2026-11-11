@@ -280,6 +280,16 @@ void main() {
       native.push(status(true, 'USER'));
       await pumpEventQueue();
       expect(client.cancelled, ['busy', 'other-busy']); // Duplicate sampling is not another stop.
+      native.push(status(true, 'ENVIRONMENT'));
+      native.push(status(true, 'USER'));
+      native.push(status(true, 'USER'));
+      await pumpEventQueue();
+      expect(client.cancelled, ['busy', 'other-busy'], reason: 'a source change cannot re-arm the same stopped hold');
+      native.push(status(false, null));
+      await pumpEventQueue();
+      native.push(status(true, 'USER'));
+      await pumpEventQueue();
+      expect(client.cancelled, ['busy', 'other-busy', 'busy', 'other-busy'], reason: 'a fresh stopped hold can cancel again');
     });
   }
 

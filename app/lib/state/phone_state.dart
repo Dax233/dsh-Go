@@ -554,7 +554,8 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
       if (userStop && !userStopped && interrupted && !modernSeen && (capability != null || !versioned)) {
         unawaited(_cancelLocalTurns(ref));
       }
-      userStopped = userStop;
+      // A later ambient source in the same hold must not re-arm cancel-all.
+      userStopped = s.task.stopped && (userStopped || userStop);
       active = s.task.active;
     }, onError: (_) {});
   }());
