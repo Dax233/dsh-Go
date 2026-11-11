@@ -75,6 +75,16 @@ sys.exit(status)
         path = self.root / "calls.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
+    def deb_inputs_entry(self):
+        source = SCRIPT.read_text()
+        start = source.index('  ubuntu_extra_debs "$ubuntu_arch" "$base"')
+        end = source.index('  local python;', start)
+        # Exercise the shipped caller too: redirect, read the list, reject empty.
+        return ('exercise() {\n'
+                '  local ubuntu_arch="$TEST_ARCH" base=/unused-base work="$FETCH_TEST_ROOT/work"\n'
+                '  mkdir -p "$work"\n' + source[start:end]
+                + '  printf "%s\\n" "${extra_debs[@]}"\n}\nexercise')
+
     def test_verified_cache_needs_no_network(self):
         self.cache.mkdir()
         self.dest.write_text(self.payload)
@@ -141,11 +151,46 @@ sys.exit(status)
                 original = json.dumps(dict(want=["tzdata", "ca-certificates", "git"], packages=packages))
                 lock.write_text(original)
                 before = self.calls()
-                result = self.run_shell('ubuntu_extra_debs "$TEST_ARCH" /no-base-needed', {"TEST_ARCH": arch})
+                result = self.run_shell(self.deb_inputs_entry(), {"TEST_ARCH": arch})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), expected_paths)
                 self.assertEqual(self.calls()[len(before):], expected_calls)
                 self.assertEqual(lock.read_text(), original)
+
+    def test_lock_reader_error_cannot_accept_a_partial_input_list(self):
+        cached = self.cache / "ubuntu/debs/first_1_all.deb"
+        cached.parent.mkdir(parents=True)
+        cached.write_text(self.payload)
+        packages = [dict(filename="pool/main/f/fixture/first_1_all.deb", sha256=self.sha),
+                    dict(filename="pool/main/f/fixture/missing-hash_1_all.deb")]
+        lock = self.locks / "ubuntu-noble-amd64.json"
+        original = json.dumps(dict(want=["tzdata", "ca-certificates", "git"], packages=packages))
+        lock.write_text(original)
+        result = self.run_shell(self.deb_inputs_entry(), {"TEST_ARCH": "amd64"})
+        self.assertIn("KeyError: 'sha256'", result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(lock.read_text(), original)
+
+    def test_failed_later_deb_fetch_stops_the_build_caller(self):
+        packages = []
+        urls = []
+        for name in ("first_1_all.deb", "second_1_all.deb"):
+            filename = f"pool/main/f/fixture/{name}"
+            packages.append(dict(filename=filename, sha256=self.sha))
+            urls.append(f"https://mirrors.tuna.tsinghua.edu.cn/ubuntu/{filename}")
+        backup = "https://launchpad.net/ubuntu/+archive/primary/+files/second_1_all.deb"
+        self.routes = {urls[0]: [0, self.payload], urls[1]: [22, "partial"], backup: [22, "partial"]}
+        lock = self.locks / "ubuntu-noble-amd64.json"
+        original = json.dumps(dict(want=["tzdata", "ca-certificates", "git"], packages=packages))
+        lock.write_text(original)
+        result = self.run_shell(self.deb_inputs_entry(), {"TEST_ARCH": "amd64"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("download failed", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.calls(), [*urls, backup])
+        self.assertEqual(lock.read_text(), original)
 
     def test_failed_metadata_download_cannot_publish_from_command_substitution(self):
         name = "node-vfixture-linux-x64.tar.xz"

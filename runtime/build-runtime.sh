@@ -206,12 +206,14 @@ PYEOF
     "${PY[@]}" resolve-debs --base "$base" --arch "$arch" "${idx[@]}" --want $UBUNTU_EXTRA --out "$lock" >&2
   fi
   local name file sum
+  # pipefail must carry lock-reader errors to the caller, including after output.
+  python3 -I -c 'import json,sys; [print(p["filename"], p["sha256"]) for p in json.load(open(sys.argv[1]))["packages"]]' "$lock" |
   while read -r file sum; do
     name="$(basename "$file")"
     # Superseded versions can leave the mirror; keep the locked bytes and hash.
     fetch "$mirror/$file" "$CACHE/ubuntu/debs/$name" "$sum" "$UBUNTU_DEB_FALLBACK/$name"
     printf '%s\n' "$CACHE/ubuntu/debs/$name"
-  done < <(python3 -I -c 'import json,sys; [print(p["filename"], p["sha256"]) for p in json.load(open(sys.argv[1]))["packages"]]' "$lock")
+  done
 }
 
 # Relocatable CPython (python-build-standalone, install_only_stripped). Checksums come from the
