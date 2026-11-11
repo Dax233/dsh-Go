@@ -433,6 +433,7 @@ class PhoneTaskStatus {
     this.app,
     this.paused = false,
     this.stopped = false,
+    this.interrupted,
     this.waived = false,
   });
 
@@ -458,6 +459,7 @@ class PhoneTaskStatus {
     app: _text(m['app']),
     paused: _flag(m['paused']),
     stopped: _flag(m['stopped']),
+    interrupted: m.containsKey('interrupted') ? _flag(m['interrupted']) : null,
     waived: _flag(m['waived']),
   );
 
@@ -493,6 +495,11 @@ class PhoneTaskStatus {
   /// The person pressed 停止 (overlay or notification); native refuses phone
   /// actions for a short while after. The app cancels the running turn.
   final bool stopped;
+
+  /// Whether this stop cut off a phone task that was running, recorded by native at the
+  /// moment it stopped. Null only from an older native that doesn't report it; a present
+  /// value of the wrong type is false, never a reason to guess.
+  final bool? interrupted;
 
   /// 本任务免确认 was granted: the rest of this task asks nothing.
   final bool waived;

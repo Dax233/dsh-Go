@@ -123,6 +123,155 @@ class PhoneTaskSessionsTest {
         } finally { sessions.releaseSelfCheck(lease) }
     }
 
+    @Test fun coldStopAllInvalidatesOldAdmissionAndPromptWithoutAStoppedEdgeOrHold() {
+        val prompt = checkNotNull(legacy.beforeTaskOwner())
+        val queued = admit(null)
+        val notices = mutableListOf<PhoneTasks.Snapshot>()
+        legacy.addListener { notices += it }
+        sessions.stopAll("screen off")
+        assertFalse(legacy.isCurrent(prompt))
+        assertFalse(legacy.isStopped())
+        assertTrue(notices.isNotEmpty())
+        assertTrue(notices.none { it.stopped })
+        assertTrue(sessions.snapshot().none { it["stopped"] == true })
+        assertTrue(sessions.run(queued, PhoneToolCatalog.APPS, emptyMap()).isError)
+        assertEquals(0L, legacy.snapshot().id)
+        assertFalse(invoke(null).isError) // No 30-second delay for a genuinely new admission.
+    }
+
+    @Test fun stopAllFencesAnUnstartedModernCallWithoutPoisoningItsSession() {
+        val queued = admit("A")
+        val record = task("A")
+        val before = record.tasks.snapshot()
+        sessions.stopAll("screen off")
+        assertTrue(record.tasks.snapshot().lifecycle > before.lifecycle)
+        assertFalse(record.tasks.isStopped())
+        assertFalse(record.stopped)
+        assertTrue(sessions.run(queued, PhoneToolCatalog.APPS, emptyMap()).isError)
+        assertEquals(0L, record.tasks.snapshot().id)
+        assertFalse(invoke("A").isError)
+        assertFalse(invoke("A", "2").isError)
+    }
+
+    @Test fun stopAllDoesNotFenceAFinishedSessionsNextRunOrReopenItsEndedRun() {
+        assertFalse(invoke("A").isError)
+        end("A")
+        val finished = task("A")
+        assertFalse(finished.tasks.snapshot().active)
+        sessions.stopAll("screen off")
+        assertFalse(finished.tasks.isStopped())
+        assertFalse(finished.stopped)
+        assertTrue(invoke("A").isError) // The exact host run-end fence is still permanent.
+        assertFalse(invoke("A", "2").isError)
+    }
+
+    @Test fun stopAllEndsAnIdleProjectedLegacyScopeWithoutHoldingOrKeepingItsApprovals() {
+        assertFalse(invoke(null).isError)
+        val oldOwner = checkNotNull(legacy.activeOwner())
+        legacy.approve("example.app"); legacy.waive()
+        time.addAndGet(legacy.idleMs + 1)
+        assertFalse(legacy.snapshot().active)
+        assertTrue(legacy.isActive)
+        sessions.stopAll("screen off")
+        assertFalse(legacy.isActive)
+        assertFalse(legacy.isStopped())
+        assertFalse(legacy.isCurrent(oldOwner))
+        assertFalse(legacy.isApproved("example.app"))
+        assertFalse(legacy.isWaived)
+        assertEquals(0, journalCount())
+        assertFalse(invoke(null).isError)
+        assertNotEquals(oldOwner.taskId, legacy.snapshot().id)
+    }
+
+    @Test fun stopAllStillStopsAPausedTaskEvenBeyondItsIdleTimeout() {
+        assertFalse(invoke(null).isError)
+        legacy.setPaused(true)
+        time.addAndGet(legacy.idleMs + 1)
+        sessions.stopAll("screen off")
+        assertFalse(legacy.isPaused)
+        assertTrue(legacy.isStopped())
+        assertTrue(invoke(null).isError)
+    }
+
+    @Test fun repeatedAmbientStopDoesNotRenewAnInactiveTasksExistingHold() {
+        assertFalse(invoke(null).isError)
+        sessions.stopAll("first stop")
+        val stoppedEpoch = legacy.admissionEpoch()
+        time.addAndGet(legacy.stopHoldMs / 2)
+        sessions.stopAll("second screen-off receiver")
+        assertTrue(legacy.admissionEpoch() > stoppedEpoch)
+        assertTrue(legacy.isStopped())
+        assertEquals("first stop", legacy.snapshot().stopReason)
+        time.addAndGet(legacy.stopHoldMs - legacy.stopHoldMs / 2)
+        assertFalse(legacy.isStopped())
+        assertFalse(invoke(null).isError)
+    }
+
+    @Test fun activeModernStopStillFencesLaterRunsUntilExplicitResume() {
+        assertFalse(invoke("A").isError)
+        val record = task("A")
+        sessions.stopAll("screen off")
+        time.addAndGet(record.tasks.stopHoldMs + 1)
+        assertFalse(record.tasks.isStopped())
+        assertTrue(invoke("A", "2").isError)
+        end("A")
+        assertTrue(invoke("A", "2").isError)
+        assertTrue(sessions.resume(record))
+        assertFalse(invoke("A", "2").isError)
+    }
+
+    @Test fun stopAllExportsTheStopTimeFactWithoutAnEarlierActiveDelivery() {
+        val delivered = legacy.snapshot().toMap()
+        assertFalse(invoke(null).isError)
+        sessions.stopAll("screen off")
+        assertEquals(false, delivered["active"])
+        assertEquals(true, legacy.snapshot().toMap()["interrupted"])
+        val wire = sessions.snapshot().single { it["sessionId"] == null }
+        assertEquals(true, wire["stopped"])
+        assertEquals(true, wire["interrupted"])
+    }
+
+    @Test fun normalFinishImmediatelyBeforeStopAllDoesNotInterruptTheOldDeliveredActiveTask() {
+        assertFalse(invoke(null).isError)
+        val delivered = legacy.snapshot()
+        val record = sessions.all().single { it.sessionId == null }
+        assertNotNull(sessions.finish(record))
+        sessions.stopAll("screen off")
+        assertTrue(delivered.active)
+        assertEquals(false, legacy.snapshot().toMap()["interrupted"])
+        assertFalse(legacy.snapshot().stopped)
+        assertEquals(false, sessions.snapshot().single { it["sessionId"] == null }["interrupted"])
+    }
+
+    @Test fun idleStopAllIsNotInterruptedEvenThoughTheInternalLifetimeStillExists() {
+        assertFalse(invoke(null).isError)
+        time.addAndGet(legacy.idleMs + 1)
+        assertTrue(legacy.isActive)
+        sessions.stopAll("screen off")
+        assertFalse(legacy.snapshot().stopped)
+        assertFalse(legacy.snapshot().interrupted)
+        assertFalse(invoke(null).isError)
+        assertFalse(legacy.snapshot().interrupted)
+    }
+
+    @Test fun interruptionExpiresWithoutRemovingTheModernSessionStopFence() {
+        assertFalse(invoke("A").isError)
+        val record = task("A")
+        sessions.stopAll("first receiver")
+        assertTrue(record.tasks.snapshot().interrupted)
+        time.addAndGet(record.tasks.stopHoldMs / 2)
+        sessions.stopAll("second receiver")
+        assertTrue(record.tasks.snapshot().interrupted)
+        time.addAndGet(record.tasks.stopHoldMs - record.tasks.stopHoldMs / 2)
+        val heldSession = sessions.snapshot().single { it["sessionId"] == "A" }
+        assertEquals(true, heldSession["stopped"])
+        assertEquals(false, heldSession["interrupted"])
+        assertTrue(invoke("A", "2").isError)
+        assertTrue(sessions.resume(record))
+        assertFalse(invoke("A", "2").isError)
+        assertFalse(task("A", "2").tasks.snapshot().interrupted)
+    }
+
     @Test fun stopAllCommitsEveryExistingOwnerBeforeAnyExternalCancellation() {
         assertFalse(invoke("A").isError); assertFalse(invoke("B").isError)
         val a = task("A"); val b = task("B")

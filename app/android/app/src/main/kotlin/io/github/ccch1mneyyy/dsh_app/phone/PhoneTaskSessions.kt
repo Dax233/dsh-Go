@@ -836,14 +836,15 @@ class PhoneTaskSessions(
             selfCheck?.sealed = true
             entries.values.map { task ->
                 // A prior cancellation keeps responsibility for its external work. Still
-                // commit this stop now so its epoch/hold and sticky session fence cannot be lost.
+                // invalidate this lifetime now. An idle record must not gain a stop hold or
+                // a session fence merely because the screen/service disappeared.
                 val ownsCancellation = !task.cancelling
-                val change = task.tasks.stopDeferred(reason)
+                val change = task.tasks.stopActiveDeferred(reason)
                 claimCancellation(task, change.snapshot)
                 PendingStop(task, change, ownsCancellation)
             }
         }
-        // Every pre-existing record is already stopped before the first external callback.
+        // Every pre-existing owner/admission is invalid before the first external callback.
         // A new record admitted after the batch unlocks is a separate, later admission.
         var failure: Throwable? = null
         for ((task, change, ownsCancellation) in pending) {
