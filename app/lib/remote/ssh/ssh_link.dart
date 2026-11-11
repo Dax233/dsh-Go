@@ -5,6 +5,7 @@ import 'package:dsh_client/dsh_client.dart';
 import '../../l10n/l10n.dart';
 import '../../state/link_loss_log.dart';
 import '../link_status.dart';
+import 'instabox_activity.dart';
 import 'instabox_wake.dart';
 import '../../phone/phone_channel.dart';
 import 'local_forward.dart';
@@ -400,6 +401,7 @@ class SshHostLink implements HostLink {
       );
       await _bridgeBreadcrumb(transport, 'client ok');
       _startKeepAlive();
+      _startActivityKeeper();
       return client;
     } catch (e) {
       await _bridgeBreadcrumb(transport, 'failed $e');
@@ -556,6 +558,27 @@ class SshHostLink implements HostLink {
   final PhoneChannel _phone;
   PhoneBridgeLink? _phoneBridge;
   String? _phoneProfileLaunch;
+  InstaboxActivityKeeper? _activityKeeper;
+
+  /// While this link is open, hold an InstaBox activity lease so a silent task
+  /// does not get paused as idle, and run one tiny command every few minutes so
+  /// the runtime check sees real work. Nothing here extends the maximum runtime.
+  void _startActivityKeeper() {
+    if (!instaboxWakePossibleFor(_config.host)) return;
+    if (_activityKeeper != null) return;
+    final keeper = InstaboxActivityKeeper();
+    _activityKeeper = keeper;
+    InstaboxActivityLog.markRunning(running: true, host: _config.host);
+    unawaited(keeper.start());
+  }
+
+  void _stopActivityKeeper() {
+    final keeper = _activityKeeper;
+    if (keeper == null) return;
+    _activityKeeper = null;
+    InstaboxActivityLog.markRunning(running: false);
+    unawaited(keeper.stop());
+  }
 
   Future<void> _bridgeBreadcrumb(SshTransport transport, String line) async {
     try {
@@ -843,6 +866,7 @@ class SshHostLink implements HostLink {
     if (_closed) return;
     _emit(HostLinkStatus.idle);
     _closed = true;
+    _stopActivityKeeper();
     _delay.cancel();
     final connecting = _connectingTransport;
     _connectingTransport = null;

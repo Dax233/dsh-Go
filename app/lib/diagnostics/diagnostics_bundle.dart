@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../phone/phone_channel.dart';
+import '../remote/ssh/instabox_activity.dart';
 import '../remote/ssh/local_forward.dart' show LocalForwarder;
 import '../runtime/runtime_bridge.dart';
 import '../performance/performance_state.dart';
@@ -246,6 +247,9 @@ abstract final class DiagnosticsBundle {
         'bytesDown': LocalForwarder.bytesDown,
         'bytesUp': LocalForwarder.bytesUp,
       }),
+      // InstaBox keepalive: lease renewals and the tiny work command, so a
+      // paused machine can be attributed to the platform instead of the app.
+      jsonFile('instabox.json', InstaboxActivityLog.snapshot()),
     ];
   }
 
