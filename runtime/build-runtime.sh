@@ -236,8 +236,12 @@ host_npm() {
   if [[ "$(uname -m)" == "x86_64" ]]; then
     local tarball; tarball="$(node_dist x64)"
     local dir="$CACHE/host-node/node-v${NODE_VERSION}-linux-x64"
-    if [[ ! -x "$dir/bin/node" ]]; then
-      mkdir -p "$CACHE/host-node"; tar -xJf "$tarball" -C "$CACHE/host-node"
+    # node can exist before the rest of an interrupted extraction is complete.
+    if [[ ! -x "$dir/bin/node" || ! -f "$dir/.complete" ]]; then
+      rm -rf "$dir" || die "cannot clear incomplete host Node cache $dir"
+      mkdir -p "$CACHE/host-node" || die "cannot create host Node cache"
+      tar -xJf "$tarball" -C "$CACHE/host-node" || die "cannot extract host Node $tarball"
+      touch "$dir/.complete" || die "cannot mark host Node cache complete"
     fi
     printf '%s' "$dir/bin"
   else

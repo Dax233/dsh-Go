@@ -1,9 +1,11 @@
 """Exercise the production shell download path with deterministic local transport failures."""
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
@@ -84,6 +86,25 @@ sys.exit(status)
                 '  local ubuntu_arch="$TEST_ARCH" base=/unused-base work="$FETCH_TEST_ROOT/work"\n'
                 '  mkdir -p "$work"\n' + source[start:end]
                 + '  printf "%s\\n" "${extra_debs[@]}"\n}\nexercise')
+
+    def host_node_fixture(self):
+        if os.name != "posix" or os.uname().machine != "x86_64":
+            self.skipTest("host Node extraction uses an x86_64 Linux host")
+        dist = self.cache / "node/vfixture"
+        dist.mkdir(parents=True)
+        archive = dist / "node-vfixture-linux-x64.tar.xz"
+        bodies = {"node": b"lookup-only node fixture\n", "npm": b"lookup-only npm fixture\n" + b"x" * 4096}
+        with tarfile.open(archive, "w:xz") as tar:
+            for name, body in bodies.items():
+                entry = tarfile.TarInfo("node-vfixture-linux-x64/bin/" + name)
+                entry.mode = 0o755
+                entry.size = len(body)
+                tar.addfile(entry, io.BytesIO(body))
+        sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+        (dist / "SHASUMS256.txt").write_text(f"{sha}  {archive.name}\n")
+        host = self.cache / "host-node"
+        host.mkdir()
+        return host, bodies
 
     def test_verified_cache_needs_no_network(self):
         self.cache.mkdir()
@@ -191,6 +212,53 @@ sys.exit(status)
         self.assertEqual(result.stdout, "")
         self.assertEqual(self.calls(), [*urls, backup])
         self.assertEqual(lock.read_text(), original)
+
+    def test_host_node_extraction_failure_cannot_select_system_npm(self):
+        host, _ = self.host_node_fixture()
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses directory write permission failures")
+        entry = 'bin="$(host_npm)"\nPATH="$bin:$PATH" command -v npm'
+        host.chmod(0o500)
+        try:
+            result = self.run_shell(entry, {"NODE_VERSION": "fixture"})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+        finally:
+            host.chmod(0o700)
+        result = self.run_shell(entry, {"NODE_VERSION": "fixture"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(host / "node-vfixture-linux-x64/bin/npm"))
+        self.assertEqual(self.calls(), [])
+
+    def test_interrupted_host_node_cache_is_reextracted_on_retry(self):
+        host, bodies = self.host_node_fixture()
+        entry = 'bin="$(host_npm)"\nprintf "%s" "$bin"'
+        # The real tar writes node first, then hits the child shell's file-size
+        # limit during npm. Prime a cache left by an interrupted previous build;
+        # the recovery test does not require the new implementation to leave it.
+        interrupted = self.run_shell('ulimit -f 1\ntar -xJf "$CACHE/node/vfixture/node-vfixture-linux-x64.tar.xz" '
+                                     '-C "$CACHE/host-node"', {"NODE_VERSION": "fixture"})
+        self.assertNotEqual(interrupted.returncode, 0)
+        node = host / "node-vfixture-linux-x64/bin/node"
+        npm = node.with_name("npm")
+        self.assertTrue(os.access(node, os.X_OK))
+        self.assertNotEqual(npm.read_bytes(), bodies["npm"])
+        result = self.run_shell(entry, {"NODE_VERSION": "fixture"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, str(node.parent))
+        self.assertEqual(npm.read_bytes(), bodies["npm"])
+        self.assertEqual(self.calls(), [])
+
+    def test_complete_host_node_cache_is_reused(self):
+        host, bodies = self.host_node_fixture()
+        entry = 'bin="$(host_npm)"\nprintf "%s" "$bin"'
+        result = self.run_shell(entry, {"NODE_VERSION": "fixture"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # A cache hit must not extract again: this limit would interrupt npm.
+        result = self.run_shell('ulimit -f 1\n' + entry, {"NODE_VERSION": "fixture"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((host / "node-vfixture-linux-x64/bin/npm").read_bytes(), bodies["npm"])
+        self.assertEqual(self.calls(), [])
 
     def test_failed_metadata_download_cannot_publish_from_command_substitution(self):
         name = "node-vfixture-linux-x64.tar.xz"
