@@ -1587,7 +1587,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       connection: chat?.connection,
       running: chat?.running ?? false,
       stopping: chat?.stopping ?? false,
-      waiting: approval != null || question != null,
+      waiting: approval != null
+          ? l10n.commonWaitingApproval
+          : question != null
+          ? l10n.commonWaitingAnswer
+          : null,
       // The live region reads out what is waiting, or how the turn ended.
       spoken: approval != null
           ? approvalText(approval)
@@ -1631,6 +1635,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
         : ref.watch(mediaCatalogProvider.select((c) => c.resolve(generate.model, generate.kind)?.model));
     // 引用追问: the passage waiting above this conversation's composer.
     final quote = ref.watch(composerQuoteProvider.select((quotes) => quotes[_draftKey]));
+    // Mirror _send for ordinary text; attachments, quotes and generation
+    // stay messages even while a question is waiting.
+    final answerInComposer =
+        (chat?.singleQuestion ?? false) && approval == null && _drafts.isEmpty && quote == null && generate == null;
     final modelDefaultWarning = sessionId != null && chat?.error == null && (chat?.defaultModelSaveFailed ?? false);
     final error = sessionId == null
         ? _localError
@@ -2038,9 +2046,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                     // already say an approval waits: the hint
                                     // stays the plain one.
                                     waiting: approval != null || question != null,
+                                    modeLabel: question == null
+                                        ? null
+                                        : answerInComposer
+                                        ? l10n.chatAnswerMode
+                                        : l10n.chatMessageMode,
                                     waitHint: approval != null
                                         ? null
-                                        : chat?.singleQuestion ?? false
+                                        : answerInComposer
                                         ? l10n.chatAnswerHint
                                         : question != null
                                         ? l10n.commonWaitingAnswer
@@ -2185,7 +2198,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     required DshConnectionState? connection,
     required bool running,
     required bool stopping,
-    required bool waiting,
+    required String? waiting,
     String? spoken,
   }) {
     if (!connected) {
@@ -2207,8 +2220,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     }
     if (syncing) return HeaderStatus(StatusTone.busy, appL10n.stateChatSynchronizing);
     if (stopping) return HeaderStatus(StatusTone.busy, appL10n.commonStopping);
-    if (waiting) {
-      return HeaderStatus(StatusTone.warn, appL10n.commonWaitingApproval, spoken: spoken);
+    if (waiting != null) {
+      return HeaderStatus(StatusTone.warn, waiting, spoken: spoken);
     }
     if (running) {
       return HeaderStatus(StatusTone.busy, appL10n.chatGenerating, spoken: spoken);

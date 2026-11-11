@@ -6914,6 +6914,24 @@ abstract class L10n {
   /// **'输入回答…'**
   String get chatAnswerHint;
 
+  /// No description provided for @chatAnswerMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送文字将回答待答问题'**
+  String get chatAnswerMode;
+
+  /// No description provided for @chatMessageMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送新消息'**
+  String get chatMessageMode;
+
+  /// No description provided for @chatQuestionAnswered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已回答'**
+  String get chatQuestionAnswered;
+
   /// No description provided for @chatStarting.
   ///
   /// In zh, this message translates to:

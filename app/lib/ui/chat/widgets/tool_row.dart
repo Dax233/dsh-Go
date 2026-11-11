@@ -22,6 +22,7 @@ import '../tool_view.dart';
 import '../turn_summary.dart';
 import 'approval_card.dart';
 import 'change_card.dart' show DiffCounts;
+import 'question_reply_card.dart';
 import 'stream_motion.dart';
 import 'stream_row.dart';
 import 'tool_images.dart';
@@ -107,6 +108,7 @@ class _ToolRowState extends State<ToolRow> {
     final v = view;
     // 一轮折叠后:只露卡片本身,工具行收在过程里。
     if (widget.card == ToolCardPlacement.cardOnly) {
+      if (v.questionReplies.isNotEmpty) return QuestionReplyCard(replies: v.questionReplies);
       if (v.media case final media?) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -160,6 +162,8 @@ class _ToolRowState extends State<ToolRow> {
             },
           ),
         ),
+        if (widget.card == ToolCardPlacement.inline && v.questionReplies.isNotEmpty)
+          QuestionReplyCard(replies: v.questionReplies),
         if (pending != null)
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 4),

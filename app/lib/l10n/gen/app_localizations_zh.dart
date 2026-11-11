@@ -3733,6 +3733,15 @@ class L10nZh extends L10n {
   String get chatAnswerHint => '输入回答…';
 
   @override
+  String get chatAnswerMode => '发送文字将回答待答问题';
+
+  @override
+  String get chatMessageMode => '发送新消息';
+
+  @override
+  String get chatQuestionAnswered => '已回答';
+
+  @override
   String get chatStarting => '正在启动';
 
   @override

@@ -63,7 +63,7 @@ While the AI replies with an empty composer, the send button becomes a stop butt
 
 ## Answer questions and approvals
 
-Question cards: pick an answer, or tap **Other answer** to write your own, then tap **Submit**. When a single question is waiting, you can also answer in the composer.
+Question cards: pick an answer, or tap **Other answer** to write your own, then tap **Submit**. When exactly one question is waiting, with no pending approval, attachments, quote or create mode, you can also answer in the composer; **Send text as an answer** stays visible while you type. Attachments, a quote or create mode show **Send a new message**; choosing another send mode by holding Send still sends a message. Once the host records the answer, the chat keeps an **Answered** receipt with your answer, visible even when the turn’s process is folded.
 
 Approval cards: check the command, files and reason, then tap **Allow once** or **Decline**.
 

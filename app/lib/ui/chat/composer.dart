@@ -57,6 +57,7 @@ class Composer extends StatefulWidget {
     this.placeholder,
     this.waiting = false,
     this.waitHint,
+    this.modeLabel,
     this.onContentInserted,
     this.maxLines = 6,
     this.hardwareEnterSends = false,
@@ -116,6 +117,9 @@ class Composer extends StatefulWidget {
   /// What the placeholder says while [waiting] (「等你回答」); null keeps the
   /// plain one.
   final String? waitHint;
+
+  /// Persistent send intent, separate from the placeholder that typing hides.
+  final String? modeLabel;
 
   /// Images from the keyboard (screenshots, stickers); null takes none.
   final ValueChanged<KeyboardInsertedContent>? onContentInserted;
@@ -533,6 +537,14 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.modeLabel case final label?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(_keyGap, 2, _keyGap, _keyGap),
+                    child: Text(
+                      label,
+                      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
                 ExpandReveal(
                   open: widget.tray != null,
                   child: Padding(padding: const EdgeInsets.fromLTRB(_keyGap, 2, _keyGap, _keyGap), child: _tray),

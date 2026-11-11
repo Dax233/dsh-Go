@@ -3941,6 +3941,15 @@ class L10nEn extends L10n {
   String get chatAnswerHint => 'Type your answer…';
 
   @override
+  String get chatAnswerMode => 'Send text as an answer';
+
+  @override
+  String get chatMessageMode => 'Send a new message';
+
+  @override
+  String get chatQuestionAnswered => 'Answered';
+
+  @override
   String get chatStarting => 'Starting';
 
   @override
