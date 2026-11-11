@@ -980,7 +980,11 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         setPhase(Phase.RUNNING)
         PhoneControl.get(app).onEngineReady()
         val gen = runGen
-        main.postDelayed({ if (gen == runGen && phase == Phase.RUNNING && process != null) onHealthy() }, SafePolicy.HEALTHY_MS)
+        main.postDelayed({
+            synchronized(this) {
+                if (gen == runGen && phase == Phase.RUNNING && process != null) onHealthy()
+            }
+        }, SafePolicy.HEALTHY_MS)
     }
 
     @Synchronized override fun onExit(source: DshProcess, code: Int, expected: Boolean) {

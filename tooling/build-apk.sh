@@ -64,7 +64,10 @@ case "$flavor" in
 esac
 for arg in "${extra[@]}"; do
   case "$arg" in
-    --build-number* | --build-name* | --flavor* | --target-platform*)
+    # The selected mode also controls the runtime preflight below.
+    --build-number* | --build-name* | --flavor* | --target-platform* | \
+    --release | --debug | --profile | --release=* | --debug=* | --profile=* | \
+    --no-release | --no-debug | --no-profile)
       die "$arg is set by this script; use its own options" ;;
     --split-per-abi) die "--split-per-abi adds an ABI offset to versionCode; flavors already split by ABI" ;;
   esac
@@ -118,6 +121,12 @@ if ((dry)); then
   for c in "${commands[@]}"; do echo "(cd app && ${c% })"; done
   ((keep_daemon)) || echo "(cd app/android && ./gradlew --stop)"
   exit 0
+fi
+
+# Check every selected flavor before starting any build or writing build config.
+# Debug/profile may intentionally exercise UI without a bundled runtime.
+if [[ $mode == release ]]; then
+  python3 -I "$ROOT/tooling/check_runtime_bundle.py" "${flavors[@]}"
 fi
 
 # Toolchain: use what's on PATH; the gitignored tooling/env.sh is the fallback.
