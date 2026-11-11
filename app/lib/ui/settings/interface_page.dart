@@ -166,6 +166,7 @@ class InterfacePage extends ConsumerWidget {
           ...schemaFormGroups([
             SchemaFormSection(
               title: l10n.engineGeneralWebDisplay,
+              footer: l10n.engineGeneralWebOnlyHint,
               fields: [
                 _field('ui-settings', 'enabled'),
                 _field('ui-chat', 'transcriptView'),
@@ -175,6 +176,7 @@ class InterfacePage extends ConsumerWidget {
             ),
             SchemaFormSection(
               title: l10n.engineGeneralWebSending,
+              footer: l10n.engineGeneralWebOnlyHint,
               fields: [_field('ui-conversation', 'busyEnter'), _field('ui-chat', 'linkOpening')],
             ),
           ], settings: engine),

@@ -6097,6 +6097,9 @@ class L10nZh extends L10n {
   String get engineGeneralWebSending => '网页版发送';
 
   @override
+  String get engineGeneralWebOnlyHint => '这组设置仅影响当前主机的网页版，不改变原生聊天。';
+
+  @override
   String get engineGeneralData => '数据';
 
   @override

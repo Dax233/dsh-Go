@@ -88,6 +88,7 @@
   "engineSettingsVersionRequired": "需要 DSH 0.2.1 或更新版本",
   "engineGeneralWebDisplay": "网页版显示",
   "engineGeneralWebSending": "网页版发送",
+  "engineGeneralWebOnlyHint": "这组设置仅影响当前主机的网页版，不改变原生聊天。",
   "engineGeneralData": "数据",
   "engineSubagentModelsTitle": "子代理模型",
   "engineChatLogTitle": "对话日志",

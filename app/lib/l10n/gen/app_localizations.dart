@@ -11360,6 +11360,12 @@ abstract class L10n {
   /// **'网页版发送'**
   String get engineGeneralWebSending;
 
+  /// No description provided for @engineGeneralWebOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'这组设置仅影响当前主机的网页版，不改变原生聊天。'**
+  String get engineGeneralWebOnlyHint;
+
   /// No description provided for @engineGeneralData.
   ///
   /// In zh, this message translates to:

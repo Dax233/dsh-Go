@@ -6457,6 +6457,9 @@ class L10nEn extends L10n {
   String get engineGeneralWebSending => 'Web sending';
 
   @override
+  String get engineGeneralWebOnlyHint => 'These settings only affect this host’s web app, not native chat.';
+
+  @override
   String get engineGeneralData => 'Data';
 
   @override
