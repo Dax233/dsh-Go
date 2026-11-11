@@ -42,6 +42,7 @@ fun main(args: Array<String>) {
         )), directory, object : DshProcess.Listener {
             override fun onLog(line: String, stream: String, storageLine: String) { println("[$case] $line") }
             override fun onReady(source: DshProcess, baseUrl: String, token: String) {}
+            override fun onStartupFailure(source: DshProcess) {}
             override fun onExit(source: DshProcess, code: Int, expected: Boolean) { done.countDown() }
         })
         attempts += process

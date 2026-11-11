@@ -46,6 +46,7 @@ fun main(args: Array<String>) {
         )), root, object : DshProcess.Listener {
             override fun onLog(line: String, stream: String, storageLine: String) { logs += line }
             override fun onReady(source: DshProcess, baseUrl: String, token: String) {}
+            override fun onStartupFailure(source: DshProcess) {}
             override fun onExit(source: DshProcess, code: Int, expected: Boolean) {
                 exits += code
                 done.countDown()
