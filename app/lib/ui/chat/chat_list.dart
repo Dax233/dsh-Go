@@ -39,6 +39,7 @@ import 'composer_toast.dart';
 import 'dsh_ui/dsh_ui.dart';
 import 'render/markdown_image.dart';
 import 'trajectory_sheet.dart';
+import 'turn_summary.dart' show forgetToolSummaries;
 import 'widgets/approval_card.dart';
 import 'widgets/artifact_card.dart';
 import 'widgets/assistant_message.dart';
@@ -262,6 +263,29 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   Object? _rowsInputs;
   Set<String> _autoAnswered = const {};
 
+  /// Row widgets as last built, by row key. A row whose [ChatRow] object, gap
+  /// and motion are unchanged gets the same widget back, so Flutter skips it:
+  /// a text delta rebuilds only the reply it grows. Cleared whenever rows are
+  /// derived afresh, and when anything else a row reads changes (see
+  /// [_clearBuiltRows]).
+  ///
+  /// The rule this rests on: whatever the row-building layer ([_rowFrame] and
+  /// the methods it calls) reads that does not come with the row object (the
+  /// chat state, the list's context, the language, the list's own fields,
+  /// other providers) must either clear this map when it changes, or be read
+  /// in the row widget's own build instead. Today that is: the chat state
+  /// ([_deriveRows]), the motion duration and the language ([build]), the
+  /// fork / regenerate marks ([_clearBuiltRows]) and which callbacks are given
+  /// ([didUpdateWidget]).
+  final Map<String, ({ChatRow row, double gap, Widget widget})> _built = {};
+  Duration? _builtMotion;
+  Locale? _builtLocale;
+  ChatState? _builtState;
+
+  /// A streaming draft has words, not only thinking: earlier rows read that
+  /// (whether a visual block was answered by a later reply).
+  bool _draftSays = false;
+
   double? _lastViewport;
   int _lastPendingCount = 0;
   bool _followScheduled = false;
@@ -302,6 +326,11 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    // This conversation's calls leave the tool summary caches with it.
+    forgetToolSummaries({
+      for (final item in _builtState?.items ?? const <ChatItem>[])
+        if (item is ToolChatItem) item.callId,
+    });
     _glide.dispose();
     _scroll.dispose();
     _showJump.dispose();
@@ -313,7 +342,28 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   void didUpdateWidget(ChatList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.bottomInset != widget.bottomInset && _pinned) _follow();
+    // Rows call the callbacks through `widget` when tapped; only whether
+    // each is there shapes what they show.
+    bool same(Object? a, Object? b) => (a == null) == (b == null);
+    if (oldWidget.sessionId != widget.sessionId ||
+        !same(oldWidget.onWithdraw, widget.onWithdraw) ||
+        !same(oldWidget.onSendNow, widget.onSendNow) ||
+        !same(oldWidget.onEditPrompt, widget.onEditPrompt) ||
+        !same(oldWidget.onResend, widget.onResend) ||
+        !same(oldWidget.onQuote, widget.onQuote) ||
+        !same(oldWidget.onSwitchModel, widget.onSwitchModel)) {
+      _built.clear();
+    }
   }
+
+  void _clearBuiltRows(VoidCallback change) => setState(() {
+    change();
+    _built.clear();
+  });
+
+  void _quote(String passage) => widget.onQuote?.call(passage);
+
+  void _switchModel() => widget.onSwitchModel?.call();
 
   // ---------------------------------------------------------------------------
   // 跟随与贴底
@@ -510,6 +560,8 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
         for (final turn in s.turns)
           if (turn.running) turn.startSeq,
     };
+    final changed = !identical(s, _builtState);
+    _builtState = s;
     final inputs = (
       foldTurns,
       artifacts,
@@ -522,7 +574,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       s.commands,
       s.turns,
     );
-    if (_rowsInputs == inputs) return;
+    if (_rowsInputs == inputs) {
+      // Nothing the rows are made of changed, but what they read from the
+      // controller (branch points, reply ids) may have.
+      if (changed) _built.clear();
+      return;
+    }
     _rowsInputs = inputs;
     _held = false;
     final previousLength = _rows.length;
@@ -551,6 +608,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final hadPending = _rows.any((r) => r is PendingRow);
     _rows = _rowCache.update(s, foldTurns: foldTurns, artifacts: artifacts);
     _index = _rowCache.index;
+    // Only a draft streaming on keeps the other rows' widgets: anything else
+    // may change what a row shows beyond its own item (running, pending,
+    // later items, controller lookups).
+    final draftSays = _draftHasWords(s.items);
+    if (!_rowCache.onlyDraftChanged || draftSays != _draftSays) _built.clear();
+    _draftSays = draftSays;
     // 被插话切开的轮:前几片的摘要行(`tp<轮起点>@<插话>`)跟最后一片一起收。
     // 这一帧没建出来的(在屏幕外)不留到以后:翻回去时不该再播一遍。
     for (final row in _rows) {
@@ -637,6 +700,21 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     } else if (_rows.length != previousLength || s.running) {
       _afterFrame(() => _hasNew.value = true);
     }
+  }
+
+  /// Drafts trail the list (no seq yet).
+  static bool _draftHasWords(List<ChatItem> items) {
+    for (var i = items.length - 1; i >= 0; i--) {
+      switch (items[i]) {
+        case AssistantChatItem(seq: null, :final text) when text.trim().isNotEmpty:
+          return true;
+        case AssistantChatItem(seq: null) || ToolChatItem(seq: null):
+          continue;
+        default:
+          return false;
+      }
+    }
+    return false;
   }
 
   /// 这次派生里新出现的行,哪些要淡入上移。
@@ -773,6 +851,15 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final rows = _rows;
     final split = _split;
     _fluid = AppMotion.fluid(context);
+    final motion = AppMotion.of(context, AppMotion.quick);
+    // A language switch rebuilds every element (app.dart) without an
+    // inherited change; rows hold [appL10n] strings in their arguments.
+    final locale = AppLocale.current;
+    if (motion != _builtMotion || locale != _builtLocale) {
+      _builtMotion = motion;
+      _builtLocale = locale;
+      _built.clear();
+    }
 
     // Images in replies read this conversation's workspace.
     final headroom = ref.watch(petHeadroomProvider);
@@ -897,8 +984,23 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   Widget _buildRow(int index) {
     final row = _rows[index];
     final previous = index > 0 ? _rows[index - 1] : null;
+    final gap = _gapBefore(row, previous);
     final fresh = _fresh.remove(row.key);
-    final padding = EdgeInsets.fromLTRB(AppSpace.gutter, _gapBefore(row, previous), AppSpace.gutter, 0);
+    // A row's first appearance (fade in, settle) plays once: that build is
+    // not kept, or scrolling back to the row would play it again.
+    if (fresh != null || _settling.contains(row.key)) {
+      _built.remove(row.key);
+      return _rowFrame(row, gap, fresh);
+    }
+    final built = _built[row.key];
+    if (built != null && identical(built.row, row) && built.gap == gap) return built.widget;
+    final frame = _rowFrame(row, gap, null);
+    _built[row.key] = (row: row, gap: gap, widget: frame);
+    return frame;
+  }
+
+  Widget _rowFrame(ChatRow row, double gap, int? fresh) {
+    final padding = EdgeInsets.fromLTRB(AppSpace.gutter, gap, AppSpace.gutter, 0);
     final body = StreamFadeIn(
       enabled: fresh != null,
       index: fresh ?? 0,
@@ -1061,7 +1163,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       branching: _forkingId == item.id,
       onRegenerate: prompt == null ? null : () => _regenerate(item, prompt),
       regenerating: _regeneratingId == item.id,
-      onQuote: widget.onQuote,
+      onQuote: widget.onQuote == null ? null : _quote,
       footnote: footnote == null ? null : _footnote(footnote),
     );
     // Always in a scope, so a reply that grows a visual block keeps its
@@ -1095,14 +1197,14 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   Future<void> _branch(AssistantChatItem item) async {
     if (_forkingId != null || _regeneratingId != null) return;
-    setState(() => _forkingId = item.id);
+    _clearBuiltRows(() => _forkingId = item.id);
     try {
       final messenger = ScaffoldMessenger.maybeOf(context);
       final outcome = await ref.read(chatProvider(widget.sessionId).notifier).branchAfter(item);
       if (outcome == null || !mounted) return;
       _openFork(outcome, messenger, appL10n.chatContinuedInNewChat);
     } finally {
-      if (mounted) setState(() => _forkingId = null);
+      if (mounted) _clearBuiltRows(() => _forkingId = null);
     }
   }
 
@@ -1131,7 +1233,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
         identical(ref.read(activeConnectionProvider).value?.client, client) &&
         identical(client?.mux.generation, generation) &&
         client?.mux.lastReadyGenerationNumber == readyGeneration;
-    setState(() => _regeneratingId = item.id);
+    _clearBuiltRows(() => _regeneratingId = item.id);
     try {
       final messenger = ScaffoldMessenger.maybeOf(context);
       final chat = ref.read(chatProvider(sessionId).notifier);
@@ -1150,7 +1252,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       unawaited(resend(outcome.sessionId, prompt.text, images));
     } finally {
       connection.close();
-      if (mounted) setState(() => _regeneratingId = null);
+      if (mounted) _clearBuiltRows(() => _regeneratingId = null);
     }
   }
 
@@ -1218,8 +1320,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       if (code == 'CLIENT_UPGRADE_REQUIRED' && ref.read(activeHostProvider).kind == HostKind.local) {
         return (label: appL10n.updateCheck, onPressed: () => checkForUpdates(context, ref));
       }
-      final switchModel = widget.onSwitchModel;
-      return switchModel == null ? null : (label: appL10n.chatSwitchModel, onPressed: switchModel);
+      return widget.onSwitchModel == null ? null : (label: appL10n.chatSwitchModel, onPressed: _switchModel);
     }
     if (s.pending.isNotEmpty) return null;
     final turn = s.turns.where((turn) => turn.endSeq == notice.seq).firstOrNull;

@@ -276,7 +276,9 @@ class ChatTranscript {
         if (appended is TurnEndedEvent) _derivedRunning = false;
       }
     }
-    _durable = null;
+    // An appended event the fold ignores (turn start, usage, model, title…)
+    // keeps the built items, and the list: nothing shown changed.
+    if (appended == null || _DurableFold.folds(appended, showSyntheticUserMessages)) _durable = null;
     if (_traces case final traces?) _previousTraces = traces;
     _traces = null;
     // Only these appended events change the two projections. Snapshots,
@@ -461,6 +463,19 @@ class _DurableFold {
   final messageKeys = <String>{};
   final unresolved = <_ToolBuilder>{};
 
+  /// Whether [apply] can change what [build] gives for [event].
+  static bool folds(SessionLogEvent event, bool showSyntheticUserMessages) => switch (event) {
+    UserMessageEvent() => event.isHumanPrompt || showSyntheticUserMessages,
+    AssistantMessageEvent() ||
+    ToolCallEvent() ||
+    ToolResultEvent() ||
+    ApprovalAskedEvent(callId: _?) ||
+    ApprovalDecidedEvent() ||
+    TurnEndedEvent() ||
+    LlmRetryEvent() => true,
+    _ => false,
+  };
+
   _ToolBuilder tool(String callId, String name, String arguments, int seq) {
     return tools.putIfAbsent(callId, () {
       final builder = _ToolBuilder(callId, name, arguments, seq);
@@ -573,6 +588,11 @@ class _ToolBuilder {
   ApprovalOutcome? approvalOutcome;
   ToolResultEvent? result;
 
+  /// The last item built, and the result it was built from: a call nothing
+  /// happened to since keeps its item.
+  ToolChatItem? _item;
+  ToolResultEvent? _itemResult;
+
   ToolChatItem build(ApprovalRequest? pending) {
     final result = this.result;
     final ToolStatus status;
@@ -586,7 +606,18 @@ class _ToolBuilder {
     } else {
       status = ToolStatus.running;
     }
-    return ToolChatItem(
+    final built = _item;
+    if (built != null &&
+        built.status == status &&
+        identical(_itemResult, result) &&
+        // Read from the event's data each time, not kept with it.
+        identical(built.meta, result?.meta) &&
+        identical(built.pendingApproval, pending) &&
+        built.approvalOutcome == approvalOutcome) {
+      return built;
+    }
+    _itemResult = result;
+    return _item = ToolChatItem(
       callId: callId,
       name: name,
       arguments: arguments,
