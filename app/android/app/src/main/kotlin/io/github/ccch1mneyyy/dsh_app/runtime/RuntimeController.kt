@@ -870,11 +870,13 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     }
 
     private fun recordFailure(f: RunFailure, tail: List<String>) {
+        // A later kill from outside says nothing about the profile: keep the plugin failure it followed.
+        val main = !f.safeMode && (f.kind != FailureKind.KILLED || mainFailure == null)
+        File(logDir, LATEST_FAILURE_LOG).delete()
+        if (main) File(logDir, MAIN_FAILURE_LOG).delete()
         failure = f
         val json = JSONObject(f.toMap()).toString()
         val edit = prefs.edit().putString(K_FAILURE, json)
-        // A later kill from outside says nothing about the profile: keep the plugin failure it followed.
-        val main = !f.safeMode && (f.kind != FailureKind.KILLED || mainFailure == null)
         if (main) {
             mainFailure = f
             edit.putString(K_MAIN_FAILURE, json)
