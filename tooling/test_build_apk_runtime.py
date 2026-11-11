@@ -175,6 +175,26 @@ apk.write_bytes(b'fake APK: shell flow only')
         self.assertEqual(self.calls(), [])
         self.assertEqual(result.stdout.count("flutter build apk"), 2)
 
+    def test_leading_zero_build_number_uses_one_decimal_value(self):
+        result = self.run_script("--debug", "-n", "00010251234")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        args = self.calls()[0]
+        self.assertEqual(args[args.index("--build-number") + 1], "10251234")
+        self.assertIn("--dart-define=DSH_APP_VERSION=1.0.0+10251234", args)
+        # The existing fake aapt2 returns integer metadata 10251234; the actual
+        # shell has completed its readback check, without running Flutter/Gradle.
+
+    def test_placeholder_build_number_is_rejected_before_flutter(self):
+        for value in ("1", "0001"):
+            with self.subTest(value=value):
+                self.assert_blocked(self.run_script("--debug", "-n", value), "reserved")
+
+    def test_invalid_custom_build_number_is_rejected_before_flutter(self):
+        for value in ("0", "0000", "2100000001"):
+            with self.subTest(value=value):
+                self.assert_blocked(self.run_script("--debug", "-n", value), "versionCode must be")
+
     def test_extra_mode_flags_cannot_bypass_the_release_gate(self):
         for arg in ("--release", "--profile", "--debug", "--no-debug", "--release=true"):
             with self.subTest(arg=arg):
