@@ -1372,7 +1372,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   void _openUsage(String sessionId, ModelSelection? model) {
-    ref.read(balanceProvider.notifier).refresh();
     showUsageSheet(context, sessionId: sessionId, model: model);
   }
 

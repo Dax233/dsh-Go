@@ -213,8 +213,7 @@ Future<void> deleteSessionsFlow(
     if (selectionChanged) return;
   }
   if (failures.isEmpty) {
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(context.l10n.shellChatsDeleted(deleted.length)), persist: false));
+    _showDeletionReceipt(context, deleted.length);
     return;
   }
   await showAppDialog<void>(
@@ -240,6 +239,58 @@ Future<void> deleteSessionsFlow(
       actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: Text(context.l10n.commonDone))],
     ),
   );
+}
+
+// This receipt belongs at the top: a bottom snackbar covers the composer
+// as soon as the person closes the drawer to continue chatting.
+void _showDeletionReceipt(BuildContext context, int count) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger
+    ..clearMaterialBanners()
+    ..removeCurrentMaterialBanner();
+  var current = true;
+  late final ScaffoldFeatureController<MaterialBanner, MaterialBannerClosedReason> receipt;
+  void close() {
+    if (current && messenger.mounted) receipt.close();
+  }
+
+  receipt = messenger.showMaterialBanner(
+    MaterialBanner(
+      content: _DeletionReceiptText(text: context.l10n.shellChatsDeleted(count), onTimeout: close),
+      actions: [TextButton(onPressed: close, child: Text(context.l10n.commonClose))],
+    ),
+  );
+  unawaited(receipt.closed.then((_) => current = false));
+}
+
+class _DeletionReceiptText extends StatefulWidget {
+  const _DeletionReceiptText({required this.text, required this.onTimeout});
+
+  final String text;
+  final VoidCallback onTimeout;
+
+  @override
+  State<_DeletionReceiptText> createState() => _DeletionReceiptTextState();
+}
+
+class _DeletionReceiptTextState extends State<_DeletionReceiptText> {
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 4), widget.onTimeout);
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(widget.text);
 }
 
 String sessionDeletionFailureText(BuildContext context, String code) => switch (code) {

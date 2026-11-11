@@ -190,6 +190,35 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "status" -> control.status { complete(result, it) }
+            "androidShellStatus" -> async(result, shortControl = true) { control.shell.status() }
+            "configureAndroidShell" -> {
+                val args = call.arguments as? Map<*, *>
+                val enabled = args?.get("enabled") as? Boolean
+                val backend = args?.get("backend") as? String
+                if (args?.keys != setOf("enabled", "backend") || enabled == null || backend !in setOf("shizuku", "adb")) {
+                    result.success(mapOf("ok" to false, "errorCode" to "invalidArguments"))
+                } else if (enabled && !control.isEnabled()) {
+                    result.success(mapOf("ok" to false, "errorCode" to "disabled"))
+                } else async(result, shortControl = true) { control.shell.configure(enabled, backend!!) }
+            }
+            "androidShellRequestPermission" -> async(result) { control.shell.requestShizukuPermission() }
+            "androidShellStartPairing" -> async(result) { control.shell.startAdbPairing() }
+            "androidShellPair" -> {
+                val args = call.arguments as? Map<*, *>
+                val code = args?.get("code") as? String
+                val port = args?.get("port") as? Int
+                if (args == null || args.keys.any { it !in setOf("code", "port") } || code == null ||
+                    args["port"] != null && port == null) result.success(mapOf("ok" to false, "errorCode" to "invalidArguments"))
+                else async(result) { control.shell.pairAdb(code, port) }
+            }
+            "androidShellConnect" -> {
+                val args = call.arguments as? Map<*, *>
+                val port = args?.get("port") as? Int
+                if (call.arguments != null && (args == null || args.keys.any { it != "port" } ||
+                    args["port"] != null && port == null)) result.success(mapOf("ok" to false, "errorCode" to "invalidArguments"))
+                else async(result) { control.shell.connect(port) }
+            }
+            "androidShellStop" -> { control.shell.cancelAll(); result.success(true) }
             "acknowledgeTaskInterruption" -> async(result) {
                 (call.argument<Any?>("batchToken") as? String)?.let(control::acknowledgeTaskInterruption) == true
             }

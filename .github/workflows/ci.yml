@@ -145,6 +145,14 @@ jobs:
         run: |
           sudo install -Dm644 -t "$DSH_TEST_FONT_DIR" ~/test-fonts/NotoSansCJK-*.ttc
           sudo install -Dm644 ~/test-fonts/NotoColorEmoji.ttf /usr/share/fonts/noto/NotoColorEmoji.ttf
+      - name: Install account shells for SSH bootstrap tests
+        run: |
+          if find test -name '*_test.dart' | sort | awk 'NR % 3 == ${{ matrix.shard }} && $0 == "test/remote/ssh_start_completion_test.dart" { found = 1 } END { exit !found }'; then
+            if [ '${{ steps.fonts.outputs.cache-hit }}' = 'true' ]; then
+              sudo apt-get update -q
+            fi
+            sudo apt-get install -y --no-install-recommends fish zsh
+          fi
       - run: flutter pub get --enforce-lockfile
       - name: Analyze, and generated localization matches its source
         if: matrix.shard == 0

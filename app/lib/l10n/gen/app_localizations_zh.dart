@@ -1552,7 +1552,255 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get activityQuotaTitle => '订阅额度';
+
+  @override
+  String get activityQuotaRefresh => '刷新额度';
+
+  @override
+  String get activityQuotaPermissionDenied => '订阅没有权限查询额度';
+
+  @override
+  String get activityQuotaAuthError => '登录已过期或无权查询，请检查订阅登录';
+
+  @override
+  String get activityQuotaNetworkError => '网络连接失败，请稍后重试';
+
+  @override
+  String get activityQuotaRateLimited => '查询过于频繁，请稍后重试';
+
+  @override
+  String get activityQuotaLoading => '正在查询订阅额度…';
+
+  @override
+  String get activityQuotaUnavailable => '暂时无法查询订阅额度，请稍后重试';
+
+  @override
+  String get activityQuotaUnsupported => '此主机暂不支持查询订阅额度';
+
+  @override
+  String get activityQuotaSignedOut => '订阅未登录';
+
+  @override
+  String get activityQuotaPrimary => '主要额度';
+
+  @override
+  String get activityQuotaSecondary => '次要额度';
+
+  @override
+  String get activityQuotaFiveHour => '5 小时';
+
+  @override
+  String get activityQuotaSevenDay => '7 天';
+
+  @override
+  String get activityQuotaSevenDaySonnet => '7 天 · Sonnet';
+
+  @override
+  String get activityQuotaSevenDayOpus => '7 天 · Opus';
+
+  @override
+  String activityQuotaUsed(String value) {
+    return '已使用 $value';
+  }
+
+  @override
+  String activityQuotaReset(String time) {
+    return '重置时间：$time';
+  }
+
+  @override
   String get activityToolListSeparator => '、';
+
+  @override
+  String get androidShellTitle => 'Android Shell';
+
+  @override
+  String get androidShellEntryHint => '独立的系统命令通道，默认关闭';
+
+  @override
+  String get androidShellSubtitle => '通过 Shizuku 或自连 ADB 在这台手机上执行 Android 系统命令，不是 Ubuntu 里的 bash。';
+
+  @override
+  String get androidShellEnable => '允许 Android Shell';
+
+  @override
+  String get androidShellEnableHint => '独立开关，不随不打扰模式或屏幕免确认设置开启。';
+
+  @override
+  String get androidShellConfirmationNote => '每条命令都要经过手机上的原生确认；屏幕操控的「免确认」不适用于这里。Shell 权限范围与屏幕操控不同，不能依靠应用名单拦截所有命令。';
+
+  @override
+  String get androidShellMasterOff => '先在上一页打开「手机操控」，才能启用 Android Shell。你仍可在这里查看授权和配对引导。';
+
+  @override
+  String get androidShellRiskTitle => '允许执行 Android 系统命令？';
+
+  @override
+  String get androidShellRiskBody => '命令使用所选通道的实际 UID，可能修改应用、系统设置和共享文件。它不受屏幕应用名单完整保护；每条命令仍会单独请求原生确认。只允许你理解并信任的命令。';
+
+  @override
+  String get androidShellRiskAction => '允许 Android Shell';
+
+  @override
+  String get androidShellBackend => '执行通道';
+
+  @override
+  String get androidShellShizukuHint => '使用已安装并启动的 Shizuku，需单独授权；不需要 Android 14、无障碍或不打扰模式。';
+
+  @override
+  String get androidShellAdb => '自连 ADB';
+
+  @override
+  String get androidShellAdbHint => '连接本机的无线调试，复用 App 的私有 ADB 身份；不会连接其他设备。';
+
+  @override
+  String get androidShellInstalled => 'Shizuku 已安装';
+
+  @override
+  String get androidShellRunning => 'Shizuku 正在运行';
+
+  @override
+  String get androidShellGranted => 'Shizuku 已授权';
+
+  @override
+  String get androidShellPaired => 'ADB 已配对';
+
+  @override
+  String get androidShellConnected => 'ADB 已连接';
+
+  @override
+  String get androidShellAuthorize => '申请 Shizuku 授权';
+
+  @override
+  String get androidShellAuthorizeHint => '先安装并启动 Shizuku，再点此按钮允许 dsh-Go。打开本页或刷新不会申请授权。';
+
+  @override
+  String get androidShellStatus => '执行状态';
+
+  @override
+  String get androidShellUid => '实际 UID';
+
+  @override
+  String get androidShellUidUnknown => '尚未报告';
+
+  @override
+  String get androidShellRefresh => '刷新状态';
+
+  @override
+  String get androidShellStop => '停止 Android Shell';
+
+  @override
+  String get androidShellStopHint => '取消当前命令并停止独立 Shell 执行，不关闭屏幕操控。';
+
+  @override
+  String get androidShellPairingGuide => '在开发者选项中打开「无线调试」，选择「使用配对码配对设备」。配对码只在本次配对中使用，不保存、不写入日志。';
+
+  @override
+  String get androidShellStartPairing => '打开配对引导';
+
+  @override
+  String get androidShellPair => '输入配对码';
+
+  @override
+  String get androidShellPairSubmit => '配对';
+
+  @override
+  String get androidShellPairCode => '六位配对码';
+
+  @override
+  String get androidShellPairPort => '配对端口（可选）';
+
+  @override
+  String get androidShellPairPortHint => '填配对弹窗里的端口，不是无线调试主页的连接端口；留空时尝试自动发现。';
+
+  @override
+  String get androidShellConnect => '连接 ADB';
+
+  @override
+  String get androidShellConnectChannel => '连接所选通道';
+
+  @override
+  String get androidShellConnectPort => '连接端口（可选）';
+
+  @override
+  String get androidShellConnectPortHint => '填无线调试主页「IP 地址和端口」中的端口，不是配对端口。只连接本机；留空时尝试自动发现。';
+
+  @override
+  String androidShellErrorCode(String code) {
+    return '错误码：$code';
+  }
+
+  @override
+  String androidShellLimits(int seconds, int bytes) {
+    return '单次最长 $seconds 秒，输出最多 $bytes 字节';
+  }
+
+  @override
+  String get androidShellErrorDisabled => 'Android Shell 已关闭。';
+
+  @override
+  String get androidShellErrorNotConnected => '所选通道尚未连接。';
+
+  @override
+  String get androidShellErrorShizukuMissing => '请先安装 Shizuku。';
+
+  @override
+  String get androidShellErrorShizukuStopped => '请先启动 Shizuku，再刷新状态。';
+
+  @override
+  String get androidShellErrorPermissionRequired => '需要你在 Shizuku 中明确授权。';
+
+  @override
+  String get androidShellErrorAdbNotPaired => '请先完成本机无线调试配对，再连接 ADB。';
+
+  @override
+  String get androidShellErrorConnectFailed => '连接未成功。请检查所选通道和当前无线调试连接端口，再重试。';
+
+  @override
+  String get androidShellErrorIdentityChanged => '通道身份已改变，请停止后重新授权或连接。';
+
+  @override
+  String get androidShellErrorBusy => '另一项操作尚未结束，请稍后重试，或先停止 Android Shell。';
+
+  @override
+  String get androidShellErrorInvalidArguments => '输入无效。配对码须为六位数字，端口须在 1–65535 之间。';
+
+  @override
+  String get androidShellErrorCancelled => '操作已取消。';
+
+  @override
+  String get androidShellErrorTimeout => '操作超时。先核实结果；已派发的命令不要自动重试。';
+
+  @override
+  String get androidShellErrorConfirmationDenied => '未获准执行命令。';
+
+  @override
+  String get androidShellErrorCleanupFailed => '未能完成停止清理。请重试停止，暂勿执行新命令。';
+
+  @override
+  String get androidShellErrorLocked => '手机已锁定，请解锁后重试。';
+
+  @override
+  String get androidShellErrorConfirmationUnavailable => '当前无法显示原生确认，请回到 App 并检查通知权限。';
+
+  @override
+  String get androidShellErrorTransportLost => '通道已断开。先核实结果；已派发的命令不要自动重试，需要时重新连接。';
+
+  @override
+  String get androidShellErrorProtocolMismatch => '当前原生模块不支持此 Shell 协议，请更新 App。';
+
+  @override
+  String get androidShellErrorNativeUnavailable => '此构建的 Android Shell 原生模块不可用。';
+
+  @override
+  String get androidShellErrorInvalidResponse => '没有收到有效的原生状态，请刷新或更新 App。';
+
+  @override
+  String get androidShellErrorStopFailed => '未确认已停止，请刷新状态并重试停止。';
+
+  @override
+  String get androidShellErrorUnknown => '未能确认操作结果。先核实结果；已派发的命令不要自动重试。';
 
   @override
   String get botsFolderGone => '这个文件夹已经不在了';
@@ -4116,7 +4364,7 @@ class L10nZh extends L10n {
   String get chatBranchHint => '在新对话中继续，原对话不变';
 
   @override
-  String get chatEditResendHint => '在新对话中改写，原对话不变';
+  String get chatEditResendHint => '在新对话中改写，图片和文件需重新添加；原对话不变';
 
   @override
   String get chatSaveToPhotos => '保存到相册';
@@ -15800,6 +16048,97 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwQuickPanel => '左滑,快捷入口,手势,滑动,目录,自定义目录,快捷,常用入口';
+
+  @override
+  String get selfUpdateTransport => '安装路线';
+
+  @override
+  String get selfUpdateSystem => '正常安装（默认）';
+
+  @override
+  String get selfUpdateShizuku => 'Shizuku';
+
+  @override
+  String get selfUpdateAdb => '本机 ADB';
+
+  @override
+  String get selfUpdateSecurityNote => '各路线仍受 APK 签名、Android 与厂商安全策略约束，不保证跳过扫描。不支持 root，也不会在失败后自动切换路线。';
+
+  @override
+  String get selfUpdateNativeConfirm => '只安装已校验的本应用更新；稍后仍需原生安装确认。授权 Shizuku 不等于同意安装，不需要开启手机操控或 AI Shell。';
+
+  @override
+  String get selfUpdateAuthorize => '申请更新用 Shizuku 授权';
+
+  @override
+  String get selfUpdateRefresh => '刷新通道状态';
+
+  @override
+  String selfUpdateShizukuStatus(String status) {
+    return 'Shizuku：$status';
+  }
+
+  @override
+  String get selfUpdateReady => '已授权';
+
+  @override
+  String get selfUpdatePermissionRequired => '请先安装、启动并授权 Shizuku';
+
+  @override
+  String get selfUpdateUnsupportedIdentity => '仅支持 shell UID 2000；root 与其他身份不受支持';
+
+  @override
+  String get selfUpdateAdbHint =>
+      '使用已配对的本机无线调试身份；点击安装才连接。未配对时可打开现有 Android Shell 配对页，无需开启手机操控或 AI Shell。配对码和端口不保存、不写入日志。';
+
+  @override
+  String get selfUpdatePairing => '打开 Android Shell 配对引导';
+
+  @override
+  String get selfUpdateAdbPaired => '本机 ADB 已配对';
+
+  @override
+  String get selfUpdateAdbNotPaired => '本机 ADB 尚未配对';
+
+  @override
+  String get selfUpdatePendingTitle => '正在核实安装结果';
+
+  @override
+  String get selfUpdatePendingMessage => '安装请求可能仍在处理。不会自动重试或切换路线；请查看系统提示，再读取实际安装状态。';
+
+  @override
+  String get selfUpdateUnknownTitle => '安装结果未知';
+
+  @override
+  String get selfUpdateUnknownMessage => '超时、失联或进程退出不能证明失败。不会自动重试或切换路线；请先读取实际安装状态。';
+
+  @override
+  String get selfUpdateReadResult => '读取实际安装状态';
+
+  @override
+  String get selfUpdateVerifiedTitle => '已核实当前安装版本';
+
+  @override
+  String selfUpdateVerifiedVersion(String version, int code) {
+    return '当前版本 $version（构建 $code），已由原生层核验。';
+  }
+
+  @override
+  String get selfUpdateFailedTitle => '安装未完成';
+
+  @override
+  String get selfUpdateFailedMessage => '原生层报告本次安装失败。请检查系统提示和错误码，再明确选择安装路线。';
+
+  @override
+  String selfUpdateErrorCode(String code) {
+    return '错误码：$code';
+  }
+
+  @override
+  String get selfUpdateEndWaiting => '结束本次等待';
+
+  @override
+  String get selfUpdateEndWaitingNote => '只有确认系统已不在安装时才结束等待。清除本次记录不等于取消系统安装；不会自动重试或切换路线，仍需再次原生确认。';
 
   @override
   String get shellDeletePermanently => '永久删除';

@@ -111,7 +111,7 @@ class BackgroundDisplay internal constructor(
                 check(BackgroundPolicy.supportsViewport(viewport, probe.get(Proto.VIEWPORT_VERSION))) {
                     Reasons.of("viewportUnsupported")
                 }
-                val birth = BackgroundRecoveryProtocol.birth(probe::get)
+                val birth = BackgroundRecoveryProtocol.birth(probe::get, probe::containsKey)
                     ?: error("所选后台服务不支持资源恢复，请更新并重新连接该通道。") // l10n:keep agent resource result
                 coordinateSupported = probe.get(Proto.BACKGROUND_COORDINATES) is Int &&
                     probe.getInt(Proto.BACKGROUND_COORDINATES) == 1
