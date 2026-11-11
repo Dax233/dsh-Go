@@ -2,6 +2,7 @@ package io.github.ccch1mneyyy.dsh_app.runtime
 
 import java.io.File
 import java.nio.file.Files
+import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -74,6 +75,45 @@ class RuntimeUpgradeIntegrationTest {
     @Test fun onlyFirstInstallActivatesTheBundledSystem() {
         stage(); activate()
         assertEquals("factory gh (must not replace the user copy)", File(base, "rootfs/usr/bin/gh").readText())
+        assertEquals("factory package database", File(base, "rootfs/var/lib/dpkg/status").readText())
+        assertEquals("new", File(base, "rootfs.version").readText())
+    }
+
+    private fun layerDescriptor() = JSONObject().put("schema", 1)
+        .put("osRelease", JSONObject().put("ID", "ubuntu").put("VERSION_ID", "24.04"))
+        .put("python3Sha256", MessageDigest.getInstance("SHA-256").digest("python".toByteArray())
+            .joinToString("") { "%02x".format(it) })
+
+    @Test fun engineOnlyStagingUsesTheSameTransactionForOldAndNewRuntimeMetadata() {
+        for (hasUpgrade in listOf(false, true)) {
+            base.deleteRecursively(); base.mkdirs()
+            installed(hasUpgrade)
+            next.put("schema", 2).put("baseCompatibility", layerDescriptor())
+            stage()
+            for (path in listOf("etc/os-release", "opt/python", "usr/bin/gh", "var/lib/dpkg")) {
+                File(base, "staging/$path").deleteRecursively()
+            }
+            activate()
+            assertEquals("new engine", File(base, "rootfs/opt/dsh/version").readText())
+            assertEquals("user gh", File(base, "rootfs/usr/bin/gh").readText())
+            assertEquals("user package database", File(base, "rootfs/var/lib/dpkg/status").readText())
+            assertEquals("user npm package", File(base, "rootfs/usr/local/lib/node_modules/user/index.js").readText())
+            assertEquals("user pip package", File(base, "rootfs/opt/python/lib/site-packages/user.py").readText())
+            assertEquals("user work", File(base, "rootfs/root/workspace/project").readText())
+            assertEquals("new", File(base, "rootfs.version").readText())
+            assertFalse(File(base, "staging").exists())
+        }
+    }
+
+    @Test fun mergedLayersActivateOnlyWhenTheDeclaredBaseMatchesTheirPayload() {
+        next.put("schema", 2).put("baseCompatibility", layerDescriptor())
+        stage()
+        write("staging/opt/python/bin/python3", "mismatched base")
+        assertThrows(RuntimeUpgradeBlocked::class.java) { activate() }
+        assertFalse(File(base, "rootfs").exists())
+        assertFalse(File(base, "rootfs.version").exists())
+        write("staging/opt/python/bin/python3", "python")
+        activate()
         assertEquals("factory package database", File(base, "rootfs/var/lib/dpkg/status").readText())
         assertEquals("new", File(base, "rootfs.version").readText())
     }
