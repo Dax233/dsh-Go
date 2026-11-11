@@ -520,6 +520,7 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
     // No native side (tests, an older build): nothing to watch.
     if (disposed || !acceptStatus(status)) return;
     var stopped = status.task.stopped;
+    var active = status.task.active;
     var launch = status.callerCapability?.launch;
     var modernSeen = status.callerCapability?.modernSeen == true || status.tasks.any((task) => task.sessionId != null);
     var versioned = status.taskProtocol == 1 || launch != null;
@@ -534,14 +535,22 @@ final phoneStopWatcherProvider = Provider<void>((ref) {
         modernSeen = (previousLaunch == null && modernSeen) || capability.modernSeen || modernTasks;
         versioned = true;
         stopped = s.task.stopped;
+        active = s.task.active;
         return; // A new launch is a baseline, not a stop edge.
       }
       modernSeen = modernSeen || capability?.modernSeen == true || modernTasks;
       versioned = versioned || s.taskProtocol == 1 || capability != null;
       // Session-aware native owns targeted stopping. The host API has no atomic
       // expected-run cancellation, so never cancel a later turn or every conversation.
-      if (!modernSeen && (capability != null || !versioned) && s.task.stopped && !stopped) unawaited(_cancelLocalTurns(ref));
+      // Native also reports a stop when the screen goes off or the service leaves while no
+      // phone task runs. That interrupted nothing, so it must not end the conversations
+      // (1.0.14 lost native's own "only a running task stops" check: #848, #926, #968).
+      final interrupted = active || s.task.active;
+      if (interrupted && !modernSeen && (capability != null || !versioned) && s.task.stopped && !stopped) {
+        unawaited(_cancelLocalTurns(ref));
+      }
       stopped = s.task.stopped;
+      active = s.task.active;
     }, onError: (_) {});
   }());
 });
