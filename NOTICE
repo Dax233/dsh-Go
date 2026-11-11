@@ -1,0 +1,20 @@
+dsh-Go · InstaBox Edition
+
+This repository is an unofficial fork of dsh-Go (https://github.com/ccch1mneyyy/dsh-go),
+and is not affiliated with or endorsed by the upstream project.
+
+License: GNU Affero General Public License v3.0. The upstream LICENSE file is kept
+unchanged; upstream copyright and every third-party notice in THIRD_PARTY_NOTICES.md
+remain in effect.
+
+Changes in this fork (保持与原仓库相同的 AGPL-3.0 许可):
+- InstaBox remote-host support: wake before SSH, activity leases and a small work
+  command while a link is open (InstaBox pauses idle machines on the host side).
+- Session transcript cache with synchronous replay, so a cached conversation paints
+  immediately instead of waiting for the Host to resend a window.
+- SSH link hardening: single-flight connect, reopen stagger, unary concurrency gate,
+  keepalive convergence, WebSocket close-code logging.
+- Fork defaults: anonymous usage reporting removed, no forced update sheet.
+
+Upstream remains the body of this project; this fork only adapts it to InstaBox and
+keeps the changes above.

@@ -2,6 +2,12 @@
   <b>简体中文</b> · <a href="README.en.md">English</a>
 </p>
 
+> **本仓库是 dsh-Go 的 InstaBox 版分支（dsh-Go · InstaBox Edition）**
+> 
+> 面向 InstaBox 远程机做适配：内置唤醒与**活动保活**、会话缓存、连接加固等改动。
+> 上游 `ccch1mneyyy/dsh-go` 仍是本体，本分支**与其无隶属关系**，也不代表上游立场。
+> 代码仍按 AGPL-3.0 发布；来源、版权与第三方声明见 [NOTICE](NOTICE)。
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-zh-dark.webp">

@@ -2,6 +2,15 @@
   <a href="README.md">简体中文</a> · <b>English</b>
 </p>
 
+> **This repository is the InstaBox edition of dsh-Go (dsh-Go · InstaBox Edition)**
+> 
+> It adapts the app to InstaBox remote hosts: wake before connecting, an **activity
+> lease plus a tiny work command** while a link is open, a session transcript cache,
+> and SSH link hardening. Upstream `ccch1mneyyy/dsh-go` remains the body of the
+> project; this fork is **not affiliated with it** and does not speak for it.
+> The code stays AGPL-3.0; provenance, copyright and third-party notices are in
+> [NOTICE](NOTICE).
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-en-dark.webp">
