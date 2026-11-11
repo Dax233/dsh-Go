@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import tarfile
 import tempfile
@@ -267,6 +268,41 @@ class InputStoreTest(unittest.TestCase):
             result = store.collect_objects([obj], self.cas, (self.root / "mirror").as_uri())
         self.assertFalse(result["errors"])
         self.assertEqual([path.name for path in self.cas.iterdir()], [obj["key"]])
+
+    def test_http_early_eof_uses_mirror_but_complete_wrong_bytes_stop(self):
+        payload = b"complete bytes"
+        obj = original(payload, ["https://example.invalid/archive"])
+        self.file("mirror/" + obj["key"], payload)
+        opener = store.urllib.request.urlopen
+        cases = [("early-eof", payload[:3], len(payload), 2, False),
+                 ("wrong-complete", b"x" * len(payload), len(payload), 1, True),
+                 ("verified-bytes", payload, len(payload) + 1, 1, False)]
+        for name, body, length, expected_calls, failed in cases:
+            with self.subTest(name=name):
+                receiving, sending = socket.socketpair()
+                with receiving, sending:
+                    sending.sendall(f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n\r\n".encode() + body)
+                    sending.shutdown(socket.SHUT_WR)
+                    response = store.http.client.HTTPResponse(receiving)
+                    response.begin()
+
+                    def open_source(request, **kwargs):
+                        if request.full_url == obj["urls"][0]:
+                            return response
+                        return opener(request, **kwargs)
+
+                    destination = self.cas / name
+                    with response, patch.object(store.urllib.request, "urlopen", side_effect=open_source) as calls:
+                        result = store.collect_objects([obj], destination, (self.root / "mirror").as_uri())
+                    self.assertEqual(calls.call_count, expected_calls)
+                    if failed:
+                        self.assertTrue(result["stopped"])
+                        self.assertIn("checksum mismatch", result["errors"][0]["error"])
+                        self.assertEqual(list(destination.iterdir()), [])
+                    else:
+                        self.assertFalse(result["errors"])
+                        self.assertEqual((destination / obj["key"]).read_bytes(), payload)
+                        self.assertEqual([path.name for path in destination.iterdir()], [obj["key"]])
 
     def test_unavailable_reports_missing_without_publishing(self):
         obj = original(b"missing", [(self.root / "does-not-exist").as_uri()])
