@@ -142,7 +142,8 @@ export async function generateMedia(request, context) {
     }
     if (Buffer.byteLength(JSON.stringify({ 'dsh-go/media': meta })) > 8192 || containsSecret(meta, secret)) fail('metadata');
     await context.admission?.settle();
-    await store.commit(meta, { sessionId: context.sessionId, createdAt });
+    try { await store.commit(meta, { sessionId: context.sessionId, createdAt }); }
+    catch (error) { throw error instanceof MediaError ? error : new MediaError('storage'); }
     return { meta, text: 'AI 生成' + (request.model.kind === 'video' ? '视频' : '图片') + '已保存：\n' + meta.items.map(item => item.path).join('\n') };
   } catch (error) {
     if (providerTask && signal.aborted && !cancelledRemote) {
