@@ -30,7 +30,7 @@ download_cached() (
 )
 
 install_jdk() {
-  if [ -x "$JDK_DIR/bin/java" ]; then log "JDK present"; return; fi
+  if [ -x "$JDK_DIR/bin/java" ] && [ ! -f "$JDK_DIR/.dsh-toolchain-incomplete" ]; then log "JDK present"; return; fi
   local base="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/17/jdk/x64/linux/"
   local name
   name=$(curl -fsSL "$base" | grep -oE 'OpenJDK17U-jdk_x64_linux_hotspot_[0-9._]+\.tar\.gz' | sort -uV | tail -1)
@@ -38,18 +38,23 @@ install_jdk() {
   log "JDK: $name"
   curl -fL --retry 3 -o "$DL/$name" "$base$name"
   mkdir -p "$JDK_DIR"
+  touch "$JDK_DIR/.dsh-toolchain-incomplete"
   tar -xzf "$DL/$name" -C "$JDK_DIR" --strip-components=1
   "$JDK_DIR/bin/java" -version
+  rm -f "$JDK_DIR/.dsh-toolchain-incomplete"
 }
 
 install_flutter() {
-  if [ -x "$FLUTTER_DIR/bin/flutter" ]; then log "Flutter present"; return; fi
+  if [ -x "$FLUTTER_DIR/bin/flutter" ] && [ ! -f "$FLUTTER_DIR/.dsh-toolchain-incomplete" ]; then log "Flutter present"; return; fi
   local name="flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
   local url="https://storage.flutter-io.cn/flutter_infra_release/releases/stable/linux/$name"
   log "Flutter: $name"
   download_cached "$DL/$name" "$url"
   echo "$FLUTTER_SHA256  $DL/$name" | sha256sum -c -
+  mkdir -p "$FLUTTER_DIR"
+  touch "$FLUTTER_DIR/.dsh-toolchain-incomplete"
   tar -xJf "$DL/$name" -C "$DEV_ROOT"
+  rm -f "$FLUTTER_DIR/.dsh-toolchain-incomplete"
 }
 
 install_cmdline_tools() {
