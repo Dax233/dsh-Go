@@ -6,7 +6,7 @@ import {createServer} from 'node:http';
 import {test} from 'node:test';
 import {apply} from '../bridge/dsh-go-bridge/lib/index.js';
 
-async function fixture(t, {connection = true, guardRoutes = false, rejection} = {}) {
+async function fixture(t, {connection = true, guardRoutes = false, rejection, graph} = {}) {
   const dispose = [];
   const webServer = {
     exact: new Map(), prefixes: new Map(), upgrades: new Map(),
@@ -21,7 +21,10 @@ async function fixture(t, {connection = true, guardRoutes = false, rejection} = 
   webServer.register({kind: 'exact', path: '/fixture-route', handler(_req, res) { res.end('fixture'); }});
   const ctx = {
     webServer, logger: {warn() {}}, on() {}, provide() {},
-    get: name => name === 'connection' && connection ? {requestRejection: () => rejection} : undefined,
+    get(name) {
+      if (name === 'connection' && connection) return {requestRejection: () => rejection};
+      if (name === 'clientModules' && graph) return {graph};
+    },
     effect(fn) { const stop = fn(); if (typeof stop === 'function') dispose.push(stop); },
     inject(_deps, fn) { fn(ctx); },
   };
@@ -76,6 +79,56 @@ test('bridge business errors share a nested shape and retain HTTP status', async
   const accepted = await request(occupancy, post(JSON.stringify({bootRev: 'b1', slots: {}})));
   assert.equal(accepted.status, 204);
   assert.equal(accepted.text, '');
+});
+
+test('inventory marks an earlier page report stale until the current graph reports', async t => {
+  let currentRev = 'g1';
+  const request = await fixture(t, {graph: () => ({rev: currentRev, entries: [{id: 'sample-plugin', rev: currentRev}]})});
+  const slots = {'settings.section': [{package: 'sample-plugin', cell: 'sample', order: 0, active: true}]};
+  const report = async bootRev => {
+    const response = await request('/dsh-go/v1/occupancy', {
+      method: 'POST', headers: {'content-type': 'application/json'},
+      body: JSON.stringify({bootRev, slots}),
+    });
+    assert.equal(response.status, 204);
+  };
+  const snapshot = async () => {
+    const response = await request('/dsh-go/v1/inventory');
+    assert.equal(response.status, 200);
+    return response.body;
+  };
+
+  const absent = await snapshot();
+  assert.equal(absent.currentRev, 'g1');
+  assert.equal(absent.slots, null);
+  assert.equal(absent.occupancy, null);
+
+  await report('g1');
+  const first = await snapshot();
+  assert.equal(first.bootRev, 'g1');
+  assert.equal(first.currentRev, 'g1');
+  assert.equal(first.occupancy.stale, false);
+
+  // A plugin change replaces the graph before another page reports its slots.
+  currentRev = 'g2';
+  const stale = await snapshot();
+  assert.equal(stale.bootRev, 'g1');
+  assert.equal(stale.currentRev, 'g2');
+  assert.equal(stale.occupancy.stale, true);
+  assert.deepEqual(stale.slots, first.slots, 'the stale table remains available for the consumer to judge');
+
+  await report('g2');
+  const refreshed = await snapshot();
+  assert.equal(refreshed.bootRev, 'g2');
+  assert.equal(refreshed.currentRev, 'g2');
+  assert.equal(refreshed.occupancy.stale, false);
+
+  // An already open g1 page may still post after the g2 page.
+  await report('g1');
+  const earlierPage = await snapshot();
+  assert.equal(earlierPage.bootRev, 'g1');
+  assert.equal(earlierPage.currentRev, 'g2');
+  assert.equal(earlierPage.occupancy.stale, true);
 });
 
 test('capabilities advertise implemented families independently of service availability', async t => {
