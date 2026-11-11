@@ -6,6 +6,7 @@
 #   runtime/build-runtime.sh                 # both ABIs (x86_64 first)
 #   runtime/build-runtime.sh x86_64          # one ABI
 #   COMPRESS=gz runtime/build-runtime.sh     # .tar.gz instead of .tar.xz
+#   RUNTIME_LAYERS=1 runtime/build-runtime.sh # opt in to base + engine assets
 #   RUNTIME_OUT=/path runtime/build-runtime.sh   # stage outputs outside runtime/out (not packaged)
 #
 # The DSH tree is patched with runtime/patches/*.diff (pinned per DSH version in
@@ -16,6 +17,7 @@
 #
 # Outputs (consumed by app/android/app/build.gradle.kts flavors):
 #   runtime/out/<abi>/assets/runtime/rootfs-<abi>.tar.xz
+#     or base-<abi>.tar.xz + engine-<abi>.tar.xz when RUNTIME_LAYERS=1
 #   runtime/out/<abi>/assets/runtime/manifest.json      (versions, hashes, launch template)
 #   runtime/out/<abi>/assets/runtime/licenses/...
 #   runtime/out/<abi>/jniLibs/<abi>/lib{proot,proot-loader,talloc,android-shmem}.so
@@ -32,6 +34,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE="$HERE/.cache"
 WORK="$HERE/.work"
 OUT="${RUNTIME_OUT:-$HERE/out}"   # the app build reads runtime/out; RUNTIME_OUT stages a build elsewhere
+RUNTIME_LAYERS="${RUNTIME_LAYERS:-0}"  # opt in until Android/host validation completes
+BASE_LAYER_CACHE="${BASE_LAYER_CACHE:-$CACHE/base-layers}"
 LOCKS="$HERE/locks"
 PY=(python3 -I "$HERE/lib/rtbuild.py")
 
@@ -52,7 +56,7 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.12.15}"
 PBS_RELEASE="${PBS_RELEASE:-20261021}"    # astral-sh/python-build-standalone release tag
 COMPRESS="${COMPRESS:-xz}"          # xz | gz
 XZ_PRESET="${XZ_PRESET:-6}"         # 8 MiB dictionary: modest memory for xz-java on phones
-XZ_THREADS="${XZ_THREADS:-4}"       # each xz -6 worker needs ~100 MiB; output does not depend on this
+XZ_THREADS="${XZ_THREADS:-4}"       # xz 5.8.1 -6, 136704-byte sample: -T1=408 B, -T2/-T4=416 B; threads can change bytes
 PRUNE_DEV_METADATA="${PRUNE_DEV_METADATA:-1}"   # drop *.map / *.d.ts from node_modules
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1767225600}"  # 2026-01-01T00:00:00Z, fixed tar mtimes
 
@@ -87,6 +91,8 @@ declare -A PIN=(
 log() { printf '\033[1;34m[runtime %s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 die() { printf '\033[1;31m[runtime] error:\033[0m %s\n' "$*" >&2; exit 1; }
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
+
+case "$RUNTIME_LAYERS" in 0|1) ;; *) die "RUNTIME_LAYERS must be 0 or 1" ;; esac
 
 for tool in curl sha256sum python3 tar xz; do
   command -v "$tool" >/dev/null || die "missing host tool: $tool"
@@ -400,11 +406,11 @@ PYEOF
   local pnpm_lockfile="$LOCKS/pnpm-$PNPM_VERSION/package-lock.json"
   local inputs_sha
   inputs_sha="$( {
-      echo "$RUNTIME_REVISION $abi $DSH_VERSION $NODE_VERSION $PNPM_VERSION $UBUNTU_VERSION $COMPRESS $XZ_PRESET $PRUNE_DEV_METADATA $SOURCE_DATE_EPOCH"
+      echo "$RUNTIME_REVISION $abi $DSH_VERSION $NODE_VERSION $PNPM_VERSION $UBUNTU_VERSION $COMPRESS $XZ_PRESET $XZ_THREADS $PRUNE_DEV_METADATA $SOURCE_DATE_EPOCH $RUNTIME_LAYERS"
       sha256 "$base"; sha256 "$node"; sha256 "$python"; sha256sum "${extra_debs[@]}" | cut -d' ' -f1
       sha256 "$proot_deb"; sha256 "$talloc_deb"; sha256 "$shmem_deb"
       sha256 "$lockfile"; sha256 "$pnpm_lockfile"; sha256 "$HERE/build-runtime.sh"; sha256 "$HERE/lib/rtbuild.py"
-      (cd "$HERE" && find patches bridge boot direct -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum)
+      (cd "$HERE" && find patches bridge boot direct session-deletion -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum)
     } | sha256sum | cut -c1-12 )"
   local runtime_version="${RUNTIME_REVISION}-dsh${DSH_VERSION}-node${NODE_VERSION}-ubuntu${UBUNTU_VERSION}-${inputs_sha}"
   local runtime_info
@@ -413,11 +419,16 @@ PYEOF
     "$(cat "$work/dsh-patches.json")" "$bridge_version")"
 
   # -- rootfs archive --
-  local archive="$assets/rootfs-$abi.tar.$COMPRESS"
+  local -a archives=("$assets/rootfs-$abi.tar.$COMPRESS")
+  local -a archive_args=(--out "${archives[0]}")
+  if [[ "$RUNTIME_LAYERS" == 1 ]]; then
+    archives=("$assets/base-$abi.tar.$COMPRESS" "$assets/engine-$abi.tar.$COMPRESS")
+    archive_args=(--base-out "${archives[0]}" --engine-out "${archives[1]}" --base-cache "$BASE_LAYER_CACHE")
+  fi
   local -a prune=(); [[ "$PRUNE_DEV_METADATA" == 1 ]] && prune=(--prune-dev-metadata)
   log "assembling rootfs ($COMPRESS)"
   "${PY[@]}" assemble --abi "$abi" --base "$base" --node "$node" --dsh-prefix "$prefix" --pnpm-prefix "$pnpm_prefix" \
-    --out "$archive" --report "$out/build-report.json" --runtime-info "$runtime_info" \
+    "${archive_args[@]}" --report "$out/build-report.json" --runtime-info "$runtime_info" \
     --compress "$COMPRESS" --xz-preset "$XZ_PRESET" --threads "$XZ_THREADS" --epoch "$SOURCE_DATE_EPOCH" "${prune[@]}" \
     "${extra_debs[@]/#/--deb=}" --python "$python" --bridge "$bridge"
 
@@ -442,7 +453,7 @@ print("rootfs ELF objects: %d, wrong-arch: %d, warnings: %d" % (len(r["elf"]), l
 sys.exit(1 if wrong else 0)
 PYEOF
   [[ "$bad" == 0 ]] || die "ABI verification failed for $abi"
-  log "$abi done: $(du -h "$archive" | cut -f1) archive, version $runtime_version"
+  log "$abi done: $(du -ch "${archives[@]}" | tail -n1 | cut -f1) archive total, version $runtime_version"
 }
 
 write_index() {
@@ -458,6 +469,11 @@ for abi in ("x86_64", "arm64-v8a"):
     index["abis"][abi] = {k: m.get(k) for k in (  # .get: another ABI may still hold an older build
         "runtimeVersion", "rootfs", "rootfsSha256", "rootfsBytes", "uncompressedBytes", "entries",
         "dshVersion", "nodeVersion", "pnpmVersion", "ubuntuVersion", "prootVersion")}
+    if m.get("schema", 1) == 2:
+        index["schema"] = 2
+        for key in ("rootfs", "rootfsSha256"):
+            del index["abis"][abi][key]
+        index["abis"][abi].update({key: m[key] for key in ("schema", "layers", "baseCompatibility", "upgrade")})
     index["abis"][abi]["jniLibs"] = {n: {"sha256": v["sha256"], "bytes": v["bytes"]} for n, v in m["jniLibs"].items()}
 json.dump(index, open(os.path.join(out, "manifest.json"), "w"), indent=2)
 print("wrote " + os.path.join(out, "manifest.json"))

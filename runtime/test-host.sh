@@ -29,9 +29,24 @@ fi
 command -v bwrap >/dev/null || { echo "bwrap required" >&2; exit 1; }
 [[ "$(uname -m)" == x86_64 ]] || { echo "x86_64 host required" >&2; exit 1; }
 
-archive="$(dirname "$MANIFEST")/$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["rootfs"])' "$MANIFEST")"
+archive_names="$(python3 -I - "$MANIFEST" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+schema = manifest.get("schema", 1)
+if schema == 1:
+    print(manifest["rootfs"])
+elif schema == 2:
+    for layer in ("base", "engine"):
+        print(manifest["layers"][layer]["asset"])
+else:
+    sys.exit("unsupported runtime manifest schema: %s" % schema)
+PY
+)"
+mapfile -t archives <<< "$archive_names"
 rm -rf "$ROOT"; mkdir -p "$ROOT"
-tar -xf "$archive" -C "$ROOT"
+for archive in "${archives[@]}"; do
+  tar -xf "$(dirname "$MANIFEST")/$archive" -C "$ROOT"
+done
 
 mapfile -t GUEST < <(python3 -I - "$MANIFEST" "$PORT" <<'PY'
 import json, sys
@@ -238,12 +253,14 @@ echo "== dsh home after runs"; ls -A "$ROOT/root/.dsh" | head -20
 echo "== direct glibc launch (Linux source build; Android permission/lifecycle still needs a device)"
 if [[ -n "${DIRECT_PROOT:-}" ]]; then
   # Earlier plugin/route tests exercise mutable profile state. Use another
-  # extraction of the same pinned archive for the direct/proot comparison.
+  # extraction of the same pinned archives for the direct/proot comparison.
   # The true non-root session gate must be able to traverse every ancestor.
   # Only this new disposable directory has its mode/ownership changed.
   DIRECT_ROOT="$(mktemp -d /tmp/dsh-direct-host.XXXXXX)"
   chmod 0755 "$DIRECT_ROOT"
-  tar -xf "$archive" -C "$DIRECT_ROOT"
+  for archive in "${archives[@]}"; do
+    tar -xf "$(dirname "$MANIFEST")/$archive" -C "$DIRECT_ROOT"
+  done
   if bash "$HERE/tests/direct/run-tests.sh" "$DIRECT_ROOT" "$MANIFEST" "$DIRECT_PROOT" \
     "${DIRECT_OUT:-$HERE/.work/$ABI/direct-evidence}" "$((PORT + 4))"; then
     pass "direct host gate"
