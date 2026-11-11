@@ -25592,6 +25592,102 @@ abstract class L10n {
   /// **'未更新 · 上次结果'**
   String get readListFailed;
 
+  /// No description provided for @remoteDshMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'实例管理'**
+  String get remoteDshMode;
+
+  /// No description provided for @remoteManaged.
+  ///
+  /// In zh, this message translates to:
+  /// **'托管启动'**
+  String get remoteManaged;
+
+  /// No description provided for @remoteAttachOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'只连接'**
+  String get remoteAttachOnly;
+
+  /// No description provided for @remoteManagedHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动启动或复用 App 托管的 DSH；不会自动替换存活但无法复用的实例。'**
+  String get remoteManagedHelp;
+
+  /// No description provided for @remoteAttachOnlyHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'只转发到远端 127.0.0.1 的固定端口；不启动、停止或重启 DSH。'**
+  String get remoteAttachOnlyHelp;
+
+  /// No description provided for @remoteDshPort.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端 DSH 端口'**
+  String get remoteDshPort;
+
+  /// No description provided for @remoteDshToken.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH 登录令牌'**
+  String get remoteDshToken;
+
+  /// No description provided for @remoteDshTokenHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写既有实例启动链接中的 token，仅保存在这台手机的安全存储中。'**
+  String get remoteDshTokenHelp;
+
+  /// No description provided for @remoteAttachWorkingDirectoryHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'既有实例不执行目录探测；请填写远端绝对路径，留空使用 DSH 默认目录。'**
+  String get remoteAttachWorkingDirectoryHelp;
+
+  /// No description provided for @remoteSshCompression.
+  ///
+  /// In zh, this message translates to:
+  /// **'SSH 压缩'**
+  String get remoteSshCompression;
+
+  /// No description provided for @remoteSshCompressionHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认开启；与服务器协商认证后压缩，不支持时使用未压缩传输。'**
+  String get remoteSshCompressionHelp;
+
+  /// No description provided for @remoteRestartManaged.
+  ///
+  /// In zh, this message translates to:
+  /// **'重启托管 DSH'**
+  String get remoteRestartManaged;
+
+  /// No description provided for @remoteRestartManagedWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'这会停止 App 记录的远端 DSH 并重新启动，可能中断其他客户端和进行中的对话。确认没有其他人在使用后再继续。普通测试连接不会执行此操作。'**
+  String get remoteRestartManagedWarning;
+
+  /// No description provided for @remoteErrSharedInstance.
+  ///
+  /// In zh, this message translates to:
+  /// **'远端托管 DSH 仍在运行，但启动命令不同或缺少有效启动日志。为保护共享实例，未自动重启；请检查配置，改用“只连接”，或在编辑主机中明确选择“重启托管 DSH”。'**
+  String get remoteErrSharedInstance;
+
+  /// No description provided for @remoteErrAttachSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写有效的远端 DSH 端口和登录令牌'**
+  String get remoteErrAttachSettings;
+
+  /// No description provided for @remoteDshAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接既有 DSH'**
+  String get remoteDshAttached;
+
   /// No description provided for @remoteStartupSection.
   ///
   /// In zh, this message translates to:
@@ -25913,7 +26009,7 @@ abstract class L10n {
   /// No description provided for @remoteErrDshTokenRejected.
   ///
   /// In zh, this message translates to:
-  /// **'远端 DSH 拒绝了登录令牌'**
+  /// **'远端 DSH 拒绝了登录令牌，未自动重启；请检查令牌，或在编辑主机中明确重启托管实例'**
   String get remoteErrDshTokenRejected;
 
   /// No description provided for @remoteErrDshSignIn.

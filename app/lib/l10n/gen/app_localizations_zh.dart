@@ -13994,6 +13994,55 @@ class L10nZh extends L10n {
   String get readListFailed => '未更新 · 上次结果';
 
   @override
+  String get remoteDshMode => '实例管理';
+
+  @override
+  String get remoteManaged => '托管启动';
+
+  @override
+  String get remoteAttachOnly => '只连接';
+
+  @override
+  String get remoteManagedHelp => '自动启动或复用 App 托管的 DSH；不会自动替换存活但无法复用的实例。';
+
+  @override
+  String get remoteAttachOnlyHelp => '只转发到远端 127.0.0.1 的固定端口；不启动、停止或重启 DSH。';
+
+  @override
+  String get remoteDshPort => '远端 DSH 端口';
+
+  @override
+  String get remoteDshToken => 'DSH 登录令牌';
+
+  @override
+  String get remoteDshTokenHelp => '填写既有实例启动链接中的 token，仅保存在这台手机的安全存储中。';
+
+  @override
+  String get remoteAttachWorkingDirectoryHelp => '既有实例不执行目录探测；请填写远端绝对路径，留空使用 DSH 默认目录。';
+
+  @override
+  String get remoteSshCompression => 'SSH 压缩';
+
+  @override
+  String get remoteSshCompressionHelp => '默认开启；与服务器协商认证后压缩，不支持时使用未压缩传输。';
+
+  @override
+  String get remoteRestartManaged => '重启托管 DSH';
+
+  @override
+  String get remoteRestartManagedWarning => '这会停止 App 记录的远端 DSH 并重新启动，可能中断其他客户端和进行中的对话。确认没有其他人在使用后再继续。普通测试连接不会执行此操作。';
+
+  @override
+  String get remoteErrSharedInstance =>
+      '远端托管 DSH 仍在运行，但启动命令不同或缺少有效启动日志。为保护共享实例，未自动重启；请检查配置，改用“只连接”，或在编辑主机中明确选择“重启托管 DSH”。';
+
+  @override
+  String get remoteErrAttachSettings => '请填写有效的远端 DSH 端口和登录令牌';
+
+  @override
+  String get remoteDshAttached => '已连接既有 DSH';
+
+  @override
   String get remoteStartupSection => '启动';
 
   @override
@@ -14163,7 +14212,7 @@ class L10nZh extends L10n {
   String get remoteDshStarted => '已在远端启动 DSH';
 
   @override
-  String get remoteErrDshTokenRejected => '远端 DSH 拒绝了登录令牌';
+  String get remoteErrDshTokenRejected => '远端 DSH 拒绝了登录令牌，未自动重启；请检查令牌，或在编辑主机中明确重启托管实例';
 
   @override
   String get remoteErrDshSignIn => '没能登录远端 DSH';

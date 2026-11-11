@@ -14708,6 +14708,61 @@ class L10nEn extends L10n {
   String get readListFailed => 'Not updated · previous results';
 
   @override
+  String get remoteDshMode => 'Instance management';
+
+  @override
+  String get remoteManaged => 'Managed';
+
+  @override
+  String get remoteAttachOnly => 'Attach only';
+
+  @override
+  String get remoteManagedHelp =>
+      'Start or reuse app-managed DSH. A live instance that cannot be reused is never replaced automatically.';
+
+  @override
+  String get remoteAttachOnlyHelp =>
+      'Forward only to a fixed port on remote 127.0.0.1. Never start, stop or restart DSH.';
+
+  @override
+  String get remoteDshPort => 'Remote DSH port';
+
+  @override
+  String get remoteDshToken => 'DSH launch token';
+
+  @override
+  String get remoteDshTokenHelp =>
+      'Enter the token from the existing instance’s launch URL. It stays in secure storage on this phone.';
+
+  @override
+  String get remoteAttachWorkingDirectoryHelp =>
+      'Existing instances are not probed for a home directory. Use a remote absolute path, or leave empty for DSH’s default.';
+
+  @override
+  String get remoteSshCompression => 'SSH compression';
+
+  @override
+  String get remoteSshCompressionHelp =>
+      'On by default. Negotiate compression after authentication; use uncompressed transport if unsupported.';
+
+  @override
+  String get remoteRestartManaged => 'Restart managed DSH';
+
+  @override
+  String get remoteRestartManagedWarning =>
+      'This stops the remote DSH recorded by the app and starts it again. Other clients and active chats may be interrupted. Continue only after checking nobody else is using it. Normal connection tests never do this.';
+
+  @override
+  String get remoteErrSharedInstance =>
+      'Remote managed DSH is still running, but its start command differs or its launch log is missing. To protect shared use, it was not restarted. Check the settings, use Attach only, or explicitly choose Restart managed DSH in Edit host.';
+
+  @override
+  String get remoteErrAttachSettings => 'Enter a valid remote DSH port and launch token';
+
+  @override
+  String get remoteDshAttached => 'Connected to existing DSH';
+
+  @override
   String get remoteStartupSection => 'On launch';
 
   @override
@@ -14878,7 +14933,8 @@ class L10nEn extends L10n {
   String get remoteDshStarted => 'Started DSH on the host';
 
   @override
-  String get remoteErrDshTokenRejected => 'Remote DSH rejected the sign-in token';
+  String get remoteErrDshTokenRejected =>
+      'Remote DSH rejected the token; it was not restarted. Check the token, or explicitly restart the managed instance in Edit host.';
 
   @override
   String get remoteErrDshSignIn => 'Couldn’t sign in to remote DSH';

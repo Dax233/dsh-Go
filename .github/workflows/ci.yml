@@ -187,6 +187,21 @@ jobs:
           for pkg in packages/dsh_client packages/dsh_remote; do
             (cd "$pkg" && dart pub get --enforce-lockfile && dart analyze && dart test)
           done
+      - name: Install OpenSSH for transport interoperability tests
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends openssh-server
+          sudo mkdir -p /run/sshd
+      - name: SSH compression and OpenSSH interoperability
+        working-directory: packages/dartssh2
+        env:
+          SSH_COMPRESSION_TEST: 1
+          PUB_HOSTED_URL: https://pub.dev
+        run: |
+          dart pub get
+          dart analyze
+          dart test
+          dart test --platform chrome test/src/ssh_compression_web_test.dart
 
   runtime:
     name: Runtime and bridge
