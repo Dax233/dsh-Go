@@ -73,7 +73,7 @@ class InstaboxActivityKeeper {
   InstaboxActivityKeeper({
     this.leaseTtl = const Duration(seconds: 600),
     this.renewEvery = const Duration(seconds: 180),
-    this.workEvery = const Duration(minutes: 10),
+    this.workEvery = const Duration(minutes: 5),
     this.stateEvery = const Duration(minutes: 5),
     this.requestTimeout = const Duration(seconds: 20),
     String? taskId,
@@ -84,8 +84,10 @@ class InstaboxActivityKeeper {
   final Duration leaseTtl;
   final Duration renewEvery;
 
-  /// One cheap `true` counts as real work; the interval keeps the machine from
-  /// looking like a probe that only exists to stay alive.
+  /// The host grants one more 30-minute window when the previous window held at
+  /// least five working minutes, so six `true` commands per window (one every
+  /// five minutes) is the cheapest cadence that keeps earning it. Max-run is
+  /// still capped and nothing here extends the cap itself.
   final Duration workEvery;
   final Duration requestTimeout;
   final String taskId;
