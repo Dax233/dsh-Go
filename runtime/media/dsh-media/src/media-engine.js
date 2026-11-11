@@ -70,7 +70,9 @@ export async function generateMedia(request, context) {
     // An interrupted publication may have left an owned-looking file without its index.
     // A recovery attempt gets new names: never overwrite or delete uncertain leftovers.
     store = await prepareImageStore({ ...context, signal, rid, date: outputDate,
-      publicationSuffix: context.resumeTaskId ? randomUUID() : undefined });
+      publicationSuffix: context.resumeTaskId ? randomUUID() : undefined }).catch(error => {
+      throw error instanceof MediaError ? error : new MediaError('storage');
+    });
     const maximumItems = Array.from({ length: request.n ?? 1 }, (_, i) => ({
       path: store.outputPath(i + 1, request.model.kind === 'video' ? 'mp4' : 'webp'),
       mime: request.model.kind === 'video' ? 'video/mp4' : 'image/jpeg', width: 16384, height: 16384, bytes: context.limits.maxVideoBytes ?? context.limits.maxImageBytes,

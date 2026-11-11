@@ -104,6 +104,33 @@ test('image stage partial write failure preserves storage classification and sub
   assert.deepEqual(await readdir(outputDirectory), []);
   assert.deepEqual(await readdir(join(f.context.hostStateDir, 'works', f.context.admission.outputDate)), []);
 });
+test('store preparation failure rolls back staging and releases the unsent hold', async t => {
+  const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
+  f.context.admission = await admitGeneration(req, f.context);
+  const outputDirectory = join(f.workspace, 'generated', f.context.admission.outputDate);
+  const target = join(f.context.hostStateDir, 'works');
+  const originalMkdir = fs.mkdir;
+  let failures = 0, pendingNames;
+  const injected = t.mock.method(fs, 'mkdir', async function (path, options) {
+    if (path === target) {
+      pendingNames = await readdir(outputDirectory);
+      failures++;
+      throw Object.assign(new Error('controlled index directory ENOSPC'), { code: 'ENOSPC' });
+    }
+    return originalMkdir.call(this, path, options);
+  });
+  syncBuiltinESMExports();
+  try { await assert.rejects(generateMedia(req, f.context), { code: 'storage' }); }
+  finally { injected.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(failures, 1);
+  assert.equal(pendingNames.length, 1);
+  assert.ok(pendingNames[0].endsWith('.pending'));
+  assert.equal(f.wires.length, 0);
+  const ledger = await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot();
+  assert.equal(ledger.requests[0].state, 'released');
+  assert.deepEqual(await readdir(outputDirectory), []);
+  await assert.rejects(fs.stat(target), { code: 'ENOENT' });
+});
 for (const profile of ['openai-gpt-image', 'ark-image', 'ali-wan-image', 'silicon-image']) {
   test(`${profile}: real HTTP generation saves exact original and private index with budget`, async t => {
     const f = await fixture(t, profile), req = request(profile);
