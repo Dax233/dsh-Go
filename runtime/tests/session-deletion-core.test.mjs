@@ -346,3 +346,91 @@ test('a constructing claim does not gain a drain allowance', async () => {
     await assert.rejects(seam.acquireWriter('s1', directory('s1'), header), (e) => e.code === 'not-found');
   } }));
 });
+
+test('workspace stop can finish before deletion cleanup without losing per-session fences', { timeout: 30_000 }, async () => {
+  const events = [];
+  const providerErrors = [];
+  const sessionLeases = new Set();
+  const backend = storage();
+  let claimed = false;
+  backend.tracker.claimWrite = () => { claimed = true; };
+  backend.tracker.releaseClaim = () => { claimed = false; };
+  backend.ctx.emit = (event, id) => { events.push([event, id]); };
+  let startStop;
+  const archiveWrite = new Promise((resolve) => { startStop = resolve; });
+  let observedContention;
+  const contention = new Promise((resolve) => { observedContention = resolve; });
+  seam = createDeletionSeam(backend, {
+    parseGeneration, notFound,
+    acquire: async (dir, id) => {
+      if (id === 'dsh-go-mutations' && leases.has(dir)) observedContention();
+      const lease = await acquire(dir);
+      if (id === 's1') sessionLeases.add(dir);
+      return lease;
+    },
+  });
+
+  // Explicit peers for Workspace's serial queue and one Schedule stop provider.
+  // Register the unrelated archive before delete, outside its ALS context.
+  let operationTail = Promise.resolve();
+  const enqueue = (operation) => {
+    const pending = operationTail.then(operation);
+    operationTail = pending.then(() => {}, () => {});
+    return pending;
+  };
+  const archive = enqueue(async () => {
+    await archiveWrite;
+    try {
+      await seam.withMutation(async () => { events.push(['schedule-stop', 's2']); });
+    } catch (error) { providerErrors.push(error.name); }
+  });
+  const cleanupError = new Error('derived cleanup unavailable');
+  let failCleanup = true;
+  const cleanup = () => enqueue(async () => {
+    assert.equal(seam.pending.has('s1'), true);
+    assert.equal(claimed, true);
+    assert.equal(sessionLeases.size, 2);
+    for (const dir of sessionLeases) assert.equal(leases.has(dir), true);
+    assert.equal(seam.deleted('s1'), true);
+    assert.deepEqual(await readdir(directory('s1')), []);
+    assert.throws(() => seam.assertAdmit('s1'), (error) => error.code === 'not-found');
+    await assert.rejects(seam.acquireWriter('s1', directory('s1')), (error) => error.code === 'not-found');
+    await assert.rejects(seam.materialize({ id: 's1' }, async () => {}), (error) => error.code === 'not-found');
+    await assert.rejects(seam.delete('s1', hooks()), (error) => error.code === 'writer-held');
+    let wrote = false;
+    await seam.cacheWrite('s1', async () => { wrote = true; });
+    assert.equal(wrote, false);
+    events.push(['forget', 's1']);
+    if (failCleanup) throw cleanupError;
+  });
+  let taskReads = 0;
+  await assert.rejects(seam.delete('s1', {
+    ...hooks(),
+    inspectTasks: async (id) => {
+      assert.equal(id, 's1');
+      // The tree-wide preflight runs before deleteOne takes the mutation lease.
+      if (++taskReads === 1) return false;
+      startStop();
+      await contention;
+      return false;
+    },
+    cleanup,
+  }), (error) => error === cleanupError);
+  await archive;
+  assert.equal(taskReads, 2);
+  assert.equal(seam.deleted('s1'), true);
+  assert.equal(seam.pending.has('s1'), false);
+  assert.equal(claimed, false);
+  assert.equal(leases.size, 0);
+  assert.equal(events.some(([event]) => event === 'dsh-go/session-deleted'), false);
+
+  failCleanup = false;
+  await seam.delete('s1', { ...hooks(), cleanup });
+  assert.equal(seam.pending.has('s1'), false);
+  assert.equal(claimed, false);
+  assert.equal(leases.size, 0);
+  assert.deepEqual(providerErrors, [], 'an unrelated archive stop must not exhaust the mutation lease retries');
+  assert.deepEqual(events, [
+    ['schedule-stop', 's2'], ['forget', 's1'], ['forget', 's1'], ['dsh-go/session-deleted', 's1'],
+  ]);
+});
