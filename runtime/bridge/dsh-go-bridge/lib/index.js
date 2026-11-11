@@ -4,6 +4,7 @@
 //                               slot occupancy report and `routeGuard`, measured on every
 //                               read (see probeGuard)
 //   POST /dsh-go/v1/occupancy   the browser half reports the live slot composition of its page
+//   GET  /dsh-go/v1/capabilities protocol major and implemented route families (not permissions)
 //
 //   /dsh-go/v1/{contributions,views,invoke,assets} + WS /dsh-go/v1/stream
 //                               native plugin protocol v1 (docs/design/native-plugins-protocol.md),
@@ -40,6 +41,10 @@ const PREFIX = "/dsh-go";
 const CANARY = "/dsh-go-guard-canary";
 const GUARD_PROBE_TTL_MS = 10000;
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const CAPABILITIES = [
+  "inventory", "occupancy", "native-ui", "native-stream", "native-media", "native-files",
+  "plugin-config", "session-deletion", "companion", "companion-prompt-context", "companion-recall", "companion-signals",
+];
 const ORIGINAL = Symbol.for("cordis.original");
 const GUARDED = Symbol.for("dsh-go.guarded");
 const DEFAULT_OPEN_ROUTES = ["exact /connect", "exact /oauth/callback"];
@@ -409,6 +414,10 @@ export function apply(ctx, config) {
       if (await pluginConfig.handle(req, res, path)) return;
       if (await companionRoutes.handle(req, res, path)) return;
       if (path.startsWith(`${PREFIX}/v1/`) && await nativeRoutes.handle(req, res, path, url)) return;
+      if (path === `${PREFIX}/v1/capabilities`) {
+        if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });
+        return send(res, 200, { v: 1, bridge: VERSION, capabilities: CAPABILITIES });
+      }
       if (path === `${PREFIX}/v1/inventory`) {
         if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });
         return send(res, 200, await inventory());

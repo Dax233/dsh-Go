@@ -1,11 +1,12 @@
 // Real bridge HTTP dispatch with modeled Cordis/Connection services; no DSH prefix.
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {readFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {test} from 'node:test';
 import {apply} from '../bridge/dsh-go-bridge/lib/index.js';
 
-async function fixture(t, {connection = true, guardRoutes = false} = {}) {
+async function fixture(t, {connection = true, guardRoutes = false, rejection} = {}) {
   const dispose = [];
   const webServer = {
     exact: new Map(), prefixes: new Map(), upgrades: new Map(),
@@ -20,7 +21,7 @@ async function fixture(t, {connection = true, guardRoutes = false} = {}) {
   webServer.register({kind: 'exact', path: '/fixture-route', handler(_req, res) { res.end('fixture'); }});
   const ctx = {
     webServer, logger: {warn() {}}, on() {}, provide() {},
-    get: name => name === 'connection' && connection ? {requestRejection: () => undefined} : undefined,
+    get: name => name === 'connection' && connection ? {requestRejection: () => rejection} : undefined,
     effect(fn) { const stop = fn(); if (typeof stop === 'function') dispose.push(stop); },
     inject(_deps, fn) { fn(ctx); },
   };
@@ -76,6 +77,49 @@ test('bridge business errors share a nested shape and retain HTTP status', async
   assert.equal(accepted.status, 204);
   assert.equal(accepted.text, '');
 });
+
+test('capabilities advertise implemented families independently of service availability', async t => {
+  const request = await fixture(t);
+  const response = await request('/dsh-go/v1/capabilities');
+  const version = JSON.parse(readFileSync(new URL('../bridge/dsh-go-bridge/package.json', import.meta.url))).version;
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, {v: 1, bridge: version, capabilities: [
+    'inventory', 'occupancy', 'native-ui', 'native-stream', 'native-media', 'native-files',
+    'plugin-config', 'session-deletion', 'companion', 'companion-prompt-context', 'companion-recall', 'companion-signals',
+  ]});
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  const deletion = await request('/dsh-go/v1/sessions/deletion');
+  assert.equal(deletion.status, 200);
+  assert.equal(deletion.body.supported, false, 'implemented route does not grant deletion authority');
+  const wrongMethod = await request('/dsh-go/v1/capabilities', {method: 'POST'});
+  assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.body.error.code, 'method-not-allowed');
+});
+
+test('capabilities HEAD returns GET metadata without a response body', async t => {
+  const request = await fixture(t);
+  const get = await request('/dsh-go/v1/capabilities');
+  const head = await request('/dsh-go/v1/capabilities', {method: 'HEAD'});
+  assert.equal(head.status, 200);
+  assert.equal(head.text, '');
+  for (const name of ['content-type', 'content-length', 'cache-control', 'x-content-type-options']) {
+    assert.equal(head.headers.get(name), get.headers.get(name), name);
+  }
+});
+
+for (const guardRoutes of [false, true]) for (const status of [401, 403, 503]) {
+  test(`capabilities respect Connection verdict ${status}, fallback=${guardRoutes}`, async t => {
+    const request = await fixture(t, {connection: status !== 503, rejection: status, guardRoutes});
+    for (const method of ['GET', 'HEAD']) {
+      const response = await request('/dsh-go/v1/capabilities', {method});
+      assert.equal(response.status, status);
+      assert.equal(response.text.includes('capabilities'), false);
+      if (method === 'HEAD') assert.equal(response.text, '');
+      if (guardRoutes) assert.equal(response.headers.get('x-dsh-go-guard'), 'reject');
+    }
+  });
+}
 
 for (const guardRoutes of [false, true]) test(`missing Connection preserves route-specific failures, fallback=${guardRoutes}`, async t => {
   const request = await fixture(t, {connection: false, guardRoutes});
