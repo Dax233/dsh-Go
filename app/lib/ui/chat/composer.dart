@@ -44,6 +44,7 @@ class Composer extends StatefulWidget {
     required this.onSend,
     required this.onStop,
     this.focusNode,
+    this.groupId = EditableText,
     this.busy = false,
     this.stopping = false,
     this.sessionReady = true,
@@ -65,6 +66,9 @@ class Composer extends StatefulWidget {
 
   final TextEditingController controller;
   final FocusNode? focusNode;
+
+  /// The text field and its attached controls share this tap region.
+  final Object groupId;
 
   /// 已连上 DSH。没连上时可以先打字,但发不出去。
   final bool connected;
@@ -449,6 +453,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
                 skipTraversal: true,
                 onKeyEvent: widget.onKeyEvent,
                 child: TextField(
+                  groupId: widget.groupId,
                   controller: widget.controller,
                   focusNode: widget.focusNode,
                   contentInsertionConfiguration: switch (widget.onContentInserted) {
