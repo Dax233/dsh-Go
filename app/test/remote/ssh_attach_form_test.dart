@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:dsh_app/remote/secret_store.dart';
+import 'package:dsh_app/remote/link_status.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/ui/remote/ssh_host_form.dart';
+import 'package:dsh_app/ui/remote/link_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,6 +82,13 @@ void main() {
     expect(server.connects, isEmpty);
 
     await tester.tap(find.widgetWithText(FilledButton, '测试连接'));
+    await tester.pump();
+    expect(server.connects, hasLength(1), reason: 'normal test reached the fake SSH transport');
+    expect(server.last.scripts, hasLength(2), reason: 'normal test completed probe and start');
+    expect(server.last.isClosed, isTrue, reason: 'nodsh terminated the SSH connection');
+    final progress = tester.widget<LinkProgressCard>(find.byType(LinkProgressCard));
+    expect(progress.status.phase, HostLinkPhase.failed, reason: 'last step: ${progress.status.step}');
+    expect(find.byType(CircularProgressIndicator), findsNothing, reason: 'terminal test stopped all progress indicators');
     await tester.pumpAndSettle();
     expect(server.last.scripts.any((script) => script.contains(r'kill "$P"')), isFalse);
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '测试连接')).onPressed, isNotNull);
