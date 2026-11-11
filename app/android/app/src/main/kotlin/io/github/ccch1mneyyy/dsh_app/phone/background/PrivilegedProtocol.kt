@@ -24,6 +24,7 @@ object Proto {
     const val RECOVERY_UID = "recoveryUid"
     const val RECOVERY_PID_NS_DEV = "recoveryPidNsDev"
     const val RECOVERY_PID_NS_INO = "recoveryPidNsIno"
+    const val RECOVERY_PID_NS_AVAILABLE = "recoveryPidNsAvailable"
     const val ALLOCATION_PURPOSE = "allocationPurpose"
     const val RECOVERY_KIND = "recoveryKind"
     const val OP_ALLOCATE = "allocate"

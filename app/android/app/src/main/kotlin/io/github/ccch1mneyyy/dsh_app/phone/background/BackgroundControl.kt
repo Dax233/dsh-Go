@@ -325,7 +325,7 @@ class BackgroundControl private constructor(context: Context) {
         val cap = peer.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) }) {
             check(mayStart()) { "selectionChanged" }
         }
-        val birth = if ((cap.get(Proto.OK) as? Boolean) == true) BackgroundRecoveryProtocol.birth(cap::get) else null
+        val birth = if ((cap.get(Proto.OK) as? Boolean) == true) BackgroundRecoveryProtocol.birth(cap::get, cap::containsKey) else null
         if (birth == null || saved.birth.peer == birth.peer || !mayStart()) return false
         val reply = peer.execute(BackgroundRecoveryProtocol.check(saved)) { check(mayStart()) { "selectionChanged" } }
         return BackgroundRecoveryProtocol.recovered(saved, reply::get, reply::containsKey)
@@ -366,7 +366,7 @@ class BackgroundControl private constructor(context: Context) {
                 check(mayStart()) { "selectionChanged" }
             }
             if ((cap.get(Proto.OK) as? Boolean) != true) return "connectionRequired"
-            val birth = BackgroundRecoveryProtocol.birth(cap::get) ?: return "recoveryUnsupported"
+            val birth = BackgroundRecoveryProtocol.birth(cap::get, cap::containsKey) ?: return "recoveryUnsupported"
             for ((oldPeer, group) in originals.groupBy { it.birth.peer }) {
                 if (!mayStart()) return "selectionChanged"
                 if (birth.peer == oldPeer) {
@@ -1190,7 +1190,7 @@ class BackgroundControl private constructor(context: Context) {
                     reason = failed(R.string.background_gate_peer_unsupported, peer)
                     return@call
                 }
-                val birth = BackgroundRecoveryProtocol.birth(cap::get)
+                val birth = BackgroundRecoveryProtocol.birth(cap::get, cap::containsKey)
                 if (birth == null) { reason = failed(R.string.background_gate_peer_unsupported, peer); return@call }
                 if (!call.resource.begin(birth)) { reason = AppStrings.get(app, R.string.background_resource_recovery_pending); return@call }
                 val allocation = OwnerScopeProtocol.first(call.io, peer,

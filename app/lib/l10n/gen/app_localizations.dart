@@ -2936,11 +2936,491 @@ abstract class L10n {
   /// **'{label}，/{name}'**
   String activitySlashCommandSemantics(String label, String name);
 
+  /// No description provided for @activityQuotaTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅额度'**
+  String get activityQuotaTitle;
+
+  /// No description provided for @activityQuotaRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新额度'**
+  String get activityQuotaRefresh;
+
+  /// No description provided for @activityQuotaPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅没有权限查询额度'**
+  String get activityQuotaPermissionDenied;
+
+  /// No description provided for @activityQuotaAuthError.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录已过期或无权查询，请检查订阅登录'**
+  String get activityQuotaAuthError;
+
+  /// No description provided for @activityQuotaNetworkError.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络连接失败，请稍后重试'**
+  String get activityQuotaNetworkError;
+
+  /// No description provided for @activityQuotaRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询过于频繁，请稍后重试'**
+  String get activityQuotaRateLimited;
+
+  /// No description provided for @activityQuotaLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在查询订阅额度…'**
+  String get activityQuotaLoading;
+
+  /// No description provided for @activityQuotaUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法查询订阅额度，请稍后重试'**
+  String get activityQuotaUnavailable;
+
+  /// No description provided for @activityQuotaUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此主机暂不支持查询订阅额度'**
+  String get activityQuotaUnsupported;
+
+  /// No description provided for @activityQuotaSignedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅未登录'**
+  String get activityQuotaSignedOut;
+
+  /// No description provided for @activityQuotaPrimary.
+  ///
+  /// In zh, this message translates to:
+  /// **'主要额度'**
+  String get activityQuotaPrimary;
+
+  /// No description provided for @activityQuotaSecondary.
+  ///
+  /// In zh, this message translates to:
+  /// **'次要额度'**
+  String get activityQuotaSecondary;
+
+  /// No description provided for @activityQuotaFiveHour.
+  ///
+  /// In zh, this message translates to:
+  /// **'5 小时'**
+  String get activityQuotaFiveHour;
+
+  /// No description provided for @activityQuotaSevenDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天'**
+  String get activityQuotaSevenDay;
+
+  /// No description provided for @activityQuotaSevenDaySonnet.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天 · Sonnet'**
+  String get activityQuotaSevenDaySonnet;
+
+  /// No description provided for @activityQuotaSevenDayOpus.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天 · Opus'**
+  String get activityQuotaSevenDayOpus;
+
+  /// No description provided for @activityQuotaUsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已使用 {value}'**
+  String activityQuotaUsed(String value);
+
+  /// No description provided for @activityQuotaReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置时间：{time}'**
+  String activityQuotaReset(String time);
+
   /// No description provided for @activityToolListSeparator.
   ///
   /// In zh, this message translates to:
   /// **'、'**
   String get activityToolListSeparator;
+
+  /// No description provided for @androidShellTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'Android Shell'**
+  String get androidShellTitle;
+
+  /// No description provided for @androidShellEntryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立的系统命令通道，默认关闭'**
+  String get androidShellEntryHint;
+
+  /// No description provided for @androidShellSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过 Shizuku 或自连 ADB 在这台手机上执行 Android 系统命令，不是 Ubuntu 里的 bash。'**
+  String get androidShellSubtitle;
+
+  /// No description provided for @androidShellEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许 Android Shell'**
+  String get androidShellEnable;
+
+  /// No description provided for @androidShellEnableHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立开关，不随不打扰模式或屏幕免确认设置开启。'**
+  String get androidShellEnableHint;
+
+  /// No description provided for @androidShellConfirmationNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'每条命令都要经过手机上的原生确认；屏幕操控的「免确认」不适用于这里。Shell 权限范围与屏幕操控不同，不能依靠应用名单拦截所有命令。'**
+  String get androidShellConfirmationNote;
+
+  /// No description provided for @androidShellMasterOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'先在上一页打开「手机操控」，才能启用 Android Shell。你仍可在这里查看授权和配对引导。'**
+  String get androidShellMasterOff;
+
+  /// No description provided for @androidShellRiskTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许执行 Android 系统命令？'**
+  String get androidShellRiskTitle;
+
+  /// No description provided for @androidShellRiskBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'命令使用所选通道的实际 UID，可能修改应用、系统设置和共享文件。它不受屏幕应用名单完整保护；每条命令仍会单独请求原生确认。只允许你理解并信任的命令。'**
+  String get androidShellRiskBody;
+
+  /// No description provided for @androidShellRiskAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许 Android Shell'**
+  String get androidShellRiskAction;
+
+  /// No description provided for @androidShellBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'执行通道'**
+  String get androidShellBackend;
+
+  /// No description provided for @androidShellShizukuHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用已安装并启动的 Shizuku，需单独授权；不需要 Android 14、无障碍或不打扰模式。'**
+  String get androidShellShizukuHint;
+
+  /// No description provided for @androidShellAdb.
+  ///
+  /// In zh, this message translates to:
+  /// **'自连 ADB'**
+  String get androidShellAdb;
+
+  /// No description provided for @androidShellAdbHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接本机的无线调试，复用 App 的私有 ADB 身份；不会连接其他设备。'**
+  String get androidShellAdbHint;
+
+  /// No description provided for @androidShellInstalled.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shizuku 已安装'**
+  String get androidShellInstalled;
+
+  /// No description provided for @androidShellRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shizuku 正在运行'**
+  String get androidShellRunning;
+
+  /// No description provided for @androidShellGranted.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shizuku 已授权'**
+  String get androidShellGranted;
+
+  /// No description provided for @androidShellPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'ADB 已配对'**
+  String get androidShellPaired;
+
+  /// No description provided for @androidShellConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'ADB 已连接'**
+  String get androidShellConnected;
+
+  /// No description provided for @androidShellAuthorize.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请 Shizuku 授权'**
+  String get androidShellAuthorize;
+
+  /// No description provided for @androidShellAuthorizeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'先安装并启动 Shizuku，再点此按钮允许 dsh-Go。打开本页或刷新不会申请授权。'**
+  String get androidShellAuthorizeHint;
+
+  /// No description provided for @androidShellStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'执行状态'**
+  String get androidShellStatus;
+
+  /// No description provided for @androidShellUid.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际 UID'**
+  String get androidShellUid;
+
+  /// No description provided for @androidShellUidUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未报告'**
+  String get androidShellUidUnknown;
+
+  /// No description provided for @androidShellRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新状态'**
+  String get androidShellRefresh;
+
+  /// No description provided for @androidShellStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止 Android Shell'**
+  String get androidShellStop;
+
+  /// No description provided for @androidShellStopHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消当前命令并停止独立 Shell 执行，不关闭屏幕操控。'**
+  String get androidShellStopHint;
+
+  /// No description provided for @androidShellPairingGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'在开发者选项中打开「无线调试」，选择「使用配对码配对设备」。配对码只在本次配对中使用，不保存、不写入日志。'**
+  String get androidShellPairingGuide;
+
+  /// No description provided for @androidShellStartPairing.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开配对引导'**
+  String get androidShellStartPairing;
+
+  /// No description provided for @androidShellPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入配对码'**
+  String get androidShellPair;
+
+  /// No description provided for @androidShellPairSubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对'**
+  String get androidShellPairSubmit;
+
+  /// No description provided for @androidShellPairCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'六位配对码'**
+  String get androidShellPairCode;
+
+  /// No description provided for @androidShellPairPort.
+  ///
+  /// In zh, this message translates to:
+  /// **'配对端口（可选）'**
+  String get androidShellPairPort;
+
+  /// No description provided for @androidShellPairPortHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填配对弹窗里的端口，不是无线调试主页的连接端口；留空时尝试自动发现。'**
+  String get androidShellPairPortHint;
+
+  /// No description provided for @androidShellConnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接 ADB'**
+  String get androidShellConnect;
+
+  /// No description provided for @androidShellConnectChannel.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接所选通道'**
+  String get androidShellConnectChannel;
+
+  /// No description provided for @androidShellConnectPort.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接端口（可选）'**
+  String get androidShellConnectPort;
+
+  /// No description provided for @androidShellConnectPortHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填无线调试主页「IP 地址和端口」中的端口，不是配对端口。只连接本机；留空时尝试自动发现。'**
+  String get androidShellConnectPortHint;
+
+  /// No description provided for @androidShellErrorCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'错误码：{code}'**
+  String androidShellErrorCode(String code);
+
+  /// No description provided for @androidShellLimits.
+  ///
+  /// In zh, this message translates to:
+  /// **'单次最长 {seconds} 秒，输出最多 {bytes} 字节'**
+  String androidShellLimits(int seconds, int bytes);
+
+  /// No description provided for @androidShellErrorDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'Android Shell 已关闭。'**
+  String get androidShellErrorDisabled;
+
+  /// No description provided for @androidShellErrorNotConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选通道尚未连接。'**
+  String get androidShellErrorNotConnected;
+
+  /// No description provided for @androidShellErrorShizukuMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先安装 Shizuku。'**
+  String get androidShellErrorShizukuMissing;
+
+  /// No description provided for @androidShellErrorShizukuStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先启动 Shizuku，再刷新状态。'**
+  String get androidShellErrorShizukuStopped;
+
+  /// No description provided for @androidShellErrorPermissionRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要你在 Shizuku 中明确授权。'**
+  String get androidShellErrorPermissionRequired;
+
+  /// No description provided for @androidShellErrorAdbNotPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先完成本机无线调试配对，再连接 ADB。'**
+  String get androidShellErrorAdbNotPaired;
+
+  /// No description provided for @androidShellErrorConnectFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接未成功。请检查所选通道和当前无线调试连接端口，再重试。'**
+  String get androidShellErrorConnectFailed;
+
+  /// No description provided for @androidShellErrorIdentityChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道身份已改变，请停止后重新授权或连接。'**
+  String get androidShellErrorIdentityChanged;
+
+  /// No description provided for @androidShellErrorBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'另一项操作尚未结束，请稍后重试，或先停止 Android Shell。'**
+  String get androidShellErrorBusy;
+
+  /// No description provided for @androidShellErrorInvalidArguments.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入无效。配对码须为六位数字，端口须在 1–65535 之间。'**
+  String get androidShellErrorInvalidArguments;
+
+  /// No description provided for @androidShellErrorCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作已取消。'**
+  String get androidShellErrorCancelled;
+
+  /// No description provided for @androidShellErrorTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作超时。先核实结果；已派发的命令不要自动重试。'**
+  String get androidShellErrorTimeout;
+
+  /// No description provided for @androidShellErrorConfirmationDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未获准执行命令。'**
+  String get androidShellErrorConfirmationDenied;
+
+  /// No description provided for @androidShellErrorCleanupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能完成停止清理。请重试停止，暂勿执行新命令。'**
+  String get androidShellErrorCleanupFailed;
+
+  /// No description provided for @androidShellErrorLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机已锁定，请解锁后重试。'**
+  String get androidShellErrorLocked;
+
+  /// No description provided for @androidShellErrorConfirmationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前无法显示原生确认，请回到 App 并检查通知权限。'**
+  String get androidShellErrorConfirmationUnavailable;
+
+  /// No description provided for @androidShellErrorTransportLost.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道已断开。先核实结果；已派发的命令不要自动重试，需要时重新连接。'**
+  String get androidShellErrorTransportLost;
+
+  /// No description provided for @androidShellErrorProtocolMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前原生模块不支持此 Shell 协议，请更新 App。'**
+  String get androidShellErrorProtocolMismatch;
+
+  /// No description provided for @androidShellErrorNativeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此构建的 Android Shell 原生模块不可用。'**
+  String get androidShellErrorNativeUnavailable;
+
+  /// No description provided for @androidShellErrorInvalidResponse.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有收到有效的原生状态，请刷新或更新 App。'**
+  String get androidShellErrorInvalidResponse;
+
+  /// No description provided for @androidShellErrorStopFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未确认已停止，请刷新状态并重试停止。'**
+  String get androidShellErrorStopFailed;
+
+  /// No description provided for @androidShellErrorUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能确认操作结果。先核实结果；已派发的命令不要自动重试。'**
+  String get androidShellErrorUnknown;
 
   /// No description provided for @botsFolderGone.
   ///
@@ -7571,7 +8051,7 @@ abstract class L10n {
   /// No description provided for @chatEditResendHint.
   ///
   /// In zh, this message translates to:
-  /// **'在新对话中改写，原对话不变'**
+  /// **'在新对话中改写，图片和文件需重新添加；原对话不变'**
   String get chatEditResendHint;
 
   /// No description provided for @chatSaveToPhotos.
@@ -28879,6 +29359,174 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'左滑,快捷入口,手势,滑动,目录,自定义目录,快捷,常用入口'**
   String get searchKwQuickPanel;
+
+  /// No description provided for @selfUpdateTransport.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装路线'**
+  String get selfUpdateTransport;
+
+  /// No description provided for @selfUpdateSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'正常安装（默认）'**
+  String get selfUpdateSystem;
+
+  /// No description provided for @selfUpdateShizuku.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shizuku'**
+  String get selfUpdateShizuku;
+
+  /// No description provided for @selfUpdateAdb.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机 ADB'**
+  String get selfUpdateAdb;
+
+  /// No description provided for @selfUpdateSecurityNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'各路线仍受 APK 签名、Android 与厂商安全策略约束，不保证跳过扫描。不支持 root，也不会在失败后自动切换路线。'**
+  String get selfUpdateSecurityNote;
+
+  /// No description provided for @selfUpdateNativeConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'只安装已校验的本应用更新；稍后仍需原生安装确认。授权 Shizuku 不等于同意安装，不需要开启手机操控或 AI Shell。'**
+  String get selfUpdateNativeConfirm;
+
+  /// No description provided for @selfUpdateAuthorize.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请更新用 Shizuku 授权'**
+  String get selfUpdateAuthorize;
+
+  /// No description provided for @selfUpdateRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新通道状态'**
+  String get selfUpdateRefresh;
+
+  /// No description provided for @selfUpdateShizukuStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'Shizuku：{status}'**
+  String selfUpdateShizukuStatus(String status);
+
+  /// No description provided for @selfUpdateReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已授权'**
+  String get selfUpdateReady;
+
+  /// No description provided for @selfUpdatePermissionRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先安装、启动并授权 Shizuku'**
+  String get selfUpdatePermissionRequired;
+
+  /// No description provided for @selfUpdateUnsupportedIdentity.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅支持 shell UID 2000；root 与其他身份不受支持'**
+  String get selfUpdateUnsupportedIdentity;
+
+  /// No description provided for @selfUpdateAdbHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用已配对的本机无线调试身份；点击安装才连接。未配对时可打开现有 Android Shell 配对页，无需开启手机操控或 AI Shell。配对码和端口不保存、不写入日志。'**
+  String get selfUpdateAdbHint;
+
+  /// No description provided for @selfUpdatePairing.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 Android Shell 配对引导'**
+  String get selfUpdatePairing;
+
+  /// No description provided for @selfUpdateAdbPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机 ADB 已配对'**
+  String get selfUpdateAdbPaired;
+
+  /// No description provided for @selfUpdateAdbNotPaired.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机 ADB 尚未配对'**
+  String get selfUpdateAdbNotPaired;
+
+  /// No description provided for @selfUpdatePendingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在核实安装结果'**
+  String get selfUpdatePendingTitle;
+
+  /// No description provided for @selfUpdatePendingMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装请求可能仍在处理。不会自动重试或切换路线；请查看系统提示，再读取实际安装状态。'**
+  String get selfUpdatePendingMessage;
+
+  /// No description provided for @selfUpdateUnknownTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装结果未知'**
+  String get selfUpdateUnknownTitle;
+
+  /// No description provided for @selfUpdateUnknownMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'超时、失联或进程退出不能证明失败。不会自动重试或切换路线；请先读取实际安装状态。'**
+  String get selfUpdateUnknownMessage;
+
+  /// No description provided for @selfUpdateReadResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取实际安装状态'**
+  String get selfUpdateReadResult;
+
+  /// No description provided for @selfUpdateVerifiedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'已核实当前安装版本'**
+  String get selfUpdateVerifiedTitle;
+
+  /// No description provided for @selfUpdateVerifiedVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本 {version}（构建 {code}），已由原生层核验。'**
+  String selfUpdateVerifiedVersion(String version, int code);
+
+  /// No description provided for @selfUpdateFailedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装未完成'**
+  String get selfUpdateFailedTitle;
+
+  /// No description provided for @selfUpdateFailedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生层报告本次安装失败。请检查系统提示和错误码，再明确选择安装路线。'**
+  String get selfUpdateFailedMessage;
+
+  /// No description provided for @selfUpdateErrorCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'错误码：{code}'**
+  String selfUpdateErrorCode(String code);
+
+  /// No description provided for @selfUpdateEndWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束本次等待'**
+  String get selfUpdateEndWaiting;
+
+  /// No description provided for @selfUpdateEndWaitingNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有确认系统已不在安装时才结束等待。清除本次记录不等于取消系统安装；不会自动重试或切换路线，仍需再次原生确认。'**
+  String get selfUpdateEndWaitingNote;
 
   /// No description provided for @shellDeletePermanently.
   ///

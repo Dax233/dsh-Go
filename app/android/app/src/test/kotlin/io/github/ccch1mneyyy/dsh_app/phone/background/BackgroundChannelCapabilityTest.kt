@@ -17,18 +17,37 @@ class BackgroundChannelCapabilityTest {
 
     @Test fun completeStrictPeerIsSerialUntilItsActualMuxHandshakeCompletes() {
         val cap = probe()
-        assertEquals(1, backgroundRequestLimit(cap::get, false))
-        assertEquals(3, backgroundRequestLimit(cap::get, true))
+        assertEquals(1, backgroundRequestLimit(cap::get, cap::containsKey, false))
+        assertEquals(3, backgroundRequestLimit(cap::get, cap::containsKey, true))
         // Features of other consumers are not invented prerequisites for ordinary BG tasks.
         assertFalse(cap.containsKey(Proto.PREVIEW_VERSION))
         assertFalse(cap.containsKey(Proto.VIEWPORT_VERSION))
     }
 
+    @Test fun explicitNamespaceUnavailableAdmitsOrdinaryChannelWithoutClaimingRecoveryEvidence() {
+        val cap = probe().apply {
+            put(Proto.RECOVERY_PID_NS_AVAILABLE, false)
+            put(Proto.RECOVERY_PID_NS_DEV, 0L); put(Proto.RECOVERY_PID_NS_INO, 0L)
+        }
+        assertEquals(1, backgroundRequestLimit(cap::get, cap::containsKey, false))
+        assertEquals(3, backgroundRequestLimit(cap::get, cap::containsKey, true))
+        for ((key, value) in listOf(
+            Proto.RECOVERY_PID_NS_AVAILABLE to true, Proto.RECOVERY_PID_NS_AVAILABLE to null,
+            Proto.RECOVERY_PID_NS_AVAILABLE to 0, Proto.RECOVERY_PID_NS_AVAILABLE to "false",
+            Proto.RECOVERY_PID_NS_DEV to 7L, Proto.RECOVERY_PID_NS_INO to 9L,
+        )) {
+            val bad = cap + (key to value)
+            assertEquals(0, backgroundRequestLimit(bad::get, bad::containsKey, true))
+        }
+        cap.remove(Proto.RECOVERY_PID_NS_AVAILABLE)
+        assertEquals(0, backgroundRequestLimit(cap::get, cap::containsKey, true))
+    }
+
     @Test fun transportCapacityCannotMakeAnOldOrIncompletePeerOperational() {
         for (key in probe().keys) {
             val cap = probe().apply { remove(key) }
-            assertEquals(key, 0, backgroundRequestLimit(cap::get, false))
-            assertEquals(key, 0, backgroundRequestLimit(cap::get, true))
+            assertEquals(key, 0, backgroundRequestLimit(cap::get, cap::containsKey, false))
+            assertEquals(key, 0, backgroundRequestLimit(cap::get, cap::containsKey, true))
         }
     }
 
@@ -40,7 +59,7 @@ class BackgroundChannelCapabilityTest {
             Proto.RECOVERY_PEER to "unknown", Proto.RECOVERY_PID_NS_INO to 0L,
         )) {
             val cap = probe().apply { put(key, value) }
-            assertEquals(key, 0, backgroundRequestLimit(cap::get, true))
+            assertEquals(key, 0, backgroundRequestLimit(cap::get, cap::containsKey, true))
         }
     }
 }

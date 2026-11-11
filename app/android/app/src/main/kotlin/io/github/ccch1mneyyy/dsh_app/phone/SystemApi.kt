@@ -54,6 +54,15 @@ internal sealed interface SystemResolution {
 
 /** Used by the Android preparation path and its final filter recheck. Null means missing evidence. */
 internal object SystemHandlers {
+    /** ActivityInfo.enabled may still be the manifest flag for a runtime-enabled launcher alias. */
+    fun componentEnabled(manifestEnabled: Boolean, readSetting: () -> Int): Boolean = try {
+        when (readSetting()) {
+            0 -> manifestEnabled // PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+            1 -> true // PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else -> false // Explicitly disabled or unknown: never fall back to the manifest.
+        }
+    } catch (_: Exception) { false }
+
     fun valid(candidates: List<SystemHandler>, packageName: String?): Boolean =
         candidates.isNotEmpty() && candidates.all {
             it.packageName.isNotBlank() && it.component.isNotBlank() && it.uid >= 0 &&
@@ -318,6 +327,11 @@ class Args(private val map: Map<String, Any?>) {
     fun strictBool(key: String) = map[key] as? Boolean
     /** Focus input preserves the actual JSON string; existing type coercion is unchanged. */
     fun strictText(key: String) = map[key] as? String
+    fun strictInt(key: String): Int? = when (val value = map[key]) {
+        is Int -> value
+        is Long -> value.toInt().takeIf { it.toLong() == value }
+        else -> null
+    }
     fun onlyKeys(vararg keys: String) = map.keys.all { it in keys }
 
     fun str(key: String): String? = when (val v = map[key]) {

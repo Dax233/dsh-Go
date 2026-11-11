@@ -58,7 +58,7 @@ class AdbChannel(private val stream: AdbStream) : PrivilegedChannel {
             val ack = execute(MuxProtocol.optIn(expected))
             MuxProtocol.acknowledge(ack, expected)
         }
-        val limit = backgroundRequestLimit(probe::get, expected != null)
+        val limit = backgroundRequestLimit(probe::get, probe::containsKey, expected != null)
         synchronized(setup) {
             check(!closed)
             if (expected != null) {
@@ -91,10 +91,10 @@ class AdbChannel(private val stream: AdbStream) : PrivilegedChannel {
 /** All three starters consume their existing PROBE, after a valid ACK when mux is present.
  * Dynamic selection, gate, viewport and resource-recovery admission remain controller facts.
  */
-internal fun backgroundRequestLimit(get: (String) -> Any?, multiplexed: Boolean): Int {
+internal fun backgroundRequestLimit(get: (String) -> Any?, contains: (String) -> Boolean, multiplexed: Boolean): Int {
     if (get(Proto.OK) != true || (get(Proto.RELEASE_RECEIPT) as? Int) != 1 ||
         !OwnerScopeProtocol.supported(get(Proto.OWNER_SCOPE_VERSION), get(Proto.SCOPE_LIMIT)) ||
         !TargetIdentity.supported(get(Proto.TARGET_IDENTITY_VERSION)) ||
-        BackgroundRecoveryProtocol.birth(get) == null) return 0
+        BackgroundRecoveryProtocol.birth(get, contains) == null) return 0
     return if (multiplexed) 3 else 1
 }

@@ -524,7 +524,7 @@
   "chatEditAndResend": "编辑后重发",
   "chatRegenerateHint": "在新对话中重新生成，原对话不变",
   "chatBranchHint": "在新对话中继续，原对话不变",
-  "chatEditResendHint": "在新对话中改写，原对话不变",
+  "chatEditResendHint": "在新对话中改写，图片和文件需重新添加；原对话不变",
   "chatSaveToPhotos": "保存到相册",
   "chatCopyAll": "全部复制",
   "chatRequestRetrying": "请求失败，正在重试",

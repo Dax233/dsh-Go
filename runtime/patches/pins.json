@@ -1488,6 +1488,14 @@
         }
       }
     },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
+          "after": "7c48bc2b02595c987149f0187239a2599eccbc73f876fe30c722495a8ad36523",
+          "before": "5661abb18af697db2b18b6cc0cef700af40bf2289a68da73b0b3c817f13bca9c"
+        }
+      }
+    },
     "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-entry-lifecycle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js": {

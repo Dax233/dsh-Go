@@ -366,6 +366,9 @@ class _UpToDate extends AppUpdateController {
   AppUpdateState build() => const AppUpdateState(loaded: true, current: AppVersion(0, 9, 7));
 
   @override
+  Future<void> get ready async {}
+
+  @override
   Future<UpdateCheckPhase> check() async {
     checks++;
     return UpdateCheckPhase.upToDate;
