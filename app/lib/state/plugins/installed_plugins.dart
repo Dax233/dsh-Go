@@ -300,9 +300,22 @@ class InstalledPluginsController extends AsyncNotifier<List<PluginBundle>?> {
       }
     });
     Timer? debounce;
+    Future<void> refreshChanged() async {
+      final before = _loadSeq;
+      if (state.isLoading) {
+        try {
+          await future;
+        } on Object {
+          // The failed initial read is already in state. This later Host event
+          // still requires a fresh read, just as it does after an old success.
+        }
+      }
+      if (r.mounted && before == _loadSeq) await refresh();
+    }
+
     void scheduleRefresh() {
       debounce?.cancel();
-      debounce = Timer(const Duration(milliseconds: 300), () => unawaited(refresh().catchError((Object _) {})));
+      debounce = Timer(const Duration(milliseconds: 300), () => unawaited(refreshChanged().catchError((Object _) {})));
     }
 
     final sub = host.client.pluginManagerEvents.listen((event) {
