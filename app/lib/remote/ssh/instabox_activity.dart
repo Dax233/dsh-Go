@@ -33,6 +33,7 @@ class InstaboxActivityLog {
 
   static var _running = false;
   static String? _host;
+  static Map<String, Object?> _machine = const {};
 
   /// The link marks the keeper live so the diagnostics snapshot needs no access
   /// to the link itself.
@@ -40,6 +41,10 @@ class InstaboxActivityLog {
     _running = running;
     _host = running ? host : null;
   }
+
+  /// Last machine facts: state, ready, and how much of the maximum runtime is
+  /// left. Null fields are omitted so a paused machine does not look running.
+  static void setMachine(Map<String, Object?> facts) => _machine = facts;
 
   static Map<String, Object?> snapshot() => {
     "configured": instaboxActivityConfigured,
@@ -49,6 +54,7 @@ class InstaboxActivityLog {
     "leasesFailed": _failed("lease"),
     "workOk": _ok("exec"),
     "workFailed": _failed("exec"),
+    ..._machine,
     "recent": entries,
   };
 }
@@ -68,6 +74,7 @@ class InstaboxActivityKeeper {
     this.leaseTtl = const Duration(seconds: 600),
     this.renewEvery = const Duration(seconds: 180),
     this.workEvery = const Duration(minutes: 10),
+    this.stateEvery = const Duration(minutes: 5),
     this.requestTimeout = const Duration(seconds: 20),
     String? taskId,
   }) : taskId = taskId ?? "dsh-go-${_token()}";
@@ -83,8 +90,14 @@ class InstaboxActivityKeeper {
   final Duration requestTimeout;
   final String taskId;
 
+  /// The machine's own state and remaining maximum runtime are read from the
+  /// stored machine record (a read, not a wake), so a countdown can be shown
+  /// before the platform pauses the run.
+  final Duration stateEvery;
+
   Timer? _renewTimer;
   Timer? _workTimer;
+  Timer? _stateTimer;
   var _disposed = false;
 
   static String _token() {
@@ -113,8 +126,10 @@ class InstaboxActivityKeeper {
   Future<void> start() async {
     if (_disposed || !instaboxActivityConfigured) return;
     await _lease();
+    unawaited(_state());
     _renewTimer = Timer.periodic(renewEvery, (_) => unawaited(_lease()));
     _workTimer = Timer.periodic(workEvery, (_) => unawaited(_work()));
+    _stateTimer = Timer.periodic(stateEvery, (_) => unawaited(_state()));
   }
 
   /// Releases the lease on a clean disconnect; a crash simply lets the TTL run
@@ -124,8 +139,10 @@ class InstaboxActivityKeeper {
     _disposed = true;
     _renewTimer?.cancel();
     _workTimer?.cancel();
+    _stateTimer?.cancel();
     _renewTimer = null;
     _workTimer = null;
+    _stateTimer = null;
     if (!instaboxActivityConfigured) return;
     try {
       await _send("DELETE", _leaseUri()).timeout(requestTimeout);
@@ -158,6 +175,58 @@ class InstaboxActivityKeeper {
       InstaboxActivityLog.add("exec", ok: ok, detail: ok ? null : "http $status");
     } catch (e) {
       InstaboxActivityLog.add("exec", ok: false, detail: e);
+    }
+  }
+
+  /// Reads the stored machine record: state, runtime readiness, and the
+  /// maximum-runtime clock. This is a read (does not wake), used only for a
+  /// countdown and for attributing a later pause.
+  Future<void> _state() async {
+    if (_disposed || !instaboxActivityConfigured) return;
+    try {
+      final body = await _sendForBody("GET", _machineUri()).timeout(requestTimeout);
+      final map = (jsonDecode(body) as Map<dynamic, dynamic>).cast<String, dynamic>();
+      final runtime = map["runtime"] is Map
+          ? (map["runtime"] as Map).cast<String, dynamic>()
+          : const <String, dynamic>{};
+      final started = DateTime.tryParse("${map["runStartedAt"] ?? ""}");
+      final maxRun = map["maxRunMinutes"];
+      int? remaining;
+      if (started != null && maxRun is int && maxRun > 0) {
+        remaining = maxRun - DateTime.now().toUtc().difference(started).inMinutes;
+        if (remaining < 0) remaining = 0;
+      }
+      InstaboxActivityLog.setMachine({
+        "machineState": map["state"],
+        "ready": runtime["ready"] == true,
+        "maxRunMinutes": ?maxRun,
+        "runStartedAt": ?map["runStartedAt"],
+        "remainingMinutes": ?remaining,
+      });
+      InstaboxActivityLog.add("state",
+          ok: true,
+          detail: "state=${map["state"]}${remaining != null ? " remaining=${remaining}m" : ""}");
+    } catch (e) {
+      InstaboxActivityLog.add("state", ok: false, detail: e);
+    }
+  }
+
+  Uri _machineUri() =>
+      Uri.parse("$_base/v1/machines/$instaboxWakeMachineId");
+
+  Future<String> _sendForBody(String method, Uri uri) async {
+    final client = HttpClient()..connectionTimeout = requestTimeout;
+    try {
+      final request = await client.openUrl(method, uri);
+      _headers.forEach(request.headers.set);
+      final response = await request.close();
+      final text = await response.transform(utf8.decoder).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError("http ${response.statusCode}");
+      }
+      return text;
+    } finally {
+      client.close(force: true);
     }
   }
 
