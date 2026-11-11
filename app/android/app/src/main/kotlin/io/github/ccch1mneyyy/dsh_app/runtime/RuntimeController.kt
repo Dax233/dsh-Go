@@ -501,16 +501,16 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                     else DshProcess(
                         app, manifest, installer.rootfs,
                         object : DshProcess.Listener by this@RuntimeController {
-                            override fun onLog(line: String, stream: String) {
+                            override fun onLog(line: String, stream: String, storageLine: String) {
                                 if (stream != "system") {
                                     synchronized(runTail) {
                                         if (gen == runGen) {
-                                            runTail.addLast(line)
+                                            runTail.addLast(storageLine)
                                             while (runTail.size > CrashClassifier.TAIL_LINES) runTail.removeFirst()
                                         }
                                     }
                                 }
-                                this@RuntimeController.onLog(line, stream)
+                                this@RuntimeController.onLog(line, stream, storageLine)
                             }
                         },
                     ).also {
@@ -882,7 +882,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         edit.apply()
         try {
             logDir.mkdirs()
-            val text = tail.joinToString("\n", postfix = "\n") { CrashClassifier.redact(it) }
+            val text = tail.joinToString("\n", postfix = "\n") { LogRedactor.redact(it) }
             File(logDir, LATEST_FAILURE_LOG).writeText(text)
             if (main) File(logDir, MAIN_FAILURE_LOG).writeText(text)
         } catch (_: Exception) {
@@ -918,8 +918,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
 
     // DshProcess.Listener
 
-    override fun onLog(line: String, stream: String) {
-        log(line, stream)
+    override fun onLog(line: String, stream: String, storageLine: String) {
+        log(line, stream, storageLine)
     }
 
     override fun onTidying(active: Boolean) {
@@ -1079,7 +1079,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         }
     }
 
-    private fun log(line: String, stream: String) = runtimeLogs.accept(line, stream)
+    private fun log(line: String, stream: String, storageLine: String = line) = runtimeLogs.accept(line, stream, storageLine)
 
     private fun setPhase(next: Phase) {
         if (next != Phase.RUNNING) managedSkillGate.retire()

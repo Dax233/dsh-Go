@@ -348,6 +348,140 @@ void main() {
       );
     });
 
+    test('inventory success and non-404 failures keep one request and existing error codes', () async {
+      host.bridge = _bridge;
+      host.requests.clear();
+      expect((await client.readBridgeInventory())?.bootRev, 'g1');
+      expect(host.requests.map((r) => r.path), [bridgeInventoryPath]);
+      for (final status in [401, 403, 503]) {
+        host.bridgeStatus = status;
+        host.bridgeBody = jsonEncode({
+          'error': {'code': 'unavailable', 'message': 'try later'},
+        });
+        host.requests.clear();
+        await expectLater(
+          client.readBridgeInventory(),
+          throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'client-inventory/http-$status')),
+        );
+        expect(host.requests.map((r) => r.path), [bridgeInventoryPath]);
+      }
+    });
+
+    test('inventory resource 404 keeps nested or legacy flat errors without negotiation', () async {
+      host.bridgeStatus = 404;
+      for (final body in [
+        {
+          'error': {'code': 'not-found', 'message': 'table missing'},
+        },
+        {'code': 'not-found', 'message': 'table missing'},
+        {
+          'error': {'code': 'not-found', 'message': 'table missing'},
+          'code': 'route-not-found',
+          'message': 'stale alias',
+        },
+      ]) {
+        host.bridgeBody = jsonEncode(body);
+        host.requests.clear();
+        await expectLater(
+          client.readBridgeInventory(),
+          throwsA(
+            isA<DshRemoteException>()
+                .having((e) => e.code, 'code', 'client-inventory/not-found')
+                .having((e) => e.message, 'message', 'table missing')
+                .having((e) => e.details, 'details', {'path': bridgeInventoryPath, 'status': 404}),
+          ),
+        );
+        expect(host.requests.map((r) => r.path), [bridgeInventoryPath]);
+      }
+    });
+
+    test('an explicit missing inventory route needs no capability request', () async {
+      host.bridgeStatus = 404;
+      for (final body in [
+        {
+          'error': {'code': 'route-not-found', 'message': 'route missing'},
+        },
+        {'code': 'route-not-found', 'message': 'route missing'},
+      ]) {
+        host.bridgeBody = jsonEncode(body);
+        host.requests.clear();
+        expect(await client.readBridgeInventory(), isNull);
+        expect(host.requests.map((r) => r.path), [bridgeInventoryPath]);
+      }
+    });
+
+    test('ambiguous inventory 404 uses fresh capabilities and keeps legacy fallback', () async {
+      host.bridgeStatus = 404;
+      host.bridgeBody = '<html>not found</html>';
+      host.requests.clear();
+      expect(await client.readBridgeInventory(), isNull);
+      expect(host.requests.map((r) => r.path), [bridgeInventoryPath, dshGoCapabilitiesPath]);
+      for (final capabilities in [
+        <String>[],
+        ['future-capability'],
+        ['inventory'],
+        <String>[],
+      ]) {
+        host.capabilities = {'v': 1, 'bridge': '999.0.0', 'capabilities': capabilities};
+        host.requests.clear();
+        if (capabilities.contains('inventory')) {
+          await expectLater(
+            client.readBridgeInventory(),
+            throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'client-inventory/http-404')),
+          );
+        } else {
+          expect(await client.readBridgeInventory(), isNull);
+        }
+        expect(host.requests.map((r) => r.path), [bridgeInventoryPath, dshGoCapabilitiesPath]);
+        expect(host.requests.every((r) => r.cookie?.contains(_FakeHost.cookieName) ?? false), isTrue);
+        expect(host.requests.every((r) => r.query.isEmpty), isTrue);
+      }
+    });
+
+    test('inventory negotiation failures propagate instead of becoming an absent bridge', () async {
+      host.bridgeStatus = 404;
+      for (final status in [401, 403, 503]) {
+        host.capabilitiesStatus = status;
+        await expectLater(
+          client.readBridgeInventory(),
+          throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'dsh-go/http-$status')),
+        );
+      }
+      host.capabilitiesStatus = 404;
+      host.capabilitiesBody = jsonEncode({
+        'error': {'code': 'not-found', 'message': 'resource missing'},
+      });
+      await expectLater(
+        client.readBridgeInventory(),
+        throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'dsh-go/not-found')),
+      );
+      host.capabilitiesBody = jsonEncode({
+        'error': {'code': 'route-not-found', 'message': 'route missing'},
+      });
+      expect(await client.readBridgeInventory(), isNull);
+      host.capabilitiesStatus = null;
+      host.capabilitiesBody = null;
+      host.capabilities = {'v': 2};
+      await expectLater(
+        client.readBridgeInventory(),
+        throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'dsh-go/unsupported-version')),
+      );
+      host.capabilities = {'v': 1, 'bridge': '0.4.0'};
+      await expectLater(client.readBridgeInventory(), throwsA(isA<DshProtocolException>()));
+      host.capabilitiesBody = '<html>not json</html>';
+      await expectLater(client.readBridgeInventory(), throwsA(isA<DshProtocolException>()));
+    });
+
+    test('combined inventory keeps its documented best-effort treatment of optional failures', () async {
+      host.bridgeStatus = 404;
+      host.bridgeBody = jsonEncode({
+        'error': {'code': 'not-found', 'message': 'table missing'},
+      });
+      host.requests.clear();
+      expect((await client.readClientInventory()).tier, ClientInventoryTier.boot);
+      expect(host.requests.where((r) => r.path == dshGoCapabilitiesPath), isEmpty);
+    });
+
     test('readClientInventory climbs to the tier the Host offers', () async {
       var inventory = await client.readClientInventory();
       expect(inventory.tier, ClientInventoryTier.boot);
@@ -424,6 +558,9 @@ class _FakeHost {
   Map<String, Object?>? bridge;
   String? bridgeBody;
   int? bridgeStatus;
+  Map<String, Object?>? capabilities;
+  String? capabilitiesBody;
+  int? capabilitiesStatus;
   bool failBundles = false;
 
   Future<void> close() => _server.close(force: true);
@@ -448,6 +585,7 @@ class _FakeHost {
           response.statusCode = 401;
         } else if (bridgeStatus case final status?) {
           response.statusCode = status;
+          if (bridgeBody case final body?) response.write(body);
         } else if (bridgeBody case final body?) {
           response.write(body);
         } else if (bridge case final table?) {
@@ -455,6 +593,18 @@ class _FakeHost {
           response.write(jsonEncode(table));
         } else {
           response.statusCode = 404;
+        }
+      case dshGoCapabilitiesPath:
+        if (!authed) {
+          response.statusCode = 401;
+        } else {
+          response.statusCode = capabilitiesStatus ?? (capabilities == null && capabilitiesBody == null ? 404 : 200);
+          if (capabilitiesBody case final body?) {
+            response.write(body);
+          } else if (capabilities case final snapshot?) {
+            response.headers.contentType = ContentType.json;
+            response.write(jsonEncode(snapshot));
+          }
         }
       case '/api/pluginManager/listBundles':
         final envelope = jsonDecode(await utf8.decodeStream(request)) as Map<String, Object?>;

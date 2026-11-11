@@ -18,6 +18,7 @@ library;
 
 import 'carrier.dart';
 import 'connection.dart';
+import 'dsh_go_api.dart';
 import 'errors.dart';
 import 'json.dart';
 import 'plugins_api.dart';
@@ -481,12 +482,29 @@ extension ClientInventoryApi on DshClient {
     return parseWebBootGraph(response.text);
   }
 
-  /// Tier B: `GET /dsh-go/v1/inventory`. Null when the bridge is not installed
-  /// (404). Throws like [readWebBoot], and [DshProtocolException] when the
-  /// body is not an inventory.
+  /// Tier B: `GET /dsh-go/v1/inventory`. Null for an explicitly missing route
+  /// or a legacy 404 without an advertised inventory capability. Resource
+  /// errors keep their code under `client-inventory/`; only an ambiguous 404
+  /// calls [DshGoApi.readDshGoBridgeCapabilities], whose errors propagate unchanged.
+  /// Other failures throw like [readWebBoot], or [DshProtocolException] when
+  /// the body is not an inventory. Successful reads need no negotiation.
   Future<BridgeInventory?> readBridgeInventory({Duration timeout = const Duration(seconds: 10)}) async {
     final response = await _get(bridgeInventoryPath, timeout);
-    if (response.statusCode == 404) return null;
+    if (response.statusCode == 404) {
+      final body = asMap(tryDecodeJson(response.text));
+      final error = asMap(body?['error']) ?? body;
+      final code = asString(error?['code']);
+      if (code == 'route-not-found') return null;
+      if (code != null) {
+        throw DshRemoteException(
+          'client-inventory/$code',
+          asString(error?['message']) ?? '$bridgeInventoryPath: HTTP 404',
+          {'path': bridgeInventoryPath, 'status': 404},
+        );
+      }
+      final bridge = await readDshGoBridgeCapabilities(timeout: timeout);
+      if (bridge == null || !bridge.capabilities.contains('inventory')) return null;
+    }
     if (response.statusCode != 200) throw _httpError(bridgeInventoryPath, response.statusCode);
     final inventory = BridgeInventory.fromJson(tryDecodeJson(response.text));
     if (inventory == null) throw const DshProtocolException('$bridgeInventoryPath: not an inventory object');

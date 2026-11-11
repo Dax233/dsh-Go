@@ -340,6 +340,21 @@ def apply_hunks(data, hunks, label):
     return data
 
 
+def patch_names(patches):
+    """Read the explicit application order; every .diff must occur exactly once."""
+    series = os.path.join(patches, "series")
+    with open(series, encoding="utf-8") as source:
+        names = [line.strip() for line in source if line.strip() and not line.lstrip().startswith("#")]
+    if not names or len(names) != len(set(names)):
+        sys.exit("%s: empty or duplicate patch order" % series)
+    available = {name for name in os.listdir(patches) if name.endswith(".diff")}
+    listed = set(names)
+    if listed != available:
+        sys.exit("%s: unlisted patches %s; unknown entries %s"
+                 % (series, sorted(available - listed), sorted(listed - available)))
+    return names
+
+
 def cmd_patch_dsh(args):
     """Apply runtime/patches/*.diff to a DSH npm prefix, refusing anything not pinned for this DSH version.
 
@@ -349,9 +364,7 @@ def cmd_patch_dsh(args):
     observed hashes for this DSH version (use after reviewing the upstream file and the patch)."""
     pins_path = os.path.join(args.patches, "pins.json")
     pins = json.load(open(pins_path)) if os.path.isfile(pins_path) else {"schema": 1, "patches": {}}
-    names = sorted(n for n in os.listdir(args.patches) if n.endswith(".diff"))
-    if not names:
-        sys.exit("no patches in " + args.patches)
+    names = patch_names(args.patches)
     # Several independently reviewed patches may touch the same file. Their
     # pins must form one ordered chain, and a fully patched tree is a valid
     # idempotent input. Never accept an arbitrary intermediate/custom hash.

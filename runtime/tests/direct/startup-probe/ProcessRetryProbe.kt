@@ -44,7 +44,7 @@ fun main(args: Array<String>) {
         val process = DshProcess(Context(root), RuntimeManifest(launchArgv = listOf(
             launcher.path, "/usr/bin/env", "-i", "{GUEST_ENV}", "startup-probe-command",
         )), root, object : DshProcess.Listener {
-            override fun onLog(line: String, stream: String) { logs += line }
+            override fun onLog(line: String, stream: String, storageLine: String) { logs += line }
             override fun onReady(source: DshProcess, baseUrl: String, token: String) {}
             override fun onExit(source: DshProcess, code: Int, expected: Boolean) {
                 exits += code
