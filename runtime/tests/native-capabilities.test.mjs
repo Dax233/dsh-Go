@@ -403,3 +403,73 @@ test('NJS2 duplicate role start is rejected without returning a stale earlier le
   let calls = 0; f.service.onCapability(() => calls++);
   w.send({ t: 'cap.event', lease: result.effects[0].lease, seq: 1, event: 'voice.stopped' }); await until(() => calls === 1, 'accepted start has no live lease');
 });
+
+for (const [mode, role] of [['replace', 'voice'], ['dispose', 'overlay'], ['unrelated', 'voice']]) {
+  test(`5307 ${role} start keeps a current lease across ${mode} registration`, async t => {
+    const f = await fixture(t), w = await f.ws(['audio', 'voice', 'overlay']), events = [];
+    const audio = () => ({ body: Buffer.from('audio'), contentType: 'audio/wav' });
+    const remove = f.service.media('clip', audio);
+    let second = false;
+    f.service.onCapability((scope, event) => events.push(event.event));
+    f.service.on('go', () => {
+      if (!second) return { type: 'audio', op: 'play', instance: 'owner', src: 'media:clip' };
+      // Ordinary plugin registration work completes before this invoke returns.
+      if (mode === 'replace') f.service.media('clip', audio);
+      else if (mode === 'dispose') remove();
+      else f.service.micro('caption', { data() {} })();
+      return role === 'voice'
+        ? { type: 'voice', op: 'start', instance: 'owner' }
+        : { type: 'overlay', op: 'show', instance: 'owner', id: 'captionOverlay' };
+    });
+    const original = (await f.invoke(w)).effects[0];
+    second = true;
+    const result = await f.invoke(w);
+    assert.equal(result.status, 200);
+    assert.equal(result.effects.length, 1);
+    assert.deepEqual(result.issues, []);
+    const added = result.effects[0];
+    const terminal = role === 'voice' ? 'voice.stopped' : 'overlay.closed';
+    // A round trip allows the already queued registration sweep to run.
+    w.send({ t: 'ping', at: 1 }); await w.next(m => m.t === 'pong' && m.at === 1);
+    w.send({ t: 'cap.event', lease: added.lease, seq: 1, event: terminal });
+    w.send({ t: 'ping', at: 2 }); await w.next(m => m.t === 'pong' && m.at === 2);
+    const observed = { reused: added.lease === original.lease, events };
+    t.diagnostic(JSON.stringify({ mode, role, ...observed }));
+    assert.deepEqual(observed, { reused: mode === 'unrelated', events: [terminal] });
+  });
+}
+
+for (const mode of ['dispose', 'replace', 'callback-only']) {
+  test(`5307 late terminal after ${mode} stays with the current media generation`, async t => {
+    const f = await fixture(t), w = await f.ws(['audio', 'voice']), events = [];
+    const audio = () => ({ body: Buffer.from('audio'), contentType: 'audio/wav' });
+    const remove = f.service.media('clip', audio);
+    f.service.on('go', () => [
+      { type: 'audio', op: 'play', instance: 'owner', src: 'media:clip' },
+      { type: 'voice', op: 'start', instance: 'owner' },
+    ]);
+    let afterTurn = false;
+    f.service.onCapability((scope, event) => {
+      events.push({ handler: 'original', event: event.event });
+      if (mode === 'dispose') remove();
+      else if (mode === 'replace') f.service.media('clip', audio);
+      f.service.onCapability((scope, next) => {
+        events.push({ handler: 'replacement', event: next.event, afterTurn });
+      });
+      setImmediate(() => { afterTurn = true; });
+    });
+    const effect = (await f.invoke(w)).effects[0];
+    // Valid messages can arrive together. The actual WS decoder dispatches them
+    // in order, including plugin registration work, before its data turn ends.
+    w.socket.write(Buffer.concat([
+      { t: 'cap.event', lease: effect.lease, seq: 1, event: 'voice.speechStart' },
+      { t: 'cap.event', lease: effect.lease, seq: 2, event: 'voice.stopped' },
+      { t: 'ping', at: 3 },
+    ].map(message => encodeFrame(1, JSON.stringify(message), { mask: true }))));
+    await w.next(m => m.t === 'pong' && m.at === 3);
+    t.diagnostic(JSON.stringify({ mode, events }));
+    const expected = [{ handler: 'original', event: 'voice.speechStart' }];
+    if (mode === 'callback-only') expected.push({ handler: 'replacement', event: 'voice.stopped', afterTurn: false });
+    assert.deepEqual(events, expected);
+  });
+}
