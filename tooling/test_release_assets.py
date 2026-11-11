@@ -20,7 +20,7 @@ from unittest import mock
 
 import apk_delta
 from build_number import MAX_VERSION_CODE
-from release_assets import BADGING_RE, ReleaseError, check_abis, patch_from, previous_releases, published_apk, release_build
+from release_assets import BADGING_RE, ReleaseError, check_abis, find_aapt2, patch_from, previous_releases, published_apk, release_build
 
 # Stands in for gh: `release list` prints $FAKE_RELEASES, `release download`
 # copies the asset files from $FAKE_ASSETS/<tag>/; every call goes to $FAKE_LOG.
@@ -62,6 +62,26 @@ def sha(path):
 
 
 class ReleaseBuildTest(unittest.TestCase):
+    def test_sdk_tool_lookup_uses_platform_filename_newest_version_and_path_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for platform, filename in (("win32", "aapt2.exe"), ("linux", "aapt2")):
+                with self.subTest(platform=platform):
+                    sdk = root / platform / "Android SDK"
+                    for version in ("35.0.9", "35.0.10"):
+                        tool = sdk / "build-tools" / version / filename
+                        tool.parent.mkdir(parents=True)
+                        tool.write_bytes(b"not executed")
+                    with mock.patch("release_assets.ROOT", root), \
+                            mock.patch("release_assets.sys.platform", platform), \
+                            mock.patch("release_assets.shutil.which", return_value=None) as which, \
+                            mock.patch.dict(os.environ, {"ANDROID_HOME": str(sdk), "ANDROID_SDK_ROOT": ""}):
+                        self.assertEqual(find_aapt2(), str(sdk / "build-tools" / "35.0.10" / filename))
+                        preferred = root / filename
+                        preferred.write_bytes(b"not executed")
+                        which.return_value = str(preferred)
+                        self.assertEqual(find_aapt2(), str(preferred))
+
     def test_both_flavors_agree(self):
         apks = {"arm64": ("1.2.0", 10251234), "x64": ("1.2.0", 10251234)}
         self.assertEqual(release_build("1.2.0", None, apks), 10251234)

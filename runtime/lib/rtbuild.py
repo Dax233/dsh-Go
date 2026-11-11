@@ -370,14 +370,16 @@ def cmd_patch_dsh(args):
     # pins must form one ordered chain, and a fully patched tree is a valid
     # idempotent input. Never accept an arbitrary intermediate/custom hash.
     terminal = {}
+    after_positions = {}
     if not args.record:
-        for name in names:
+        for position, name in enumerate(names):
             for rel, pin in pins["patches"].get(name, {}).get(args.dsh_version, {}).items():
                 if rel in terminal and terminal[rel] != pin["before"]:
                     sys.exit("%s: broken patch hash chain for %s" % (name, rel))
                 terminal[rel] = pin["after"]
+                after_positions.setdefault(rel, {})[pin["after"]] = position
     applied = []
-    for name in names:
+    for position, name in enumerate(names):
         diff = parse_unified_diff(open(os.path.join(args.patches, name)).read())
         want = pins["patches"].get(name, {}).get(args.dsh_version)
         if want is None and not args.record:
@@ -393,7 +395,7 @@ def cmd_patch_dsh(args):
             if not args.record:
                 if pin is None:
                     sys.exit("%s: no pin for %s" % (name, rel))
-                if before == pin["after"] or before == terminal.get(rel):
+                if after_positions[rel].get(before, -1) >= position:
                     print("%s: %s already patched" % (name, rel))
                     observed[rel] = pin
                     continue

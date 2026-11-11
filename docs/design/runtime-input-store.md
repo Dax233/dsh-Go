@@ -1,6 +1,6 @@
 # 固定运行时输入原件库
 
-`runtime/lib/input_store.py` 保留构建所需的原始归档字节，使用原有 SHA256 / npm SRI 寻址。它读取 `runtime/build-runtime.sh` 的版本默认值、`PIN` 和源地址，以及 Ubuntu / npm 锁；不执行 shell，不另维护一份 pin，不发布到外部。
+`runtime/lib/input_store.py` 保留构建所需的原始归档字节，使用原有 SHA256 / npm SRI 寻址。它以 UTF-8 读取 `runtime/build-runtime.sh` 的版本默认值、`PIN` 和源地址，以及 Ubuntu / npm 锁；不执行 shell，不另维护一份 pin，不发布到外部。
 
 这是 Linux 构建主机工具，要求 Python 3.11 或更新版本。npm 预热另需已有的 host Node/npm；脚本不安装系统工具。原件库必须支持同盘硬链接，批次临时目录建在库内。这里的文件同步和原子替换保证正常错误路径不发布半文件，不宣称完整的断电持久性。
 
@@ -40,7 +40,31 @@ HTTPS 自留地址也接受同样的扁平对象名；URL 必须由 owner 明确
 
 下载先写库内临时文件；逐块计算原摘要、核对锁中已知大小，成功后 `fsync` 文件并 `os.replace` 到最终对象名。建立响应时的 HTTP 协议异常和读取中的传输中断均可继续下一来源；内容摘要/大小不符、坏的已存对象、写盘或替换失败立即停止本轮收集，不用下一来源掩盖错误。不可达对象会汇总报告，其他独立对象可继续收集。正常异常路径清理临时文件；进程被强杀可能留下 `.part-*`，它不被当作完整对象。
 
+新对象读取最多接受锁中已知的字节数；大小未知时上限为 1 GiB。这是传输限制，不是原件大小的测量。最多多读一个字节判定超限，该块不写盘，临时文件清理，既有对象保持；超限直接报内容错误，不换来源重试。`import` 的新对象写入同样受此限制。
+
 所有子命令的 stdout 是一个 JSON 结果；错误时退出非零。`collect` 输出对象总数、缓存/新取数量、已取得字节数及错误；`verify` 输出逐项缺失/损坏。总字节是本轮实际核验对象的统计，不能据此宣称尚未收齐的全库大小。标准错误保留 npm 等诊断。
+
+## 导出待上传原件
+
+```sh
+python3 -I runtime/lib/input_store.py collect --store /absolute/input-store \
+  --output /absolute/runtime-input-release
+```
+
+`--output` 可省略，默认收集行为不变。指定时把本轮取得并通过原摘要校验的对象复制成平铺的 `sha256-<hex>` 文件，同时写 `SHA256SUMS`；复制沿用临时文件校验和替换，不与 CAS 共享硬链接。输出目录可重用；`SHA256SUMS` 每次只列本轮成功导出的对象，旧的无关文件不删除。缺件仍非零退出，已经成功的原件可以单独使用，不能把这个子集称为全量备份。
+
+导出不读取许可材料，不创建 release、不上传。何时发布由 owner 决定。原本以 SHA256 寻址的二进制可直接使用导出的名字作回落；npm 的 SHA512 SRI 保留在原锁中，仅有 SHA256 文件名的导出目录不能直接当作 npm 的 SHA512 镜像。下载回来后将这些数据文件交给既有 `import --store ... <文件...>`，它按内容计算原锁摘要、恢复原 CAS 名称，再使用 `warm-npm`。不要把 `SHA256SUMS` 当成原件传给 `import`。
+
+### 对应源码材料缺口（只读报告）
+
+以下仅记录 `8020294de0d3e0d286ddf392da1b411f69e32eca` 的源 pin/锁没有提供的材料，不作法律判断，也不成为导出或发布门禁：
+
+- `runtime/build-runtime.sh` 的 Ubuntu base pin 没有归档内组件、版本与对应源码清单；`runtime/locks/ubuntu-noble-{arm64,amd64}.json` 只记录额外 deb 的二进制版本、摘要和大小，不能替代基础归档清点，也没有精确 source package 与打包材料。
+- 同一脚本的 Termux `proot`、`libtalloc`、`libandroid-shmem` pin 没有实际 recipe、补丁与构建材料的对应记录。已有 `proot-v5.1.107.98.zip` 源码 pin 可作为来源材料，不能据它推定其余打包材料齐全。
+- Node 与 Python 原始归档的 pin 没有复合归档组件及其对应源码/构建材料清单。
+- `runtime/locks/dsh-0.2.2-rc.1/package-lock.json` 中 `@img/sharp-libvips-*`、`@img/sharp-win32-*`、`@img/sharp-wasm32` 声明含 LGPL，`@deepseek-ai/libreoffice-kit*` 声明 MPL；锁有包版本和 SRI，但没有匹配归档内实际组件的源码与构建材料记录。`inventory` 可列出当前各平台引用，不能仅按采集机器的平台略过备份中的其它包。
+
+这些缺口由 owner 结合实际原件补齐；工具不会猜测源码 URL、修改许可声明或要求填写审核状态。升级 pin/锁后应重新查看实际材料，报告没有固定对象数量断言。
 
 ## npm 预热与原锁离线安装
 

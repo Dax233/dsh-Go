@@ -16,6 +16,9 @@ import urllib.parse
 import urllib.request
 
 
+MAX_UNKNOWN_BYTES = 1024 * 1024 * 1024
+
+
 class InputError(Exception):
     pass
 
@@ -25,7 +28,7 @@ class TransportError(InputError):
 
 
 def shell_inputs(repo):
-    source = (repo / "runtime/build-runtime.sh").read_text()
+    source = (repo / "runtime/build-runtime.sh").read_text(encoding="utf-8")
     values = {}
     for name, value in re.findall(r'^([A-Z][A-Z0-9_]*)="([^"\n]*)"', source, re.M):
         default = re.fullmatch(r"\$\{" + name + r":-(.*)\}", value)
@@ -69,7 +72,7 @@ def lock_label(lock, repo):
 
 
 def add_npm_lock(objects, lock, repo):
-    data = json.loads(lock.read_text())
+    data = json.loads(lock.read_text(encoding="utf-8"))
     for package_path, package in data["packages"].items():
         if not package_path:
             continue
@@ -128,7 +131,7 @@ def inventory(repo, npm_locks=None, all_locks=False):
             pinned(name, [values["TERMUX_REPO"] + "/pool/main/" + pool + "/" + package + "/" + name], abi, "termux_jni")
         lock = repo / ("runtime/locks/ubuntu-noble-" + ubuntu + ".json")
         mirror = values["UBUNTU_ARCHIVE_" + ("AMD64" if ubuntu == "amd64" else "ARM64")]
-        for index, package in enumerate(json.loads(lock.read_text())["packages"]):
+        for index, package in enumerate(json.loads(lock.read_text(encoding="utf-8"))["packages"]):
             name = Path(package["filename"]).name
             urls = [mirror + "/" + package["filename"]]
             if "UBUNTU_DEB_FALLBACK" in values:
@@ -149,7 +152,7 @@ def inventory(repo, npm_locks=None, all_locks=False):
     else:
         defaults = [repo / ("runtime/locks/" + name + "/package-lock.json") for name in
                     ("dsh-" + values["DSH_VERSION"], "pnpm-" + values["PNPM_VERSION"])]
-        pnpm = json.loads(defaults[1].read_text())["packages"].get("node_modules/pnpm", {})
+        pnpm = json.loads(defaults[1].read_text(encoding="utf-8"))["packages"].get("node_modules/pnpm", {})
         if pnpm.get("version") != values["PNPM_VERSION"] or pnpm.get("integrity") != values["PNPM_INTEGRITY"]:
             raise InputError("current pnpm lock version/integrity does not match source pins")
         locks = sorted(set(defaults) | set((repo / "runtime/locks").glob("*/package-lock.json"))) if all_locks else defaults
@@ -179,16 +182,20 @@ def store_stream(source, obj, store):
             temporary = Path(output.name)
             digest = hashlib.new(obj["algorithm"])
             size = 0
+            limit = obj["size"] if obj["size"] is not None else MAX_UNKNOWN_BYTES
             while True:
                 try:
-                    chunk = source.read(1024 * 1024)
+                    chunk = source.read(min(1024 * 1024, limit - size + 1))
                 except (OSError, http.client.HTTPException) as error:
                     raise TransportError("input read failed: " + type(error).__name__) from error
                 if not chunk:
                     break
+                size += len(chunk)
+                if size > limit:
+                    reason = "size exceeds expected bytes" if obj["size"] is not None else "input exceeds transfer limit"
+                    raise InputError(reason + ": " + obj["key"])
                 output.write(chunk)
                 digest.update(chunk)
-                size += len(chunk)
             if digest.hexdigest() != obj["digest"]:
                 raise InputError("checksum mismatch: " + obj["key"])
             if obj["size"] is not None and size != obj["size"]:
@@ -241,20 +248,33 @@ def collect_one(obj, store, mirror_base=None):
     raise TransportError("unavailable " + obj["key"] + ": " + ", ".join(failures))
 
 
-def collect_objects(objects, store, mirror_base=None):
+def collect_objects(objects, store, mirror_base=None, output=None):
     result = {"objects": len(objects), "cached": 0, "collected": 0, "bytes": 0, "errors": [],
               "self_mirror": "configured" if mirror_base else "自留回落不可用（未配置 --mirror-base）"}
+    checksums = {}
+    if output is not None:
+        output.mkdir(parents=True, exist_ok=True)
     for obj in objects:
         try:
             path, status = collect_one(obj, store, mirror_base)
             result[status] += 1
             result["bytes"] += path.stat().st_size
+            if output is not None:
+                digest = obj["digest"] if obj["algorithm"] == "sha256" else digest_file(path, "sha256")
+                exported = {**obj, "key": "sha256-" + digest, "algorithm": "sha256", "digest": digest}
+                with path.open("rb") as source:
+                    store_stream(source, exported, output)
+                checksums[exported["key"]] = digest
         except TransportError as error:
             result["errors"].append({"key": obj["key"], "error": str(error)})
         except (InputError, OSError) as error:
             result["errors"].append({"key": obj["key"], "error": str(error)})
             result["stopped"] = True
             break
+    if output is not None:
+        (output / "SHA256SUMS").write_text(
+            "".join(checksums[name] + "  " + name + "\n" for name in sorted(checksums)), encoding="utf-8", newline="\n")
+        result["exported"] = len(checksums)
     return result
 
 
@@ -353,6 +373,8 @@ def parser():
             command.add_argument("--store", type=Path, required=True)
         if name in ("collect", "warm-npm"):
             command.add_argument("--mirror-base", required=name == "warm-npm", help="explicit HTTPS or file:// flat object directory")
+        if name == "collect":
+            command.add_argument("--output", type=Path, help="copy verified objects as sha256 files with SHA256SUMS")
         if name == "import":
             command.add_argument("files", type=Path, nargs="+")
         if name == "warm-npm":
@@ -377,7 +399,8 @@ def main(argv=None):
             elif args.command == "collect":
                 if args.mirror_base:
                     checked_url(args.mirror_base, base=True)
-                result = collect_objects(objects, args.store.absolute(), args.mirror_base)
+                result = collect_objects(objects, args.store.absolute(), args.mirror_base,
+                                         args.output.absolute() if args.output is not None else None)
             elif args.command == "verify":
                 result = verify_objects(objects, args.store.absolute())
             else:

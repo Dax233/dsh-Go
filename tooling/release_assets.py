@@ -79,7 +79,7 @@ def find_aapt2() -> str | None:
             sdks.append(match.group(1).strip())
     for sdk in filter(None, sdks):
         tools = sorted(
-            pathlib.Path(sdk).glob("build-tools/*/aapt2"),
+            pathlib.Path(sdk).glob("build-tools/*/aapt2" + (".exe" if sys.platform == "win32" else "")),
             key=lambda p: tuple(int(n) for n in re.findall(r"\d+", p.parent.name)),
         )
         if tools:
