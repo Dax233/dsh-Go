@@ -4513,6 +4513,38 @@ class L10nZh extends L10n {
   String get chatNoDetails => '暂无详情';
 
   @override
+  String chatOutputHiddenLines(int count, String shown) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '中间省略 $shown 行');
+    return '$_temp0';
+  }
+
+  @override
+  String chatOutputHiddenChars(String count) {
+    return '中间省略 $count 字';
+  }
+
+  @override
+  String chatOutputSummary(int count, String lines, String chars) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '共 $lines 行');
+    return '$_temp0 · $chars 字';
+  }
+
+  @override
+  String get chatOutputViewAll => '查看全部';
+
+  @override
+  String get chatOutputCopyAll => '复制全文';
+
+  @override
+  String get chatOutputCopied => '已复制全文';
+
+  @override
+  String get chatOutputToEnd => '跳到末尾';
+
+  @override
+  String get chatOutputToStart => '回到开头';
+
+  @override
   String get chatErrApiKey => 'API Key 无效或已过期';
 
   @override

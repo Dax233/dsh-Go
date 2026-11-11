@@ -8318,6 +8318,54 @@ abstract class L10n {
   /// **'暂无详情'**
   String get chatNoDetails;
 
+  /// No description provided for @chatOutputHiddenLines.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{中间省略 {shown} 行}}'**
+  String chatOutputHiddenLines(int count, String shown);
+
+  /// No description provided for @chatOutputHiddenChars.
+  ///
+  /// In zh, this message translates to:
+  /// **'中间省略 {count} 字'**
+  String chatOutputHiddenChars(String count);
+
+  /// No description provided for @chatOutputSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count, plural, other{共 {lines} 行}} · {chars} 字'**
+  String chatOutputSummary(int count, String lines, String chars);
+
+  /// No description provided for @chatOutputViewAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部'**
+  String get chatOutputViewAll;
+
+  /// No description provided for @chatOutputCopyAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制全文'**
+  String get chatOutputCopyAll;
+
+  /// No description provided for @chatOutputCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制全文'**
+  String get chatOutputCopied;
+
+  /// No description provided for @chatOutputToEnd.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳到末尾'**
+  String get chatOutputToEnd;
+
+  /// No description provided for @chatOutputToStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'回到开头'**
+  String get chatOutputToStart;
+
   /// No description provided for @chatErrApiKey.
   ///
   /// In zh, this message translates to:

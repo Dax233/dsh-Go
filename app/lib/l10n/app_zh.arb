@@ -2856,6 +2856,44 @@
   "chatToolDeclined": "已拒绝这次调用",
   "chatToolRunning": "正在执行…",
   "chatNoDetails": "暂无详情",
+  "chatOutputHiddenLines": "{count, plural, other{中间省略 {shown} 行}}",
+  "@chatOutputHiddenLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "shown": {
+        "type": "String"
+      }
+    }
+  },
+  "chatOutputHiddenChars": "中间省略 {count} 字",
+  "@chatOutputHiddenChars": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "chatOutputSummary": "{count, plural, other{共 {lines} 行}} · {chars} 字",
+  "@chatOutputSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "lines": {
+        "type": "String"
+      },
+      "chars": {
+        "type": "String"
+      }
+    }
+  },
+  "chatOutputViewAll": "查看全部",
+  "chatOutputCopyAll": "复制全文",
+  "chatOutputCopied": "已复制全文",
+  "chatOutputToEnd": "跳到末尾",
+  "chatOutputToStart": "回到开头",
   "chatErrApiKey": "API Key 无效或已过期",
   "chatErrBalance": "余额不足",
   "chatErrAccountQuota": "账号额度已用完",

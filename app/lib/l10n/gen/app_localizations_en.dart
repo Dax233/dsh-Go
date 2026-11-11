@@ -4801,6 +4801,43 @@ class L10nEn extends L10n {
   String get chatNoDetails => 'No details yet';
 
   @override
+  String chatOutputHiddenLines(int count, String shown) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$shown lines hidden',
+      one: '1 line hidden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatOutputHiddenChars(String count) {
+    return '$count characters hidden';
+  }
+
+  @override
+  String chatOutputSummary(int count, String lines, String chars) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$lines lines', one: '1 line');
+    return '$_temp0 · $chars characters';
+  }
+
+  @override
+  String get chatOutputViewAll => 'View all';
+
+  @override
+  String get chatOutputCopyAll => 'Copy all';
+
+  @override
+  String get chatOutputCopied => 'Copied the full text';
+
+  @override
+  String get chatOutputToEnd => 'Jump to end';
+
+  @override
+  String get chatOutputToStart => 'Back to top';
+
+  @override
   String get chatErrApiKey => 'API key is invalid or expired';
 
   @override
