@@ -136,7 +136,6 @@
     <string name="pet_new_chat">新对话</string>
     <string name="pet_screenshot">截图并问 DSH-Go</string>
     <string name="pet_wheel_screenshot">截图提问</string>
-    <string name="pet_wheel_hint">拖动选择\n松手执行</string>
     <string name="pet_wheel_stop">停止任务</string>
     <string name="pet_wheel_hosts">切换主机</string>
     <string name="pet_wheel_snooze">今日隐藏</string>

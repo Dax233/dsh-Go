@@ -1323,6 +1323,7 @@ internal object PetOverlay {
             if (view.hosts) machine.last?.hosts?.size?.coerceAtLeast(1) ?: 1 else menuItems(machine.last).size,
             dock.side, body.centerX.toFloat(), body.centerY.toFloat(), safeArea(), ctx.resources.displayMetrics.density,
             if (view.hosts) 2f else ctx.resources.configuration.fontScale,
+            view.labelWidth(),
         )
         view.place(g)
         params.width = g.bounds.width
