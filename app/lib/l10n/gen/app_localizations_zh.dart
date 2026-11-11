@@ -1552,6 +1552,64 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get activityQuotaTitle => '订阅额度';
+
+  @override
+  String get activityQuotaRefresh => '刷新额度';
+
+  @override
+  String get activityQuotaPermissionDenied => '订阅没有权限查询额度';
+
+  @override
+  String get activityQuotaAuthError => '登录已过期或无权查询，请检查订阅登录';
+
+  @override
+  String get activityQuotaNetworkError => '网络连接失败，请稍后重试';
+
+  @override
+  String get activityQuotaRateLimited => '查询过于频繁，请稍后重试';
+
+  @override
+  String get activityQuotaLoading => '正在查询订阅额度…';
+
+  @override
+  String get activityQuotaUnavailable => '暂时无法查询订阅额度，请稍后重试';
+
+  @override
+  String get activityQuotaUnsupported => '此主机暂不支持查询订阅额度';
+
+  @override
+  String get activityQuotaSignedOut => '订阅未登录';
+
+  @override
+  String get activityQuotaPrimary => '主要额度';
+
+  @override
+  String get activityQuotaSecondary => '次要额度';
+
+  @override
+  String get activityQuotaFiveHour => '5 小时';
+
+  @override
+  String get activityQuotaSevenDay => '7 天';
+
+  @override
+  String get activityQuotaSevenDaySonnet => '7 天 · Sonnet';
+
+  @override
+  String get activityQuotaSevenDayOpus => '7 天 · Opus';
+
+  @override
+  String activityQuotaUsed(String value) {
+    return '已使用 $value';
+  }
+
+  @override
+  String activityQuotaReset(String time) {
+    return '重置时间：$time';
+  }
+
+  @override
   String get activityToolListSeparator => '、';
 
   @override
@@ -4306,7 +4364,7 @@ class L10nZh extends L10n {
   String get chatBranchHint => '在新对话中继续，原对话不变';
 
   @override
-  String get chatEditResendHint => '在新对话中改写，原对话不变';
+  String get chatEditResendHint => '在新对话中改写，图片和文件需重新添加；原对话不变';
 
   @override
   String get chatSaveToPhotos => '保存到相册';

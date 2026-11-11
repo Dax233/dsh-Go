@@ -1632,6 +1632,64 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get activityQuotaTitle => 'Subscription usage';
+
+  @override
+  String get activityQuotaRefresh => 'Refresh usage';
+
+  @override
+  String get activityQuotaPermissionDenied => 'This subscription does not have permission to access usage.';
+
+  @override
+  String get activityQuotaAuthError => 'Sign-in expired or access denied. Check your subscription sign-in.';
+
+  @override
+  String get activityQuotaNetworkError => 'Network error. Try again later.';
+
+  @override
+  String get activityQuotaRateLimited => 'Too many requests. Try again later.';
+
+  @override
+  String get activityQuotaLoading => 'Loading subscription usage…';
+
+  @override
+  String get activityQuotaUnavailable => 'Can\'t load subscription usage right now. Try again later.';
+
+  @override
+  String get activityQuotaUnsupported => 'This host does not support subscription usage';
+
+  @override
+  String get activityQuotaSignedOut => 'Subscription is signed out';
+
+  @override
+  String get activityQuotaPrimary => 'Primary limit';
+
+  @override
+  String get activityQuotaSecondary => 'Secondary limit';
+
+  @override
+  String get activityQuotaFiveHour => '5 hours';
+
+  @override
+  String get activityQuotaSevenDay => '7 days';
+
+  @override
+  String get activityQuotaSevenDaySonnet => '7 days · Sonnet';
+
+  @override
+  String get activityQuotaSevenDayOpus => '7 days · Opus';
+
+  @override
+  String activityQuotaUsed(String value) {
+    return '$value used';
+  }
+
+  @override
+  String activityQuotaReset(String time) {
+    return 'Resets: $time';
+  }
+
+  @override
   String get activityToolListSeparator => ', ';
 
   @override
@@ -4576,7 +4634,7 @@ class L10nEn extends L10n {
   String get chatBranchHint => 'Continue in a new chat. The original stays as is.';
 
   @override
-  String get chatEditResendHint => 'Rewrite in a new chat. The original stays as is.';
+  String get chatEditResendHint => 'Rewrite in a new chat. Reattach images and files; the original stays as is.';
 
   @override
   String get chatSaveToPhotos => 'Save to Photos';

@@ -814,6 +814,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             addView(PhonePromptUi.card(service, p), FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         }
+        showWindow(root)
         val layout = params(top = false, keepScreenOn = true)
         place(root, layout, top = false)
         if (!p.live || !add(root, layout)) return null
@@ -928,6 +929,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
                 main.postDelayed(this, 1_000)
             }
         }
+        showWindow(root)
         val params = params(top = false, keepScreenOn = true)
         place(root, params, top = false)
         if (!add(root, params)) return false
@@ -1005,6 +1007,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
                 main.postDelayed(this, 1_000)
             }
         }
+        showWindow(root)
         val params = params(top = true, keepScreenOn = true)
         place(root, params, top = true)
         if (!add(root, params)) return false

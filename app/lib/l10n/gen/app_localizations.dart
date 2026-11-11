@@ -2936,6 +2936,114 @@ abstract class L10n {
   /// **'{label}，/{name}'**
   String activitySlashCommandSemantics(String label, String name);
 
+  /// No description provided for @activityQuotaTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅额度'**
+  String get activityQuotaTitle;
+
+  /// No description provided for @activityQuotaRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新额度'**
+  String get activityQuotaRefresh;
+
+  /// No description provided for @activityQuotaPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅没有权限查询额度'**
+  String get activityQuotaPermissionDenied;
+
+  /// No description provided for @activityQuotaAuthError.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录已过期或无权查询，请检查订阅登录'**
+  String get activityQuotaAuthError;
+
+  /// No description provided for @activityQuotaNetworkError.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络连接失败，请稍后重试'**
+  String get activityQuotaNetworkError;
+
+  /// No description provided for @activityQuotaRateLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询过于频繁，请稍后重试'**
+  String get activityQuotaRateLimited;
+
+  /// No description provided for @activityQuotaLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在查询订阅额度…'**
+  String get activityQuotaLoading;
+
+  /// No description provided for @activityQuotaUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法查询订阅额度，请稍后重试'**
+  String get activityQuotaUnavailable;
+
+  /// No description provided for @activityQuotaUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'此主机暂不支持查询订阅额度'**
+  String get activityQuotaUnsupported;
+
+  /// No description provided for @activityQuotaSignedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'订阅未登录'**
+  String get activityQuotaSignedOut;
+
+  /// No description provided for @activityQuotaPrimary.
+  ///
+  /// In zh, this message translates to:
+  /// **'主要额度'**
+  String get activityQuotaPrimary;
+
+  /// No description provided for @activityQuotaSecondary.
+  ///
+  /// In zh, this message translates to:
+  /// **'次要额度'**
+  String get activityQuotaSecondary;
+
+  /// No description provided for @activityQuotaFiveHour.
+  ///
+  /// In zh, this message translates to:
+  /// **'5 小时'**
+  String get activityQuotaFiveHour;
+
+  /// No description provided for @activityQuotaSevenDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天'**
+  String get activityQuotaSevenDay;
+
+  /// No description provided for @activityQuotaSevenDaySonnet.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天 · Sonnet'**
+  String get activityQuotaSevenDaySonnet;
+
+  /// No description provided for @activityQuotaSevenDayOpus.
+  ///
+  /// In zh, this message translates to:
+  /// **'7 天 · Opus'**
+  String get activityQuotaSevenDayOpus;
+
+  /// No description provided for @activityQuotaUsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已使用 {value}'**
+  String activityQuotaUsed(String value);
+
+  /// No description provided for @activityQuotaReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置时间：{time}'**
+  String activityQuotaReset(String time);
+
   /// No description provided for @activityToolListSeparator.
   ///
   /// In zh, this message translates to:
@@ -7943,7 +8051,7 @@ abstract class L10n {
   /// No description provided for @chatEditResendHint.
   ///
   /// In zh, this message translates to:
-  /// **'在新对话中改写，原对话不变'**
+  /// **'在新对话中改写，图片和文件需重新添加；原对话不变'**
   String get chatEditResendHint;
 
   /// No description provided for @chatSaveToPhotos.

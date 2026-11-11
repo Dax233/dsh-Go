@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../l10n/l10n.dart';
 import '../../../state/composer_quote.dart' show splitQuote;
 import '../../common/expand_reveal.dart';
 import '../../common/fluid_bits.dart';
@@ -83,7 +82,6 @@ class UserBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
     final surfaces = DshSurfaces.of(context);
     final style = AppType.chatBody(context, color: surfaces.onUserBubble);
     // A generation request (generation mode's parameter header on the first
@@ -113,7 +111,6 @@ class UserBubble extends StatelessWidget {
     final bubble = Semantics(
       container: true,
       header: true,
-      label: l10n.chatMe,
       child: HoldLift(
         onLongPress: () => _menu(context),
         child: DecoratedBox(
