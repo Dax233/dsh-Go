@@ -39,7 +39,7 @@ async function fixture(t, profile, behavior = {}) {
       controller.abort(new DOMException('deadline', 'TimeoutError'));
       return;
     }
-    if (creating && behavior.reject) { res.writeHead(behavior.reject); res.end('{}'); return; }
+    if (creating && behavior.reject) { res.writeHead(behavior.reject); res.end(JSON.stringify({ error: behavior.error })); return; }
     if (req.method === 'DELETE' || req.url.endsWith('/cancel')) { state = 'cancelled'; res.end('{}'); return; }
     const url = 'https://result.example/original.' + (profile.includes('video') ? 'mp4' : 'png');
     let value;
@@ -49,7 +49,7 @@ async function fixture(t, profile, behavior = {}) {
     else {
       if (behavior.queryError) { res.writeHead(503); res.end('{}'); return; }
       if (behavior.queryStall) return;
-      value = profile === 'ark-video' ? { id: 'task-1', status: state === 'cancelled' ? 'cancelled' : state, content: { video_url: url } }
+      value = profile === 'ark-video' ? { id: 'task-1', status: state === 'cancelled' ? 'cancelled' : state, error: behavior.error, content: { video_url: url } }
         : profile === 'ali-video' ? { output: { task_id: 'task-1', task_status: ({ queued: 'PENDING', running: 'RUNNING', succeeded: 'SUCCEEDED', failed: 'FAILED', cancelled: 'CANCELED' })[state], video_url: url } }
           : { status: ({ queued: 'InQueue', running: 'InProgress', succeeded: 'Succeed', failed: 'Failed' })[state], results: { videos: [{ url }] } };
     }
@@ -422,3 +422,25 @@ test('legacy-only defaults keep the old selection and fail-closed behavior', () 
   const explicit = selectedRequest({ prompt: '猫', serviceId: 'vid' }, snapshot, snapshot.services, 'generate_video');
   assert.equal(explicit.request.service.id, 'vid');
 });
+
+for (const [phase, profile, errorCode] of [
+  ['create', 'ark-image', 'OutputImageSensitiveContentDetected'],
+  ['create', 'ark-video', 'InputImageSensitiveContentDetected'],
+  ['query', 'ark-video', 'InputTextSensitiveContentDetected'],
+]) {
+  test(`${profile}: ${phase} moderation reports policy and keeps the submitted budget hold`, async t => {
+    const f = await fixture(t, profile, { state: 'failed', error: { code: errorCode },
+      ...(phase === 'create' ? { reject: 400 } : {}) });
+    const req = request(profile);
+    f.context.admission = await admitGeneration(req, f.context);
+    await assert.rejects(generateMedia(req, f.context), { code: 'policy' });
+    assert.deepEqual(f.wires.map(wire => wire.method), phase === 'create' ? ['POST'] : ['POST', 'GET']);
+    const ledger = await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot();
+    assert.equal(ledger.requests.length, 1);
+    const record = ledger.requests[0];
+    assert.equal(record.state, phase === 'create' ? 'submission_unknown' : 'submitted');
+    assert.equal(record.providerTaskId, phase === 'create' ? undefined : 'task-1');
+    assert.equal(record.estimateMicros, f.context.budget.unknownHoldMicros);
+    assert.deepEqual(await readdir(join(f.workspace, 'generated', record.outputDate)), []);
+  });
+}
