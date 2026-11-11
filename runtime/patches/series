@@ -11,6 +11,7 @@ route-guard.diff
 schemastery-json-context.diff
 session-title-word-prefix.diff
 str-editor-view-prefix.diff
+web-composer-mobile-newline.diff
 z-plugin-install-log-utf8.diff
 zz-direct-runtime.diff
 zzz-config-editor-path.diff
