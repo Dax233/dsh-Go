@@ -200,6 +200,7 @@ class BundleTile extends ConsumerWidget {
         subtitle: subtitle.isEmpty ? null : subtitle,
         subtitleColor: error.isNotEmpty && !running ? colors.danger : null,
         trailing: trailing,
+        trailingSemanticLabel: trailing is Switch && !readOnly ? title : null,
         chevron: false,
         onTap: readOnly
             ? null
