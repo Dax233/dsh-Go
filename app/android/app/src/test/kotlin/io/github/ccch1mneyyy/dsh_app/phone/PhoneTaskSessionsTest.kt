@@ -46,6 +46,7 @@ class PhoneTaskSessionsTest {
     }
     @Volatile private var enabled = true
     @Volatile private var locked = false
+    @Volatile private var beforeRecoveryRead: () -> Unit = {}
     private val env = object : PhoneEnv {
         override fun enabled() = enabled
         override fun policies() = PhonePolicies()
@@ -95,7 +96,11 @@ class PhoneTaskSessionsTest {
     private val sessions = PhoneTaskSessions(time::get, ids::incrementAndGet,
         { tasks, _ -> PhoneCore(env, tasks, ActionLog(), worker) }, legacy, legacyCore, { changed() }, settleResources = { cleanup(it) }, dispatchCleanup = { cleanupDispatch(it) }, cancelScope = { task, state -> cancelScope(task, state) },
         journal = journal, recoveryAdmission = { recoveryAdmission() },
-        screenRecoveryReady = { env.enabled() && !env.isLocked() },
+        screenRecoveryReady = {
+            val ready = env.enabled() && !env.isLocked()
+            beforeRecoveryRead()
+            ready
+        },
         startSkillScope = { skillEpoch }, completeSkillScope = { owner, epoch, result -> completeSkill(owner, epoch, result) },
         prepareBackground = { _, _ -> backgroundPreparations.incrementAndGet(); null },
         createBackgroundWorker = { SerialWorker("session-background", time::get) { false }.also { backgroundWorkers += it } })
@@ -264,6 +269,32 @@ class PhoneTaskSessionsTest {
         assertTrue(invoke("A", "already-ended").isError)
         assertTrue(invoke("A").isError)
         end("A") // Host end before the next run is also supported.
+        assertFalse(invoke("A", "2").isError)
+        assertTrue(invoke("A").isError)
+    }
+
+    @Test fun aReadySampleFromBeforeScreenOffCannotClearTheNewStopFence() {
+        assertFalse(invoke("A").isError)
+        val sampled = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        beforeRecoveryRead = {
+            beforeRecoveryRead = {}
+            sampled.countDown()
+            check(release.await(2, TimeUnit.SECONDS))
+        }
+        val raced = pool.submit<PhoneTaskSessions.Admission> { admit("A", "2") }
+        try {
+            check(sampled.await(2, TimeUnit.SECONDS))
+            locked = true
+            sessions.stopAll("screen off", PhoneTasks.StopSource.SCREEN_OFF)
+        } finally {
+            release.countDown()
+        }
+        val refused = raced.get(2, TimeUnit.SECONDS)
+        assertNull(refused.task)
+        assertTrue(sessions.run(refused, PhoneToolCatalog.APPS, emptyMap()).isError)
+        assertTrue(invoke("A", "2").isError)
+        locked = false
         assertFalse(invoke("A", "2").isError)
         assertTrue(invoke("A").isError)
     }

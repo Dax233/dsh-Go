@@ -186,7 +186,8 @@ class PhoneTaskSessions(
     /** Called while PhoneBridge still holds its launch lock, before dispatch enters its pool. */
     fun admit(attribution: PhoneCaller?): Admission {
         val startedAt = clock()
-        // Platform state reads may use Binder; do not hold the registry across them.
+        // Platform state reads may use Binder; bind their result to the current stop epoch.
+        val readinessEpoch = synchronized(lock) { epoch }
         val screenReady = attribution?.runLifecycle == 1 && screenRecoveryReady()
         return synchronized(lock) {
             if (attribution?.runLifecycle == 1) modernCallerSeen = true
@@ -198,7 +199,7 @@ class PhoneTaskSessions(
             val key = Key(caller?.sessionId, caller?.runId)
             if (caller != null) {
                 if (key in endedRuns || entries[key]?.stopped == true) return Admission(null, epoch, PhoneTasks.STOPPED_MESSAGE, startedAt = startedAt)
-                if (caller.sessionId in stoppedSessions && !recoverScreenStop(key, screenReady))
+                if (caller.sessionId in stoppedSessions && !recoverScreenStop(key, screenReady && readinessEpoch == epoch))
                     return Admission(null, epoch, PhoneTasks.STOPPED_MESSAGE, startedAt = startedAt)
                 if (!reserve(key)) return Admission(null, epoch, CAPACITY_MESSAGE, startedAt = startedAt)
             }
@@ -861,6 +862,7 @@ class PhoneTaskSessions(
     fun stopAll(reason: String, source: PhoneTasks.StopSource = PhoneTasks.StopSource.ENVIRONMENT) {
         data class PendingStop(val task: Task, val change: PhoneTasks.Change, val ownsCancellation: Boolean)
         val pending = synchronized(lock) {
+            epoch++
             selfCheck?.sealed = true
             if (source != PhoneTasks.StopSource.SCREEN_OFF) screenStoppedSessions.clear()
             entries.values.map { task ->
