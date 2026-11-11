@@ -136,6 +136,29 @@ test("effects: shorthand, whitelist, limits", () => {
   assert.ok(validate({ type: "refresh" }, { panels: new Set(["a"]), source: "a", static: true }).issue);
 });
 
+test("effects: overflow diagnostics survive unknown and unnegotiated entries", () => {
+  const known = Array.from({ length: 6 }, (_, i) => ({ type: "toast", text: String(i + 1) }));
+  const unknown = { type: "future-effect" };
+  const audio = { type: "audio", op: "play", instance: "reading", src: "media:speech" };
+  const opts = { panels: new Set(), capabilities: { declared: ["audio"], features: [], media: ["speech"] } };
+  const results = [
+    normalize(known, opts),
+    normalize([unknown, ...known.slice(0, 4)], opts),
+    normalize([audio, ...known.slice(0, 4)], opts),
+    normalize([unknown, ...known], opts),
+    normalize([audio, ...known], opts),
+  ];
+  assert.deepEqual(results.map((r) => r.effects), results.map(() => known.slice(0, 4)));
+  assert.deepEqual(results.map((r) => r.violation), [true, false, false, true, true]);
+  assert.deepEqual(results.map((r) => codes(r.issues)), [
+    ["too-many@/runtime/effects/4"],
+    ["unknown-effect@/runtime/effects/0"],
+    ["unknown-effect@/runtime/effects/0"],
+    ["unknown-effect@/runtime/effects/0", "too-many@/runtime/effects/5"],
+    ["unknown-effect@/runtime/effects/0", "too-many@/runtime/effects/5"],
+  ]);
+});
+
 // ------------------------------------------------------------------ manifest
 
 test("manifest: valid manifest renders with locale and ready flags", () => {
