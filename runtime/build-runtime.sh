@@ -66,6 +66,7 @@ NPM_REGISTRY="https://registry.npmmirror.com"
 TERMUX_REPO="https://packages.termux.dev/apt/termux-main"
 UBUNTU_ARCHIVE_AMD64="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"        # InRelease verified with gpgv
 UBUNTU_ARCHIVE_ARM64="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
+UBUNTU_DEB_FALLBACK="https://launchpad.net/ubuntu/+archive/primary/+files"
 PBS_OFFICIAL="https://github.com/astral-sh/python-build-standalone/releases/download"
 PBS_MIRROR="https://registry.npmmirror.com/-/binary/python-build-standalone"
 
@@ -98,15 +99,24 @@ for tool in curl sha256sum python3 tar xz; do
   command -v "$tool" >/dev/null || die "missing host tool: $tool"
 done
 
-# fetch URL DEST [expected-sha256]: cached download with checksum verification.
+# fetch URL DEST [expected-sha256] [fallback-url]: cached, checksum-verified download.
 fetch() {
   local url="$1" dest="$2" want="${3:-}"
-  mkdir -p "$(dirname "$dest")"
+  mkdir -p "$(dirname "$dest")" || die "cannot create download directory for $dest"
   if [[ -f "$dest" && -n "$want" && "$(sha256 "$dest")" == "$want" ]]; then return 0; fi
   if [[ -f "$dest" && -z "$want" ]]; then return 0; fi
-  log "download $url"
-  curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -sS -o "$dest.part" "$url"
-  mv "$dest.part" "$dest"
+  # Handle transport failure here: callers include command substitutions, where
+  # errexit is disabled, and a conditional fetch call would disable it too.
+  local candidate fetched=0
+  for candidate in "$url" "${4:-}"; do
+    [[ -n "$candidate" ]] || continue
+    log "download $candidate"
+    if curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -sS -o "$dest.part" "$candidate"; then
+      fetched=1; break
+    fi
+  done
+  [[ "$fetched" == 1 ]] || die "download failed for $dest"
+  mv "$dest.part" "$dest" || die "cannot publish download $dest"
   if [[ -n "$want" ]]; then
     local got; got="$(sha256 "$dest")"
     [[ "$got" == "$want" ]] || { rm -f "$dest"; die "sha256 mismatch for $dest: got $got want $want"; }
@@ -198,7 +208,8 @@ PYEOF
   local name file sum
   while read -r file sum; do
     name="$(basename "$file")"
-    fetch "$mirror/$file" "$CACHE/ubuntu/debs/$name" "$sum"
+    # Superseded versions can leave the mirror; keep the locked bytes and hash.
+    fetch "$mirror/$file" "$CACHE/ubuntu/debs/$name" "$sum" "$UBUNTU_DEB_FALLBACK/$name"
     printf '%s\n' "$CACHE/ubuntu/debs/$name"
   done < <(python3 -I -c 'import json,sys; [print(p["filename"], p["sha256"]) for p in json.load(open(sys.argv[1]))["packages"]]' "$lock")
 }
@@ -213,8 +224,8 @@ python_dist() {  # $1 = aarch64|x86_64; echoes path
   local listed; listed="$(awk -v f="$name" '$2==f {print $1}' "$dir/SHA256SUMS")"
   [[ -n "$listed" ]] || die "$name not in SHA256SUMS of $PBS_RELEASE"
   [[ -z "$pin" || "$pin" == "$listed" ]] || die "SHA256SUMS disagrees with pinned hash for $name"
-  fetch "$PBS_MIRROR/$PBS_RELEASE/$name" "$dir/$name" "$listed" 2>/dev/null \
-    || fetch "$PBS_OFFICIAL/$PBS_RELEASE/$name" "$dir/$name" "$listed"
+  fetch "$PBS_MIRROR/$PBS_RELEASE/$name" "$dir/$name" "$listed" \
+    "$PBS_OFFICIAL/$PBS_RELEASE/$name"
   printf '%s' "$dir/$name"
 }
 
