@@ -154,9 +154,6 @@ jobs:
             sudo apt-get install -y --no-install-recommends fish zsh
           fi
       - run: flutter pub get --enforce-lockfile
-      - name: SSH form regression (focused diagnosis)
-        if: matrix.shard == 2
-        run: flutter test --no-pub --reporter github test/remote/ssh_attach_form_test.dart
       - name: Analyze, and generated localization matches its source
         if: matrix.shard == 0
         run: |
