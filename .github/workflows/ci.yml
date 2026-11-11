@@ -199,7 +199,16 @@ jobs:
     steps:
       - *checkout
       - *node
+      - name: Restore the patched DSH and pnpm prefixes
+        id: runtime-prefixes
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dsh
+            ${{ runner.temp }}/pnpm
+          key: runtime-prefixes-v1-${{ runner.os }}-${{ runner.arch }}-node${{ env.NODE_VERSION }}-${{ hashFiles('runtime/locks/**/package*.json', 'runtime/patches/**', 'runtime/session-deletion/**', 'runtime/lib/rtbuild.py', 'runtime/build-runtime.sh') }}
       - name: Install a throwaway patched DSH
+        if: steps.runtime-prefixes.outputs.cache-hit != 'true'
         run: |
           version=$(sed -nE 's/^DSH_VERSION="\$\{DSH_VERSION:-(.+)\}"$/\1/p' runtime/build-runtime.sh)
           prefix="$RUNNER_TEMP/dsh"
@@ -213,6 +222,19 @@ jobs:
           mkdir "$pnpm_prefix"
           cp "runtime/locks/pnpm-$pnpm_version/package.json" "runtime/locks/pnpm-$pnpm_version/package-lock.json" "$pnpm_prefix/"
           npm ci --prefix "$pnpm_prefix" --ignore-scripts --no-audit --no-fund
+      # Save before tests: some tests deliberately modify their disposable prefix.
+      - name: Save the prepared prefixes
+        if: steps.runtime-prefixes.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/dsh
+            ${{ runner.temp }}/pnpm
+          key: ${{ steps.runtime-prefixes.outputs.cache-primary-key }}
+      - name: Export the runtime test paths
+        run: |
+          prefix="$RUNNER_TEMP/dsh"
+          pnpm_prefix="$RUNNER_TEMP/pnpm"
           {
             echo "DSH_PREFIX=$prefix"
             echo "DSH_TEST_PREFIX=$prefix"
