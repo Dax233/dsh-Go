@@ -70,6 +70,7 @@ void main() {
     await pump(tester, sampleSsh, server);
     final restart = find.widgetWithText(TextButton, '重启托管 DSH');
     await tester.ensureVisible(restart);
+    await tester.pumpAndSettle();
     await tester.tap(restart);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -83,6 +84,7 @@ void main() {
     expect(server.last.scripts.any((script) => script.contains(r'kill "$P"')), isFalse);
 
     await tester.ensureVisible(restart);
+    await tester.pumpAndSettle();
     await tester.tap(restart);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重启托管 DSH'));

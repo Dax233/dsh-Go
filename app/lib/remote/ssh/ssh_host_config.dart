@@ -128,8 +128,9 @@ class SshHostConfig {
     final command = raw['launchCommand'];
     final cwd = raw['workingDirectory'];
     final remotePort = raw['remotePort'];
-    if (raw['dshMode'] == 'attachOnly' &&
-        (remotePort is! int || remotePort < 1 || remotePort > 65535)) return null;
+    if (raw['dshMode'] == 'attachOnly' && (remotePort is! int || remotePort < 1 || remotePort > 65535)) {
+      return null;
+    }
     return SshHostConfig(
       id: id,
       name: name is String && name.trim().isNotEmpty ? name : host,
