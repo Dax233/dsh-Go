@@ -18,6 +18,17 @@ mkdir -p "$DEV_ROOT" "$DL"
 
 log() { printf '[toolchain %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
+download_cached() (
+  local destination="$1" url="$2" pending_download
+  if [ -f "$destination" ]; then return; fi
+  pending_download=$(mktemp "$destination.part.XXXXXX")
+  trap 'rm -f -- "$pending_download"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  curl -fL --retry 3 -o "$pending_download" "$url"
+  mv -T -- "$pending_download" "$destination"
+)
+
 install_jdk() {
   if [ -x "$JDK_DIR/bin/java" ]; then log "JDK present"; return; fi
   local base="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/17/jdk/x64/linux/"
@@ -36,7 +47,7 @@ install_flutter() {
   local name="flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
   local url="https://storage.flutter-io.cn/flutter_infra_release/releases/stable/linux/$name"
   log "Flutter: $name"
-  [ -f "$DL/$name" ] || curl -fL --retry 3 -o "$DL/$name" "$url"
+  download_cached "$DL/$name" "$url"
   echo "$FLUTTER_SHA256  $DL/$name" | sha256sum -c -
   tar -xJf "$DL/$name" -C "$DEV_ROOT"
 }
@@ -45,7 +56,7 @@ install_cmdline_tools() {
   if [ -x "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then log "cmdline-tools present"; return; fi
   local name="commandlinetools-linux-${CMDLINE_TOOLS_BUILD}_latest.zip"
   log "cmdline-tools: $name"
-  [ -f "$DL/$name" ] || curl -fL --retry 3 -o "$DL/$name" "https://dl.google.com/android/repository/$name"
+  download_cached "$DL/$name" "https://dl.google.com/android/repository/$name"
   rm -rf "$DL/cmdline-tools" && mkdir -p "$SDK_DIR/cmdline-tools"
   (cd "$DL" && unzip -q -o "$name")
   rm -rf "$SDK_DIR/cmdline-tools/latest"
@@ -55,7 +66,11 @@ install_cmdline_tools() {
 install_jdk & p1=$!
 install_flutter & p2=$!
 install_cmdline_tools & p3=$!
-wait $p1 && wait $p2 && wait $p3
+install_status=0
+for installer_pid in "$p1" "$p2" "$p3"; do
+  wait "$installer_pid" || install_status=$?
+done
+((install_status == 0)) || exit "$install_status"
 
 export JAVA_HOME="$JDK_DIR"
 export ANDROID_HOME="$SDK_DIR" ANDROID_SDK_ROOT="$SDK_DIR"
