@@ -214,8 +214,7 @@ object LastKnownGood {
                 null
             }
             if (holder != null && !File("/proc/$holder").exists()) {
-                lock.delete()
-                continue
+                if (lock.delete()) continue
             }
             if (System.currentTimeMillis() > deadline) throw IllegalStateException(busyConfig)
             Thread.sleep(50)
