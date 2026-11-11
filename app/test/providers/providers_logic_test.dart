@@ -62,6 +62,55 @@ void main() {
       );
     });
 
+    for (final (api, input, expected) in [
+      (ProviderApi.openaiCompletions, 'https://gw.example.com/v1/chat/completions', 'https://gw.example.com/v1'),
+      (ProviderApi.openaiResponses, 'https://gw.example.com/api/v3/responses', 'https://gw.example.com/api/v3'),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/api/v1/messages', 'https://gw.example.com/api'),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/proxy/messages', 'https://gw.example.com/proxy'),
+      (
+        ProviderApi.openaiCompletions,
+        ' https://GW.example.com:8443/TeNaNt/a%2Fb/V1/ChAt/CoMpLeTiOnS/// ',
+        'https://GW.example.com:8443/TeNaNt/a%2Fb/V1',
+      ),
+      (ProviderApi.openaiResponses, 'http://[::1]:8000/Proxy/ReSpOnSeS/', 'http://[::1]:8000/Proxy'),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/Proxy/V1/MeSsAgEs///', 'https://gw.example.com/Proxy'),
+      (
+        ProviderApi.openaiCompletions,
+        'https://gw.example.com/chat/completions/chat/completions',
+        'https://gw.example.com/chat/completions',
+      ),
+      (ProviderApi.openaiResponses, 'https://gw.example.com/responses/responses', 'https://gw.example.com/responses'),
+      (
+        ProviderApi.anthropicMessages,
+        'https://gw.example.com/tenant/v1/v1/messages',
+        'https://gw.example.com/tenant/v1',
+      ),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/messages/messages', 'https://gw.example.com/messages'),
+    ]) {
+      test('Base URL endpoint: ${api.name} $input', () {
+        expect(normalizeBaseUrl(input, api), expected);
+      });
+    }
+
+    test('Base URL endpoints do not consume authority or another protocol path', () {
+      for (final api in ProviderApi.values) {
+        for (final url in ['https://messages', 'https://v1', 'https://responses', 'https://chat/completions']) {
+          expect(normalizeBaseUrl(url, api), url, reason: '$api $url');
+        }
+      }
+      for (final (api, path) in [
+        (ProviderApi.openaiCompletions, '/v1/messages'),
+        (ProviderApi.openaiResponses, '/v1/chat/completions'),
+        (ProviderApi.anthropicMessages, '/v1/responses'),
+        (ProviderApi.openaiCompletions, '/v1/chat/completions-extra'),
+        (ProviderApi.openaiResponses, '/api/v3'),
+        (ProviderApi.anthropicMessages, '/api/V1'),
+      ]) {
+        final url = 'https://gw.example.com$path';
+        expect(normalizeBaseUrl(url, api), url);
+      }
+    });
+
     test('Base URL errors', () {
       expect(baseUrlError(''), '填写 Base URL');
       expect(baseUrlError('gw.example.com/v1'), '以 http:// 或 https:// 开头的完整地址');

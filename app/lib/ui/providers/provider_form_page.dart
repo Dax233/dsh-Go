@@ -75,6 +75,13 @@ class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
 
   bool get _isEdit => _editing != null;
 
+  /// A stored base is authoritative until its address or protocol is edited.
+  String _baseUrlForRequest(String raw, ProviderApi api) {
+    final existing = _editing;
+    if (existing != null && existing.api == api && existing.baseUrl == raw) return raw;
+    return normalizeBaseUrl(raw, api);
+  }
+
   late final Listenable _edits = Listenable.merge([_name, _baseUrl, _key]);
   late String _clean;
 
@@ -159,7 +166,7 @@ class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
     final backend = ref.read(providerBackendProvider);
     final api = _api;
     var expectedUrl = _baseUrl.text;
-    final url = normalizeBaseUrl(expectedUrl, api);
+    final url = _baseUrlForRequest(expectedUrl, api);
     bool isCurrent() =>
         mounted &&
         identical(ref.read(providerBackendProvider), backend) &&
@@ -179,10 +186,10 @@ class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
       if (result.baseUrl != url) {
         _baseUrl.text = result.baseUrl;
         setState(() => _baseUrlNote = context.l10n.engineProviderCompletedUrl(result.baseUrl));
-      } else if (_baseUrl.text != url) {
-        _baseUrl.text = url;
       }
-      // Our own normalization belongs to this discovery; later user edits do not.
+      // Keep pasted endpoints intact: saving must normalize the original input
+      // once, not strip a second suffix from discovery's normalized base.
+      // An actual discovery fallback belongs to this request; later edits do not.
       expectedUrl = _baseUrl.text;
       if (result.models.isEmpty) {
         setState(() => _modelsError = context.l10n.engineProviderNoDiscoveredModels);
@@ -241,7 +248,7 @@ class _ProviderFormPageState extends ConsumerState<ProviderFormPage> {
     final draft = ProviderDraft(
       name: _name.text,
       api: _api,
-      baseUrl: normalizeBaseUrl(_baseUrl.text, _api),
+      baseUrl: _baseUrlForRequest(_baseUrl.text, _api),
       apiKey: key,
       models: _models,
     );

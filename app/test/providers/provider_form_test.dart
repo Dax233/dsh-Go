@@ -234,6 +234,33 @@ void main() {
   });
 
   group('create', () {
+    for (final (label, endpoint, expected) in [
+      ('OpenAI', 'https://gw.example.com/v1/chat/completions///', 'https://gw.example.com/v1'),
+      ('Responses', 'https://gw.example.com/api/v3/responses', 'https://gw.example.com/api/v3'),
+      ('Anthropic', 'https://gw.example.com/Tenant/v1/messages', 'https://gw.example.com/Tenant'),
+      ('Anthropic', 'https://gw.example.com/Tenant/v1/v1/messages', 'https://gw.example.com/Tenant/v1'),
+      ('Anthropic', 'https://gw.example.com/Proxy/messages', 'https://gw.example.com/Proxy'),
+    ]) {
+      testWidgets('one endpoint after discovery and save: $label $endpoint', (tester) async {
+        final backend = FakeProviderBackend(discoverResult: discovered);
+        await _open(tester, backend);
+        await tester.tap(find.text(label));
+        await _type(tester, 'Base URL', endpoint);
+        await _type(tester, 'API Key', 'sk-fixture');
+        await tester.tap(find.text('获取模型'));
+        await settle(tester);
+        expect(backend.calls.firstWhere((c) => c.$1 == 'discover').$2['baseURL'], expected);
+        await tester.tap(find.text('添加 3 个模型'));
+        await settle(tester);
+        final displayed = tester.widget<TextField>(_field('Base URL')).controller!.text;
+        await tester.tap(find.text('保存'));
+        await settle(tester);
+        expect(backend.calls.firstWhere((c) => c.$1 == 'create').$2['baseURL'], expected);
+        expect(displayed, endpoint, reason: 'ordinary discovery keeps the original input for the next save');
+        expect(backend.callNames.where((c) => c != 'read'), ['discover', 'create', 'storeKey']);
+      });
+    }
+
     testWidgets('fetch → pick two → save: profile, then key; pops with the id', (tester) async {
       final backend = FakeProviderBackend(discoverResult: discovered);
       final vault = MemoryProviderKeyVault();
@@ -371,6 +398,91 @@ void main() {
   });
 
   group('edit', () {
+    for (final (api, base) in [
+      (ProviderApi.openaiCompletions, 'https://gw.example.com/tenant/chat/completions'),
+      (ProviderApi.openaiResponses, 'https://gw.example.com/tenant/responses'),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/tenant/v1/messages'),
+      (ProviderApi.anthropicMessages, 'https://gw.example.com/tenant/v1'),
+    ]) {
+      for (final discoverFirst in [false, true]) {
+        testWidgets('preserves stored base $base, discovery $discoverFirst', (tester) async {
+          final profile = ProviderProfile(
+            route: 'custom-stored',
+            api: api.wire,
+            baseUrl: base,
+            models: const [ProviderModelSpec(id: 'model')],
+          );
+          final backend = FakeProviderBackend(profiles: [profile]);
+          await _open(tester, backend, existing: CustomProvider.fromProfile(profile));
+          await _type(tester, '名称', 'Renamed');
+          if (discoverFirst) {
+            await tester.tap(find.text('获取模型'));
+            await settle(tester);
+            expect(backend.calls.firstWhere((c) => c.$1 == 'discover').$2['baseURL'], base);
+          }
+          await tester.tap(find.text('保存'));
+          await settle(tester);
+          final update = backend.calls.firstWhere((c) => c.$1 == 'update').$2;
+          expect(update['displayName'], 'Renamed');
+          expect(update['baseURL'], base, reason: 'the unchanged address is already a stored base');
+          expect(update['api'], api.wire);
+          expect(update['expectedRevision'], 3);
+          expect(backend.callNames, isNot(contains('storeKey')));
+        });
+      }
+    }
+
+    testWidgets('a protocol-only edit reinterprets the address for that protocol', (tester) async {
+      const profile = ProviderProfile(
+        route: 'custom-stored',
+        api: 'openai-responses',
+        baseUrl: 'https://gw.example.com/tenant/v1/messages',
+        models: [ProviderModelSpec(id: 'model')],
+      );
+      final backend = FakeProviderBackend(profiles: [profile]);
+      await _open(tester, backend, existing: CustomProvider.fromProfile(profile));
+      await tester.tap(find.text('Anthropic'));
+      await tester.tap(find.text('保存'));
+      await settle(tester);
+      final update = backend.calls.firstWhere((c) => c.$1 == 'update').$2;
+      expect(update['api'], 'anthropic-messages');
+      expect(update['baseURL'], 'https://gw.example.com/tenant');
+    });
+
+    for (final (label, endpoint, expected) in [
+      ('OpenAI', 'https://gw.example.com/v1/chat/completions', 'https://gw.example.com/v1'),
+      ('Responses', 'https://gw.example.com/api/v3/responses', 'https://gw.example.com/api/v3'),
+      ('Anthropic', 'https://gw.example.com/Tenant/v1/messages', 'https://gw.example.com/Tenant'),
+    ]) {
+      testWidgets('saves a full $label endpoint without discovery', (tester) async {
+        final backend = sampleBackend();
+        await _open(tester, backend, existing: CustomProvider.fromProfile(gateway));
+        await tester.tap(find.text(label));
+        await _type(tester, 'Base URL', endpoint);
+        await tester.tap(find.text('保存'));
+        await settle(tester);
+        final update = backend.calls.firstWhere((c) => c.$1 == 'update').$2;
+        expect(update['baseURL'], expected);
+        expect(update['expectedRevision'], 3);
+        expect(backend.callNames.where((c) => c != 'read'), ['update']);
+      });
+    }
+
+    for (final suffix in ['?x=1', '#fragment']) {
+      testWidgets('endpoint with $suffix is rejected before discovery and save', (tester) async {
+        final backend = sampleBackend();
+        await _open(tester, backend, existing: CustomProvider.fromProfile(gateway));
+        await _type(tester, 'Base URL', 'https://gw.example.com/v1/chat/completions$suffix');
+        await tester.tap(find.text('获取模型'));
+        await settle(tester);
+        expect(find.text('去掉 ? 或 # 之后的部分'), findsOneWidget);
+        await tester.tap(find.text('保存'));
+        await settle(tester);
+        expect(find.text('去掉 ? 或 # 之后的部分'), findsOneWidget);
+        expect(backend.callNames.where((c) => c != 'read'), isEmpty);
+      });
+    }
+
     testWidgets('prefilled; an empty key keeps the stored one', (tester) async {
       final backend = sampleBackend();
       final gw = CustomProvider.fromProfile(gateway);

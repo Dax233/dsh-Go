@@ -227,13 +227,26 @@ class ProviderDraft {
 
 // ── Validation ───────────────────────────────────────────────────────────────
 
-/// Trims, drops trailing slashes and, for Anthropic, a trailing `/v1`: the
-/// Anthropic protocol appends `/v1/messages` itself, so `…/v1` would ask for
-/// `/v1/v1/messages`. OpenAI-style endpoints keep their path (most need
-/// `/v1`).
+/// After [baseUrlError] succeeds, trims and removes one matching protocol endpoint.
+/// Trailing slashes are dropped first.
+/// Otherwise Anthropic drops a trailing `/v1`, as its SDK appends `/v1/messages`.
+/// Other base paths are kept; OpenAI-style endpoints are not given a `/v1`.
 String normalizeBaseUrl(String raw, ProviderApi api) {
-  var url = raw.trim().replaceFirst(RegExp(r'/+$'), '');
-  if (api == ProviderApi.anthropicMessages) url = url.replaceFirst(RegExp(r'/v1$'), '');
+  final url = raw.trim().replaceFirst(RegExp(r'/+$'), '');
+  final uri = Uri.parse(url);
+  final pattern = switch (api) {
+    ProviderApi.openaiCompletions => r'/chat/completions$',
+    ProviderApi.openaiResponses => r'/responses$',
+    ProviderApi.anthropicMessages => r'/(?:v1/)?messages$',
+  };
+  final endpoint = RegExp(pattern, caseSensitive: false).firstMatch(uri.path)?.group(0);
+  // Match the path, never the authority; retain the original escaped prefix.
+  if (endpoint != null && url.toLowerCase().endsWith(endpoint.toLowerCase())) {
+    return url.substring(0, url.length - endpoint.length);
+  }
+  if (api == ProviderApi.anthropicMessages && uri.path.endsWith('/v1') && url.endsWith('/v1')) {
+    return url.substring(0, url.length - 3);
+  }
   return url;
 }
 
