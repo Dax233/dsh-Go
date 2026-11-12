@@ -16,7 +16,7 @@ afterEach(() => vi.restoreAllMocks());
 function setup() {
   const bucket = new PetBucket(), f = makeEnv({ BUCKET: bucket as unknown as R2Bucket });
   const call = (path: string, method = 'GET', body?: object | Uint8Array, admin = false, extra: Record<string, string> = {}) => worker.fetch(new Request('https://example.org' + path, {
-    method, headers: { ...(path.startsWith(API) ? { 'User-Api-Key': 'synthetic-forum-key' } : {}), ...(admin ? { 'X-Admin-Key': f.env.ADMIN_KEY! } : {}),
+    method, headers: { ...(path.startsWith(API) ? { 'User-Api-Key': 'synthetic-forum-key', 'X-Workshop-Forum-Origin': 'https://forum.dshtui.com' } : {}), ...(admin ? { 'X-Admin-Key': f.env.ADMIN_KEY! } : {}),
       ...(body ? { 'Content-Type': body instanceof Uint8Array ? 'application/zip' : 'application/json' } : {}), ...extra },
     ...(body ? { body: body instanceof Uint8Array ? body : JSON.stringify(body) } : {}),
   }), f.env, makeCtx().ctx);
@@ -41,6 +41,55 @@ it('starts with both capabilities enabled and keeps old pet routes separate', as
   expect(f.dl.objects.size).toBe(0);
   expect((await f.call('/market/pets.json')).status).toBe(404);
 });
+it('requires the forum assertion at every author identity entry before any upstream call', async () => {
+  const f = setup(), sid = '0123456789abcdef0123456789abcdef';
+  const routes = [
+    ['/submissions', 'GET'], ['/submissions', 'POST'], [`/submissions/${sid}`, 'GET'],
+    [`/submissions/${sid}/archive`, 'PUT'], [`/submissions/${sid}/withdraw`, 'POST'], ['/reports', 'POST'],
+  ] as const;
+  for (const expected of [undefined, '', 'https://another-forum.example']) {
+    for (const [path, method] of routes) {
+      const response = await worker.fetch(new Request('https://example.org' + API + path, {
+        method, headers: { 'User-Api-Key': 'synthetic-forum-key', ...(expected === undefined ? {} : { 'X-Workshop-Forum-Origin': expected }) },
+      }), f.env, makeCtx().ctx);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: 'workshop_forum_origin' });
+    }
+  }
+  expect(fetch).not.toHaveBeenCalled(); expect(f.bucket.objects.size).toBe(0);
+});
+it('checks the configured forum again after capabilities and never routes from the assertion', async () => {
+  const f = setup(), announced = await (await f.call(API + '/capabilities')).json() as any;
+  expect(announced.forumOrigin).toBe('https://forum.dshtui.com');
+  f.env.WORKSHOP_FORUM_URL = 'https://another-forum.example';
+  const changed = await f.call(API + '/submissions');
+  expect(changed.status).toBe(409); expect(await changed.json()).toEqual({ error: 'workshop_forum_origin' });
+  expect(fetch).not.toHaveBeenCalled();
+  const current = await f.call(API + '/submissions', 'GET', undefined, false, { 'X-Workshop-Forum-Origin': 'https://another-forum.example' });
+  expect(current.status).toBe(200);
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual(['https://another-forum.example/session/current.json']);
+});
+it('compares the canonical IPv6 forum but forwards only the configured destination and allowed headers', async () => {
+  const f = setup(); f.env.WORKSHOP_FORUM_URL = 'https://[2001:0db8:0000:0000:0000:0000:0000:0001]:443/';
+  const announced = await (await f.call(API + '/capabilities')).json() as any;
+  expect(announced.forumOrigin).toBe('https://[2001:db8::1]');
+  const response = await f.call(API + '/submissions', 'GET', undefined, false, { 'X-Workshop-Forum-Origin': announced.forumOrigin });
+  expect(response.status).toBe(200);
+  const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+  expect(url).toBe('https://[2001:db8::1]/session/current.json');
+  expect(init?.headers).toEqual({ 'User-Api-Key': 'synthetic-forum-key', Accept: 'application/json' });
+  expect(init?.redirect).toBe('manual'); expect(fetch).toHaveBeenCalledTimes(1);
+});
+it('keeps public queries and the independent admin gate free of author assertion requirements', async () => {
+  const f = setup();
+  for (const path of [API + '/capabilities', '/market/workshop.json']) {
+    expect((await worker.fetch(new Request('https://example.org' + path), f.env, makeCtx().ctx)).status).toBe(200);
+  }
+  const admin = await worker.fetch(new Request('https://example.org' + API + '/admin/reports', {
+    headers: { 'X-Admin-Key': f.env.ADMIN_KEY! },
+  }), f.env, makeCtx().ctx);
+  expect(admin.status).toBe(200); expect(fetch).not.toHaveBeenCalled();
+});
 it('binds idempotency, fixed forum identity and metadata without retaining the key', async () => {
   const f = setup(), item = await f.create();
   const same = await f.call(API + '/submissions', 'POST', { ...item.meta, requestId: item.requestId }); expect(same.status).toBe(200);
@@ -52,6 +101,17 @@ it('binds idempotency, fixed forum identity and metadata without retaining the k
   expect(f.state().audit[0]).toMatchObject({ action: 'create', actor: { forumUserId: 42 }, submissionId: item.sid });
   forumUser = 43; expect((await f.call(`${API}/submissions/${item.sid}`)).status).toBe(404);
   expect((await f.call(`${API}/submissions/${item.sid}/archive`, 'PUT', item.bytes)).status).toBe(404);
+});
+it('retains optional display metadata through creation and publication without embedding it in the pack', async () => {
+  const f = setup(), fields = { description: 'A small companion', tags: ['pet', '猫'] };
+  const item = await f.publish(pet(), fields);
+  expect(f.state().submissions[0].metadata).toMatchObject(fields);
+  const response = await f.call(`${API}/submissions/${item.sid}`);
+  expect((await response.json() as any).submission.metadata).toMatchObject(fields);
+  const catalog = await (await f.call('/market/workshop.json')).json() as any;
+  expect(catalog.entries[0]).toMatchObject(fields);
+  const repeated = await f.call(API + '/submissions', 'POST', { tags: fields.tags, description: fields.description, ...item.meta, requestId: item.requestId });
+  expect(repeated.status).toBe(200);
 });
 it('exposes bytes only after review and serves conditional/Range without leaking pending archives', async () => {
   const f = setup(), item = await f.create(); await f.upload(item);

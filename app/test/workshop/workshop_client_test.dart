@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dsh_app/update/update_http.dart';
 import 'package:dsh_app/workshop/workshop_client.dart';
+import 'package:dsh_app/workshop/workshop_http.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,6 +29,21 @@ class _FirstReadFails implements File {
   @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _ProgressHttp extends FakeWorkshopHttp implements WorkshopUploadHttp {
+  _ProgressHttp(super.route);
+  int uploads = 0;
+  @override
+  Future<UpdateHttpResponse> upload(Uri url, {required List<int> body, Map<String, String> headers = const {},
+    Duration timeout = const Duration(seconds: 30), void Function(int sent, int total)? onProgress}) async {
+    uploads++;
+    onProgress?.call(0, body.length);
+    onProgress?.call(2, body.length);
+    final response = await request('PUT', url, headers: headers, body: body, timeout: timeout);
+    onProgress?.call(body.length, body.length);
+    return response;
+  }
+}
+
 void main() {
   late Directory temp;
   late FakeWorkshopHttp http;
@@ -45,6 +61,60 @@ void main() {
       userApiKey: 'synthetic-test-key', disclosureAccepted: true);
   });
   tearDown(() => temp.deleteSync(recursive: true));
+
+  test('cachedCatalog returns no view for a missing cache without making an HTTP request', () async {
+    expect(await client.cachedCatalog(), isNull);
+    expect(client.cacheIssue, isNull);
+    expect(http.requests, isEmpty);
+  });
+
+  test('cachedCatalog restores display metadata with original time and a stale marker without HTTP', () async {
+    final metadata = {...workshopMeta(), 'description': 'A cached companion', 'tags': ['cat', 'small']};
+    http.route = (_, _, _, _) => workshopJsonResponse(workshopCatalogJson(entries: [workshopEntryJson(metadata: metadata)]));
+    final fresh = await client.catalog();
+    final restoredFile = client.cacheFile.copySync('${temp.path}/cached-only.json');
+    final offline = FakeWorkshopHttp((_, _, _, _) => throw StateError('cachedCatalog must not request HTTP'));
+    final restarted = WorkshopClient(origin: workshopTestOrigin, cacheFile: restoredFile, http: offline);
+    final cached = (await restarted.cachedCatalog())!;
+    expect(cached.stale, isTrue);
+    expect(cached.fetchedAt, fresh.fetchedAt);
+    expect(cached.refreshError, isNull);
+    expect(cached.cacheIssue, isNull);
+    expect(cached.catalog.entries.single.metadata.description, 'A cached companion');
+    expect(cached.catalog.entries.single.metadata.tags, ['cat', 'small']);
+    expect(offline.requests, isEmpty);
+  });
+
+  test('cachedCatalog reports cache issues and retries an initial storage read without HTTP', () async {
+    await client.catalog();
+    final disk = client.cacheFile.copySync('${temp.path}/cached-retry.json');
+    final once = _FirstReadFails(disk);
+    final offline = FakeWorkshopHttp((_, _, _, _) => throw StateError('unexpected HTTP'));
+    final recovering = WorkshopClient(origin: workshopTestOrigin, cacheFile: once, http: offline);
+    expect(await recovering.cachedCatalog(), isNull);
+    expect(recovering.cacheIssue, 'workshop_cache_storage');
+    expect((await recovering.cachedCatalog())!.cacheIssue, isNull);
+    expect(once.reads, 2);
+    final damaged = File('${temp.path}/cached-damaged.json')..writeAsStringSync('{bad');
+    final invalid = WorkshopClient(origin: workshopTestOrigin, cacheFile: damaged, http: offline);
+    expect(await invalid.cachedCatalog(), isNull);
+    expect(invalid.cacheIssue, 'workshop_cache_invalid');
+    expect(offline.requests, isEmpty);
+  });
+
+  test('cachedCatalog queues behind a refresh and preserves its newly known withdrawal', () async {
+    await client.catalog();
+    final gone = {'kind': 'pet', 'id': 'old', 'version': '1.0.0', 'reason': 'withdrawn', 'at': workshopTestDate};
+    http.route = (_, _, _, _) async => workshopJsonResponse(workshopCatalogJson(
+      withdrawn: [gone], at: '2026-11-12T00:00:00.000Z'));
+    final values = await Future.wait<WorkshopCatalogSnapshot?>([client.catalog(requireFresh: true), client.cachedCatalog()]);
+    expect(values[1]!.stale, isTrue);
+    expect(values[1]!.fetchedAt, values[0]!.fetchedAt);
+    expect(values[1]!.catalog.generatedAt, values[0]!.catalog.generatedAt);
+    expect(values[1]!.catalog.blocked('pet', 'old', '1.0.0'), isTrue);
+    http.route = (_, _, _, _) => workshopJsonResponse(workshopCatalogJson(at: '2026-11-13T00:00:00.000Z'));
+    await expectLater(client.catalog(requireFresh: true), workshopError('workshop_catalog_rollback'));
+  });
 
   test('disk cache survives microsecond clocks, 304, and an offline restart', () async {
     final first = await client.catalog();
@@ -230,6 +300,75 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
+  test('every author operation asserts the normalized forum and accepts matching IPv6 response ownership', () async {
+    const forum = 'https://[2001:db8::1]';
+    credential = WorkshopCredential.forConsentedWorker(worker: workshopTestOrigin,
+      forum: Uri.parse('https://[2001:0db8:0000:0000:0000:0000:0000:0001]:443/'),
+      userApiKey: 'synthetic-test-key', disclosureAccepted: true);
+    Map<String, Object?> row(String status) => {
+      ...workshopSubmissionJson(status: status),
+      'owner': {'forumOrigin': forum, 'forumUserId': 42, 'username': 'author'},
+    };
+    var authorCalls = 0;
+    http.route = (method, url, headers, _) {
+      if (url.path.endsWith('/capabilities')) {
+        expect(headers.containsKey('User-Api-Key'), isFalse);
+        expect(headers.containsKey('X-Workshop-Forum-Origin'), isFalse);
+        return workshopJsonResponse(workshopCaps(forum: forum));
+      }
+      authorCalls++;
+      expect(headers['User-Api-Key'], 'synthetic-test-key');
+      expect(headers['X-Workshop-Forum-Origin'], forum);
+      if (url.path.endsWith('/reports')) {
+        return workshopJsonResponse({'reportId': workshopTestId}, status: 201);
+      }
+      if (url.path.endsWith('/withdraw')) {
+        return workshopJsonResponse({'submission': row('withdrawn')});
+      }
+      if (url.path.endsWith('/archive')) {
+        return workshopJsonResponse({'submission': row('pending')});
+      }
+      if (method == 'GET' && url.path.endsWith('/submissions')) {
+        return workshopJsonResponse({'submissions': [row('draft')], 'nextCursor': null});
+      }
+      return workshopJsonResponse({'submission': row('draft')}, status: method == 'POST' ? 201 : 200);
+    };
+    final draft = await client.createSubmission(WorkshopMetadata.fromJson(workshopMeta()), requestId: workshopTestId,
+      rightsConfirmed: true, credential: credential);
+    final archive = File('${temp.path}/asserted.zip')..writeAsBytesSync([1, 2, 3, 4]);
+    expect((await client.upload(draft, archive, credential: credential)).status, WorkshopSubmissionStatus.pending);
+    expect((await client.submission(workshopTestId, credential: credential)).ownerOrigin, credential.forum);
+    expect((await client.submissions(credential: credential)).submissions.single.ownerOrigin, credential.forum);
+    expect((await client.withdraw(workshopTestId, 'take down', credential: credential)).status, WorkshopSubmissionStatus.withdrawn);
+    expect(await client.report(kind: 'pet', id: 'cat', version: '1.0.0', reason: 'report', credential: credential), workshopTestId);
+    expect(authorCalls, 6);
+    expect(credential.forum.toString(), forum);
+  });
+
+  test('normalized forum values still reject a different single or paged response owner', () async {
+    const forum = 'https://[2001:db8::1]';
+    credential = WorkshopCredential.forConsentedWorker(worker: workshopTestOrigin, forum: Uri.parse(forum),
+      userApiKey: 'synthetic-test-key', disclosureAccepted: true);
+    final row = {...workshopSubmissionJson(),
+      'owner': {'forumOrigin': 'https://[2001:db8::2]', 'forumUserId': 42, 'username': 'author'}};
+    http.route = (_, url, _, _) {
+      if (url.path.endsWith('/capabilities')) {
+        return workshopJsonResponse(workshopCaps(forum: forum));
+      }
+      return workshopJsonResponse(url.path.endsWith('/submissions')
+        ? {'submissions': [row], 'nextCursor': null} : {'submission': row});
+    };
+    await expectLater(client.submission(workshopTestId, credential: credential), workshopError('workshop_bad_response'));
+    await expectLater(client.submissions(credential: credential), workshopError('workshop_bad_response'));
+  });
+
+  test('a forum assertion conflict after capabilities is a known stable failure', () async {
+    http.route = (_, url, _, _) => url.path.endsWith('/capabilities') ? workshopJsonResponse(workshopCaps()) :
+      workshopJsonResponse({'error': 'workshop_forum_origin'}, status: 409);
+    await expectLater(client.createSubmission(WorkshopMetadata.fromJson(workshopMeta()), requestId: workshopTestId,
+      rightsConfirmed: true, credential: credential), workshopError('workshop_forum_origin', unknown: false));
+  });
+
   test('sharing-rights confirmation is explicit even for existing catalog metadata', () async {
     final meta = WorkshopEntry.fromJson(workshopEntryJson()).metadata;
     await expectLater(client.createSubmission(meta, requestId: WorkshopClient.newRequestId(), rightsConfirmed: false,
@@ -238,7 +377,9 @@ void main() {
   });
 
   test('create and upload use the same bounded bytes and keep private state out of cache', () async {
-    final bytes = [1, 2, 3, 4], meta = workshopMeta(bytes: [1, 2, 3, 4]);
+    final bytes = [1, 2, 3, 4];
+    final meta = {...workshopMeta(bytes: bytes), 'description': 'A small cat', 'tags': ['pet', 'cat']};
+    final progress = <List<int>>[];
     final archive = File('${temp.path}/archive.zip')..writeAsBytesSync(bytes);
     final requestId = WorkshopClient.newRequestId();
     http.route = (method, url, headers, body) {
@@ -249,6 +390,8 @@ void main() {
         final json = jsonDecode(utf8.decode(body!)) as Map;
         expect(json['requestId'], requestId);
         expect(json['rightsConfirmed'], isTrue);
+        expect(json['description'], 'A small cat');
+        expect(json['tags'], ['pet', 'cat']);
         expect(json.containsKey('User-Api-Key'), isFalse);
         return workshopJsonResponse({'submission': workshopSubmissionJson(metadata: meta)}, status: 201);
       }
@@ -258,8 +401,12 @@ void main() {
       return workshopJsonResponse({'submission': workshopSubmissionJson(status: 'pending', metadata: meta)});
     };
     final result = await client.submit(WorkshopMetadata.fromJson(meta), archive,
-      requestId: requestId, rightsConfirmed: true, credential: credential);
+      requestId: requestId, rightsConfirmed: true, credential: credential,
+      onProgress: (sent, total) => progress.add([sent, total]));
     expect(result.status, WorkshopSubmissionStatus.pending);
+    expect(result.metadata.description, 'A small cat');
+    expect(result.metadata.tags, ['pet', 'cat']);
+    expect(progress, [[0, 4], [4, 4]]);
     expect(client.cacheFile.existsSync(), isFalse);
     await client.catalog();
     expect(client.cacheFile.readAsStringSync(), isNot(contains('synthetic-test-key')));
@@ -268,12 +415,38 @@ void main() {
 
   test('same requestId retry returns pending without uploading twice', () async {
     final archive = File('${temp.path}/archive.zip')..writeAsBytesSync([1, 2, 3, 4]);
+    final progress = <List<int>>[];
     http.route = (_, url, _, _) => url.path.endsWith('/capabilities') ? workshopJsonResponse(workshopCaps()) :
       workshopJsonResponse({'submission': workshopSubmissionJson(status: 'pending')});
     final result = await client.submit(WorkshopMetadata.fromJson(workshopMeta()), archive,
-      requestId: workshopTestId, rightsConfirmed: true, credential: credential);
+      requestId: workshopTestId, rightsConfirmed: true, credential: credential,
+      onProgress: (sent, total) => progress.add([sent, total]));
     expect(result.status, WorkshopSubmissionStatus.pending);
     expect(http.requests.where((r) => r.method == 'PUT'), isEmpty);
+    expect(progress, isEmpty);
+  });
+
+  test('upload uses optional transport progress without changing old HTTP doubles', () async {
+    final transport = _ProgressHttp((_, url, _, _) => url.path.endsWith('/capabilities')
+      ? workshopJsonResponse(workshopCaps()) : workshopJsonResponse({'submission': workshopSubmissionJson(status: 'pending')}));
+    final uploading = WorkshopClient(origin: workshopTestOrigin, cacheFile: client.cacheFile, http: transport);
+    final archive = File('${temp.path}/progress.zip')..writeAsBytesSync([1, 2, 3, 4]);
+    final progress = <List<int>>[];
+    final result = await uploading.upload(WorkshopSubmission.fromJson(workshopSubmissionJson()), archive, credential: credential,
+      onProgress: (sent, total) => progress.add([sent, total]));
+    expect(result.status, WorkshopSubmissionStatus.pending);
+    expect(transport.uploads, 1);
+    expect(progress, [[0, 4], [2, 4], [4, 4]]);
+  });
+
+  test('complete fallback byte progress does not turn a rejected upload into success', () async {
+    http.route = (_, url, _, _) => url.path.endsWith('/capabilities') ? workshopJsonResponse(workshopCaps()) :
+      workshopJsonResponse({'error': 'workshop_forum_origin'}, status: 409);
+    final archive = File('${temp.path}/rejected-progress.zip')..writeAsBytesSync([1, 2, 3, 4]);
+    final progress = <List<int>>[];
+    await expectLater(client.upload(WorkshopSubmission.fromJson(workshopSubmissionJson()), archive, credential: credential,
+      onProgress: (sent, total) => progress.add([sent, total])), workshopError('workshop_forum_origin', unknown: false));
+    expect(progress, [[0, 4], [4, 4]]);
   });
 
   test('write timeout and malformed success leave an explicitly unknown result', () async {

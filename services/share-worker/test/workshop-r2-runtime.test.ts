@@ -21,7 +21,7 @@ it('completes review and withdrawal with local native R2 checksum/CAS/Range', as
     },
   }));
   const call = (path: string, method = 'GET', body?: object | Uint8Array, admin = false, extra = {}) => runtime.dispatchFetch('https://workshop.invalid' + path, {
-    method, headers: { 'User-Api-Key': 'synthetic-forum-key', ...(body ? { 'Content-Type': body instanceof Uint8Array ? 'application/zip' : 'application/json' } : {}),
+    method, headers: { 'User-Api-Key': 'synthetic-forum-key', 'X-Workshop-Forum-Origin': 'https://forum.dshtui.com', ...(body ? { 'Content-Type': body instanceof Uint8Array ? 'application/zip' : 'application/json' } : {}),
       ...(admin ? { 'X-Admin-Key': 'synthetic-admin-key-0123456789abcdef' } : {}), ...extra }, ...(body ? { body: body instanceof Uint8Array ? body : JSON.stringify(body) } : {}),
   });
   try {

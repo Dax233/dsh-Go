@@ -17,7 +17,7 @@ async function published() {
   bucket.now = () => new Date('2026-11-11T00:00:00.789Z');
   const { env } = makeEnv({ BUCKET: bucket as unknown as R2Bucket }), bytes = pet(), meta = metaFor(bytes);
   const call = (path: string, method = 'GET', body?: object | Uint8Array, admin = false, headers = {}) => workshop(new Request('https://workshop.invalid' + path, {
-    method, headers: { 'User-Api-Key': 'synthetic-forum-key', ...(admin ? { 'X-Admin-Key': env.ADMIN_KEY! } : {}),
+    method, headers: { 'User-Api-Key': 'synthetic-forum-key', 'X-Workshop-Forum-Origin': 'https://forum.dshtui.com', ...(admin ? { 'X-Admin-Key': env.ADMIN_KEY! } : {}),
       ...(body ? { 'Content-Type': body instanceof Uint8Array ? 'application/zip' : 'application/json' } : {}), ...headers },
     ...(body ? { body: body instanceof Uint8Array ? body : JSON.stringify(body) } : {}),
   }), env, makeCtx().ctx);

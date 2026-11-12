@@ -12,6 +12,7 @@ import 'dart:math';
 
 import 'package:flutter/services.dart';
 
+import 'companion_file_stream.dart';
 import 'companion_pack.dart';
 
 const _contentTypes = {
@@ -120,7 +121,11 @@ class CompanionServer {
         final length = await file.length();
         if (_closed) return response.close();
         _headers(response, type, length);
-        if (request.method == 'GET') await response.addStream(file.openRead());
+        if (request.method == 'GET') {
+          await consumeCompanionFileStream(file.openRead(), (stream) async {
+            await response.addStream(stream);
+          });
+        }
         await response.close();
       default:
         return _refuse(response);

@@ -7,6 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Observe errors before another await. Tests still await the original Future;
+// finally waits for settlement without replacing an earlier assertion failure.
+Future<void> _settled(Future<void> pending) =>
+    pending.then<void>((_) {}, onError: (Object _) {});
+
 class _Store extends CompanionPackStore {
   _Store(this.log) : super(Directory('/synthetic-companion-float-test'));
   final List<String> log;
@@ -125,13 +130,19 @@ void main() {
     final gate = Completer<String?>();
     h.store.check = () => gate.future;
     final opening = h.session.select(selected);
-    await pumpEventQueue();
-    expect(h.log, contains('check'));
-    await h.session.select(pixels);
-    gate.complete(null);
-    await opening;
-    expect(h.log, isNot(contains('open')));
-    expect(h.states.last.configured, isFalse);
+    final settled = _settled(opening);
+    try {
+      await pumpEventQueue();
+      expect(h.log, contains('check'));
+      await h.session.select(pixels);
+      gate.complete(null);
+      await opening;
+      expect(h.log, isNot(contains('open')));
+      expect(h.states.last.configured, isFalse);
+    } finally {
+      if (!gate.isCompleted) gate.complete(null);
+      await settled;
+    }
   });
 
   test('a new explicit selection retries a failed pack factory', () async {
@@ -188,70 +199,103 @@ void main() {
   test('a page opened after deselection is closed without exposing its capability', () async {
     h.pageGate = Completer<CompanionFloatPage>();
     final opening = h.session.select(selected);
-    await pumpEventQueue();
-    expect(h.log, contains('open'));
-    await h.session.select(pixels);
-    h.pageGate!.complete(h.page);
-    await opening;
-    expect(h.log, containsAllInOrder(['open', 'close:start', 'close:end']));
-    expect(h.log, isNot(contains('configure')));
+    final settled = _settled(opening);
+    try {
+      await pumpEventQueue();
+      expect(h.log, contains('open'));
+      await h.session.select(pixels);
+      h.pageGate!.complete(h.page);
+      await opening;
+      expect(h.log, containsAllInOrder(['open', 'close:start', 'close:end']));
+      expect(h.log, isNot(contains('configure')));
+    } finally {
+      if (!h.pageGate!.isCompleted) h.pageGate!.complete(h.page);
+      await settled;
+    }
   });
 
   test('deselect during native setup waits for its ack, destroys, then closes server', () async {
     h.configureGate = Completer<void>();
     final opening = h.session.select(selected);
-    await pumpEventQueue();
-    expect(h.log, contains('configure'));
-    final stopping = h.session.select(pixels);
-    await pumpEventQueue();
-    expect(h.log, isNot(contains('clear')));
-    h.configureGate!.complete();
-    await Future.wait([opening, stopping]);
-    expect(h.log, containsAllInOrder(['configure', 'configured', 'clear', 'close:start', 'close:end']));
-    expect(h.states.any((state) => state.configured), isFalse);
+    final settled = _settled(opening);
+    Future<void>? stoppingSettled;
+    try {
+      await pumpEventQueue();
+      expect(h.log, contains('configure'));
+      final stopping = h.session.select(pixels);
+      stoppingSettled = _settled(stopping);
+      await pumpEventQueue();
+      expect(h.log, isNot(contains('clear')));
+      h.configureGate!.complete();
+      await Future.wait([opening, stopping]);
+      expect(h.log, containsAllInOrder(['configure', 'configured', 'clear', 'close:start', 'close:end']));
+      expect(h.states.any((state) => state.configured), isFalse);
+    } finally {
+      if (!h.configureGate!.isCompleted) h.configureGate!.complete();
+      await settled;
+      if (stoppingSettled != null) await stoppingSettled;
+    }
   });
 
   test('failed cleanup of a late page remains owned across a later pack mutation', () async {
     h.pageGate = Completer<CompanionFloatPage>();
     final opening = h.session.select(selected);
-    await pumpEventQueue();
-    expect(h.log, contains('open'));
-    await h.session.select(pixels);
-    h.failClose = true;
-    h.pageGate!.complete(h.page);
-    await opening;
-    await expectLater(h.store.replaceWithMissing(), throwsA(isA<FileSystemException>()));
-    expect(h.log, isNot(contains('configure')));
-    expect(h.log, isNot(contains('mutate')));
-    h.failClose = false;
-    await h.store.replaceWithMissing();
-    expect(h.log, containsAllInOrder(['close:end', 'mutate']));
+    final settled = _settled(opening);
+    try {
+      await pumpEventQueue();
+      expect(h.log, contains('open'));
+      await h.session.select(pixels);
+      h.failClose = true;
+      h.pageGate!.complete(h.page);
+      await opening;
+      await expectLater(h.store.replaceWithMissing(), throwsA(isA<FileSystemException>()));
+      expect(h.log, isNot(contains('configure')));
+      expect(h.log, isNot(contains('mutate')));
+      h.failClose = false;
+      await h.store.replaceWithMissing();
+      expect(h.log, containsAllInOrder(['close:end', 'mutate']));
+    } finally {
+      if (!h.pageGate!.isCompleted) h.pageGate!.complete(h.page);
+      await settled;
+    }
   });
 
   test('revision event and mutation hook both await the same outstanding server cleanup', () async {
     await h.session.select(selected);
     h.closeGate = Completer<void>();
     final replacing = h.store.replaceWithMissing();
-    await pumpEventQueue();
-    expect(h.log, contains('close:start'));
-    expect(h.log, isNot(contains('mutate')));
-    h.closeGate!.complete();
-    await replacing;
-    await pumpEventQueue();
-    expect(h.log, containsAllInOrder(['clear', 'close:start', 'close:end', 'mutate', 'check']));
-    expect(h.log.where((event) => event == 'open'), hasLength(1));
-    expect(h.states.last.problem, 'companion_missing_model');
+    final settled = _settled(replacing);
+    try {
+      await pumpEventQueue();
+      expect(h.log, contains('close:start'));
+      expect(h.log, isNot(contains('mutate')));
+      h.closeGate!.complete();
+      await replacing;
+      await pumpEventQueue();
+      expect(h.log, containsAllInOrder(['clear', 'close:start', 'close:end', 'mutate', 'check']));
+      expect(h.log.where((event) => event == 'open'), hasLength(1));
+      expect(h.states.last.problem, 'companion_missing_model');
+    } finally {
+      if (!h.closeGate!.isCompleted) h.closeGate!.complete();
+      await settled;
+    }
   });
 
   test('disposing before the pack factory resolves leaves no hooks or renderer', () async {
     h.storeGate = Completer<CompanionPackStore>();
     final opening = h.session.select(selected);
-    await pumpEventQueue();
-    await h.session.close();
-    h.storeGate!.complete(h.store);
-    await opening;
-    expect(h.store.hooks, isEmpty);
-    expect(h.log, ['store']);
+    final settled = _settled(opening);
+    try {
+      await pumpEventQueue();
+      await h.session.close();
+      h.storeGate!.complete(h.store);
+      await opening;
+      expect(h.store.hooks, isEmpty);
+      expect(h.log, ['store']);
+    } finally {
+      if (!h.storeGate!.isCompleted) h.storeGate!.complete(h.store);
+      await settled;
+    }
   });
 
   test('absent native method closes the page and does not poison later pack mutations', () async {

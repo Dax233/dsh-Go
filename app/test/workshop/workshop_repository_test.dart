@@ -101,13 +101,17 @@ void main() {
       if (offset > 0) part.writeAsBytesSync(bytes.sublist(0, offset));
       final cancel = CancelToken();
       final sent = Completer<void>();
-      var upstreamCancelled = false;
+      var upstreamCancelled = false, wasListening = false;
       late final StreamController<List<int>> body;
       body = StreamController<List<int>>(
-        onListen: () => scheduleMicrotask(() {
-          body.add(bytes.sublist(offset, offset + 4));
-          sent.complete();
-        }),
+        onListen: () {
+          wasListening = true;
+          scheduleMicrotask(() {
+            if (body.isClosed) return;
+            body.add(bytes.sublist(offset, offset + 4));
+            sent.complete();
+          });
+        },
         onCancel: () { upstreamCancelled = true; },
       );
       http.route = (_, url, _, _) => url.path.endsWith('.json') ?
@@ -118,7 +122,10 @@ void main() {
       final pending = repository.install(entry, cancel: cancel);
       final settled = pending.then<void>((_) {}, onError: (Object _) {});
       try {
-        await sent.future.timeout(const Duration(seconds: 10));
+        await Future.any<void>([
+          sent.future,
+          pending.then<void>((_) => fail('installation ended before the body sent its first bytes')),
+        ]).timeout(const Duration(seconds: 10));
         // Let the first event and all of its microtasks finish. No second
         // event or stream close is sent before checking cancellation.
         await Future<void>.delayed(Duration.zero);
@@ -139,8 +146,9 @@ void main() {
         expect(File('${repository.downloadDirectory.path}/${entry.metadata.sha256}.zip').readAsBytesSync(), bytes);
       } finally {
         cancel.cancel();
-        await body.close();
+        final closing = body.close();
         await settled;
+        if (wasListening) await closing;
       }
     });
   }
@@ -154,7 +162,10 @@ void main() {
     body = StreamController<List<int>>(
       onListen: () {
         listening = true;
-        scheduleMicrotask(() => body.add(bytes.sublist(0, 4)));
+        scheduleMicrotask(() {
+          if (body.isClosed) return;
+          body.add(bytes.sublist(0, 4));
+        });
       },
       onCancel: () { upstreamCancelled = true; },
     );
@@ -181,7 +192,10 @@ void main() {
     ));
     final settled = pending.then<void>((_) {}, onError: (Object _) {});
     try {
-      await idleArmed.future.timeout(const Duration(seconds: 10));
+      await Future.any<void>([
+        idleArmed.future,
+        pending.then<void>((_) => fail('installation ended before the idle timer was armed')),
+      ]).timeout(const Duration(seconds: 10));
       await Future<void>.delayed(Duration.zero);
       captureIdle = false;
       expect(idle!.isActive, isTrue);
@@ -196,8 +210,9 @@ void main() {
     } finally {
       captureIdle = false;
       cancel.cancel();
-      await body.close();
+      final closing = body.close();
       await settled;
+      if (listening) await closing;
     }
   });
 
@@ -232,19 +247,28 @@ void main() {
       if (!entered.isCompleted) { entered.complete(); await release.future; }
     };
     final first = repository.install(entry);
-    await entered.future;
-    final other = WorkshopRepository(client: client, packages: packages,
-      downloadDirectory: Directory('${repository.downloadDirectory.path}/'), appVersion: '1.0.15', freeBytes: () async => 1024 * 1024 * 1024);
-    final second = other.install(otherEntry);
-    await Future<void>.delayed(Duration.zero);
-    expect(http.requests.where((r) => r.url.path.endsWith('.zip')), hasLength(1));
-    expect(File('${repository.downloadDirectory.path}/${entry.metadata.sha256}.zip').existsSync(), isTrue);
-    release.complete();
-    await first;
-    await second;
-    expect(packages.calls, ['install', 'install']);
-    expect(File('${repository.downloadDirectory.path}/${entry.metadata.sha256}.zip').existsSync(), isFalse);
-    expect(File('${repository.downloadDirectory.path}/${otherEntry.metadata.sha256}.zip').existsSync(), isTrue);
+    final firstSettled = first.then<void>((_) {}, onError: (Object _) {});
+    Future<void>? secondSettled;
+    try {
+      await entered.future;
+      final other = WorkshopRepository(client: client, packages: packages,
+        downloadDirectory: Directory('${repository.downloadDirectory.path}/'), appVersion: '1.0.15', freeBytes: () async => 1024 * 1024 * 1024);
+      final second = other.install(otherEntry);
+      secondSettled = second.then<void>((_) {}, onError: (Object _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(http.requests.where((r) => r.url.path.endsWith('.zip')), hasLength(1));
+      expect(File('${repository.downloadDirectory.path}/${entry.metadata.sha256}.zip').existsSync(), isTrue);
+      release.complete();
+      await first;
+      await second;
+      expect(packages.calls, ['install', 'install']);
+      expect(File('${repository.downloadDirectory.path}/${entry.metadata.sha256}.zip').existsSync(), isFalse);
+      expect(File('${repository.downloadDirectory.path}/${otherEntry.metadata.sha256}.zip').existsSync(), isTrue);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await firstSettled;
+      if (secondSettled != null) await secondSettled;
+    }
   });
 
   test('a checksum mismatch never reaches the installer', () async {
@@ -314,6 +338,101 @@ void main() {
     final cancel = CancelToken();
     await expectLater(repository.install(entry, cancel: cancel, onVerifying: cancel.cancel), workshopError('workshop_cancelled'));
     expect(packages.calls, isEmpty);
+  });
+
+  test('a withdrawal accepted during the final space query prevents installer handoff', () async {
+    final entered = Completer<void>(), release = Completer<int?>();
+    var spaces = 0;
+    var catalog = workshopCatalogJson(entries: [entry.toJson()]);
+    http.route = (_, url, headers, _) => url.path.endsWith('.json') ?
+      workshopJsonResponse(catalog) : fileRoute(bytes)(url, headers);
+    repository = WorkshopRepository(client: client, packages: packages, downloadDirectory: repository.downloadDirectory,
+      appVersion: '1.0.15', freeBytes: () {
+        if (++spaces == 2) {
+          entered.complete();
+          return release.future;
+        }
+        return Future.value(1024 * 1024 * 1024);
+      });
+    final otherHttp = FakeWorkshopHttp((_, _, _, _) => workshopJsonResponse(catalog));
+    final other = WorkshopClient(origin: workshopTestOrigin,
+      cacheFile: File('${temp.path}/./catalog.json'), http: otherHttp);
+    final cancel = CancelToken();
+    final pending = repository.install(entry, cancel: cancel);
+    final settled = pending.then<void>((_) {}, onError: (Object _) {});
+    try {
+      await entered.future.timeout(const Duration(seconds: 10));
+      catalog = workshopCatalogJson(entries: [], at: '2026-11-11T00:00:01.000Z', withdrawn: [
+        {'kind': 'pet', 'id': 'cat', 'version': '1.0.0', 'reason': 'author withdrew', 'at': '2026-11-11T00:00:01.000Z'},
+      ]);
+      final accepted = await other.catalog(requireFresh: true);
+      expect(accepted.catalog.blocked('pet', 'cat', '1.0.0'), isTrue);
+      expect(packages.calls, isEmpty);
+      // Both clients now receive C2. This isolates the space-query gap from
+      // a stale-response/rollback failure in the subsequent fresh request.
+      release.complete(1024 * 1024 * 1024);
+      await expectLater(pending.timeout(const Duration(seconds: 10)), workshopError('workshop_version_withdrawn'));
+      expect(packages.calls, isEmpty);
+      expect(spaces, 2);
+      expect(http.requests.where((r) => r.url.path.endsWith('/workshop.json')), hasLength(2));
+      expect(otherHttp.requests, hasLength(1));
+    } finally {
+      cancel.cancel();
+      if (!release.isCompleted) release.complete(1024 * 1024 * 1024);
+      await settled;
+      other.close();
+    }
+  });
+
+  test('final low space takes precedence over a newly withdrawn catalog', () async {
+    var catalogs = 0, spaces = 0;
+    http.route = (_, url, headers, _) {
+      if (!url.path.endsWith('.json')) return fileRoute(bytes)(url, headers);
+      return workshopJsonResponse(++catalogs == 1 ? workshopCatalogJson(entries: [entry.toJson()]) :
+        workshopCatalogJson(entries: [], at: '2026-11-11T00:00:01.000Z', withdrawn: [
+          {'kind': 'pet', 'id': 'cat', 'version': '1.0.0', 'reason': 'author withdrew', 'at': '2026-11-11T00:00:01.000Z'},
+        ]));
+    };
+    repository = WorkshopRepository(client: client, packages: packages, downloadDirectory: repository.downloadDirectory,
+      appVersion: '1.0.15', freeBytes: () async => ++spaces == 1 ? 1024 * 1024 * 1024 : 0);
+    await expectLater(repository.install(entry), workshopError('workshop_no_space'));
+    expect(spaces, 2);
+    expect(catalogs, 1, reason: 'insufficient space stops before the final network revalidation');
+    expect(packages.calls, isEmpty);
+  });
+
+  test('a withdrawal after installer handoff does not revoke an installation in flight', () async {
+    final entered = Completer<void>(), release = Completer<void>();
+    var catalog = workshopCatalogJson(entries: [entry.toJson()]);
+    http.route = (_, url, headers, _) => url.path.endsWith('.json') ?
+      workshopJsonResponse(catalog) : fileRoute(bytes)(url, headers);
+    packages.beforeInstall = () async {
+      entered.complete();
+      await release.future;
+    };
+    final other = WorkshopClient(origin: workshopTestOrigin,
+      cacheFile: File('${temp.path}/./catalog.json'),
+      http: FakeWorkshopHttp((_, _, _, _) => workshopJsonResponse(catalog)));
+    final pending = repository.install(entry);
+    final settled = pending.then<void>((_) {}, onError: (Object _) {});
+    try {
+      await entered.future.timeout(const Duration(seconds: 10));
+      catalog = workshopCatalogJson(entries: [], at: '2026-11-11T00:00:01.000Z', withdrawn: [
+        {'kind': 'pet', 'id': 'cat', 'version': '1.0.0', 'reason': 'author withdrew', 'at': '2026-11-11T00:00:01.000Z'},
+      ]);
+      expect((await other.catalog(requireFresh: true)).catalog.blocked('pet', 'cat', '1.0.0'), isTrue);
+      expect(packages.calls, ['install']);
+      release.complete();
+      final installed = await pending.timeout(const Duration(seconds: 10));
+      expect(installed.receipt.version, '1.0.0');
+      expect(installed.receipt.sha256, entry.metadata.sha256);
+      await expectLater(repository.install(entry), workshopError('workshop_version_withdrawn'));
+      expect(packages.calls, ['install'], reason: 'the later withdrawal blocks the next installation');
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await settled;
+      other.close();
+    }
   });
 
   test('offline browsing may use cache but offline installation cannot', () async {

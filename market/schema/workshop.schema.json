@@ -24,6 +24,8 @@
         "kind": {"$ref": "#/$defs/kind"}, "id": {"$ref": "#/$defs/id"}, "version": {"$ref": "#/$defs/version"}, "minApp": {"$ref": "#/$defs/version"},
         "title": {"type": "object", "additionalProperties": false, "required": ["zh", "en"], "properties": {"zh": {"$ref": "#/$defs/text", "maxLength": 120}, "en": {"$ref": "#/$defs/text", "maxLength": 120}}},
         "author": {"$ref": "#/$defs/text", "maxLength": 256},
+        "description": {"type": "string", "maxLength": 512, "anyOf": [{"const": ""}, {"$ref": "#/$defs/text", "not": {"pattern": "^[\\s\\u0085]*$"}}]},
+        "tags": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/text", "maxLength": 32, "not": {"pattern": "^[\\s\\u0085]*$"}}},
         "license": {"enum": ["CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "LicenseRef-Author-Permission"]},
         "source": {"type": "string", "format": "uri", "maxLength": 2048, "pattern": "^[hH][tT][tT][pP][sS]://"},
         "url": {"type": "string", "pattern": "^/market/workshop/(pet|companion)/[^/]+/[^/]+/[a-f0-9]{64}\\.zip$"},

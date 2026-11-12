@@ -17,7 +17,10 @@ export const hash = (value: unknown): value is string => typeof value === 'strin
 export const validVersion = (value: unknown): value is string => catalogVersion(value) && !/[\r\n]/.test(value);
 export const kind = (value: unknown): value is WorkshopKind => value === 'pet' || value === 'companion';
 export const id = (value: unknown): value is string => typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 40 && value.trim() === value;
-export const text = (value: unknown, cap: number): value is string => typeof value === 'string' && value.trim().length > 0 && Array.from(value).length <= cap && !/[\u0000-\u001f\ud800-\udfff]/u.test(value);
+// Dart VM String.trim also treats NEXT LINE as whitespace. This predicate
+// checks nonblankness only; metadata and reasons retain their original text.
+const blankText = /^[\s\u0085]*$/u;
+export const text = (value: unknown, cap: number): value is string => typeof value === 'string' && !blankText.test(value) && Array.from(value).length <= cap && !/[\u0000-\u001f\ud800-\udfff]/u.test(value);
 export const whole = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
 export const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 export async function sha256(bytes: Uint8Array | string): Promise<string> {
@@ -27,13 +30,17 @@ export async function sha256(bytes: Uint8Array | string): Promise<string> {
 export interface SubmissionMeta {
   kind: WorkshopKind; id: string; version: string; minApp: string;
   title: { zh: string; en: string }; author: string; license: string; source: string;
+  description?: string; tags?: string[];
   sha256: string; size: number; rightsConfirmed: true;
 }
 export function validMeta(value: unknown): value is SubmissionMeta {
   if (!record(value) || !kind(value.kind) || !id(value.id) || !validVersion(value.version) || !validVersion(value.minApp) ||
     !record(value.title) || !text(value.title.zh, 120) || !text(value.title.en, 120) ||
     !text(value.author, 256) || typeof value.license !== 'string' || !LICENSES.includes(value.license as typeof LICENSES[number]) ||
-    !text(value.source, 2048) || !hash(value.sha256) || !whole(value.size, 1, UPLOAD_CAP) || value.rightsConfirmed !== true) return false;
+    !text(value.source, 2048) || !hash(value.sha256) || !whole(value.size, 1, UPLOAD_CAP) || value.rightsConfirmed !== true ||
+    value.description !== undefined && value.description !== '' && !text(value.description, 512) ||
+    value.tags !== undefined && (!Array.isArray(value.tags) || value.tags.length > 8 ||
+      !value.tags.every(tag => text(tag, 32)) || new Set(value.tags).size !== value.tags.length)) return false;
   try {
     const url = new URL(value.source);
     return value.source.trim() === value.source && !/\s/.test(value.source) && url.protocol === 'https:' && !!url.hostname && !url.username && !url.password;
@@ -43,7 +50,8 @@ export function metadata(value: unknown): SubmissionMeta {
   requireWorkshop(validMeta(value), 'bad_metadata');
   return { kind: value.kind, id: value.id, version: value.version, minApp: value.minApp,
     title: { zh: value.title.zh, en: value.title.en }, author: value.author, license: value.license,
-    source: value.source, sha256: value.sha256, size: value.size, rightsConfirmed: true };
+    source: value.source, sha256: value.sha256, size: value.size, rightsConfirmed: true,
+    ...(value.description ? { description: value.description } : {}), ...(value.tags?.length ? { tags: [...value.tags] } : {}) };
 }
 export function blobKey(sha: string): string { return `workshop/blobs/${sha}.zip`; }
 export function assetUrl(value: SubmissionMeta): string { return `/market/workshop/${value.kind}/${value.id}/${value.version}/${value.sha256}.zip`; }

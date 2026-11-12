@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -23,15 +22,15 @@ Future<File> workshopExportTarget(File destination) async {
   }
 }
 
-final _exports = <String, Future<void>>{};
+Future<void> _exportTail = Future<void>.value();
 
 /// Pet and companion export call this on the owning App isolate, before
-/// compute starts. The shared destination queue therefore covers both kinds
-/// and all store instances, rather than a separate queue inside each isolate.
+/// compute starts. One queue covers both kinds and all destinations, including
+/// different spellings that the filesystem treats as the same target. Distinct
+/// targets also wait; this is not a cross-isolate or cross-process lock.
+/// The writer must only produce its staging file, not await another export.
 Future<void> workshopCommitExport(File target, Future<void> Function(File staging) write) {
-  final key = target.absolute.uri.normalizePath().toString();
-  final previous = _exports[key] ?? Future<void>.value();
-  final Future<void> run = previous.then((_) async {
+  final Future<void> run = _exportTail.then((_) async {
     File? staging;
     try {
       Future<void> absent() async {
@@ -61,9 +60,7 @@ Future<void> workshopCommitExport(File target, Future<void> Function(File stagin
       on FileSystemException { /* Only the private staging file may remain. */ }
     }
   });
-  final tail = run.then<void>((_) {}, onError: (_) {});
-  _exports[key] = tail;
-  unawaited(tail.then((_) { if (identical(_exports[key], tail)) _exports.remove(key); }));
+  _exportTail = run.then<void>((_) {}, onError: (_) {});
   return run;
 }
 

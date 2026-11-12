@@ -17,10 +17,24 @@ import 'workshop_receipt.dart';
 
 export '../update/downloader.dart' show CancelToken, DownloadProgress;
 
-class WorkshopInstalled {
-  const WorkshopInstalled({required this.localId, required this.receipt});
+/// A local row can have a per-package failure without hiding its neighbours.
+sealed class WorkshopLocalEntry {
+  const WorkshopLocalEntry({required this.localId, this.issue});
   final String localId;
+  /// Stable local diagnostic, separate from catalog availability/withdrawal.
+  final String? issue;
+}
+
+/// A valid receipt remains an uninstall target even when its pack is broken.
+class WorkshopInstalled extends WorkshopLocalEntry {
+  const WorkshopInstalled({required super.localId, required this.receipt, super.issue});
   final WorkshopReceipt receipt;
+}
+
+/// No trusted network identity: display the error, but do not authorize an
+/// expected-receipt removal or match this row to a public catalog entry.
+class WorkshopInstallationIssue extends WorkshopLocalEntry {
+  const WorkshopInstallationIssue({required super.localId, required String issue}) : super(issue: issue);
 }
 
 class WorkshopItemState {
@@ -37,7 +51,7 @@ class WorkshopItemState {
 class WorkshopInstalledState {
   const WorkshopInstalledState({required this.installed, this.entry, this.unavailable,
     this.updateAvailable = false, this.installedWithdrawn = false});
-  final WorkshopInstalled installed;
+  final WorkshopLocalEntry installed;
   final WorkshopEntry? entry;
   final String? unavailable;
   final bool updateAvailable;
@@ -47,7 +61,7 @@ class WorkshopInstalledState {
 /// The production implementation calls the existing package installers. This
 /// seam lets orchestration tests prove that rejected downloads never install.
 abstract interface class WorkshopPackages {
-  Future<List<WorkshopInstalled>> installed();
+  Future<List<WorkshopLocalEntry>> installed();
   Future<int> copyOverhead(String kind);
   Future<WorkshopInstalled> install(File archive, WorkshopReceipt receipt, {required bool replaceExisting});
   Future<void> remove(WorkshopInstalled installed);
@@ -59,11 +73,32 @@ class LocalWorkshopPackages implements WorkshopPackages {
   final CompanionPackStore companion;
 
   @override
-  Future<List<WorkshopInstalled>> installed() async {
+  Future<List<WorkshopLocalEntry>> installed() async {
     final found = await pets.workshopReceipts();
-    final result = [for (final entry in found.entries) WorkshopInstalled(localId: entry.key, receipt: entry.value)];
-    final character = await companion.workshopReceipt();
-    if (character != null) result.add(WorkshopInstalled(localId: 'companion', receipt: character));
+    final result = <WorkshopLocalEntry>[
+      for (final entry in found.entries)
+        if (entry.value.receipt case final receipt?)
+          WorkshopInstalled(localId: entry.key, receipt: receipt, issue: entry.value.issue)
+        else
+          WorkshopInstallationIssue(localId: entry.key, issue: entry.value.issue!),
+    ];
+    // Listing isolates expected failures from this slot, including recovery.
+    // Errors not converted by the store still escape this boundary.
+    try {
+      final character = await companion.workshopReceipt();
+      if (character != null) {
+        if (character.kind != 'companion') {
+          workshopInvalid('workshop_install_record');
+        }
+        result.add(WorkshopInstalled(localId: 'companion', receipt: character));
+      }
+    } on WorkshopException catch (error) {
+      result.add(WorkshopInstallationIssue(localId: 'companion', issue: workshopLocalError(error).code));
+    } on FileSystemException catch (error) {
+      result.add(WorkshopInstallationIssue(localId: 'companion', issue: workshopLocalError(error).code));
+    } on CompanionPackException catch (error) {
+      result.add(WorkshopInstallationIssue(localId: 'companion', issue: workshopLocalError(error).code));
+    }
     return result;
   }
   @override
@@ -139,7 +174,7 @@ class WorkshopRepository {
     return run;
   }
 
-  Future<List<WorkshopInstalled>> installed() => _exclusive(packages.installed);
+  Future<List<WorkshopLocalEntry>> installed() => _exclusive(packages.installed);
 
   Future<List<WorkshopItemState>> states(WorkshopCatalog catalog) => _exclusive(() async {
     final installed = await packages.installed();
@@ -149,6 +184,7 @@ class WorkshopRepository {
   Future<List<WorkshopInstalledState>> installedStates(WorkshopCatalog catalog) => _exclusive(() async {
     final installed = await packages.installed();
     return installed.map((item) {
+      if (item is! WorkshopInstalled) return WorkshopInstalledState(installed: item, unavailable: item.issue);
       final receipt = item.receipt;
       if (receipt.origin != client.origin) return WorkshopInstalledState(installed: item, unavailable: 'workshop_other_origin');
       final entry = catalog.find(receipt.kind, receipt.id);
@@ -167,9 +203,9 @@ class WorkshopRepository {
     }).toList();
   });
 
-  WorkshopItemState _state(WorkshopCatalog catalog, WorkshopEntry entry, List<WorkshopInstalled> installed) {
+  WorkshopItemState _state(WorkshopCatalog catalog, WorkshopEntry entry, List<WorkshopLocalEntry> installed) {
     final meta = entry.metadata;
-    final old = installed.where((item) => item.receipt.origin == client.origin && item.receipt.identity == meta.identity).firstOrNull;
+    final old = installed.whereType<WorkshopInstalled>().where((item) => item.receipt.origin == client.origin && item.receipt.identity == meta.identity).firstOrNull;
     var unavailable = catalog.unavailable(entry, appVersion);
     var update = false;
     if (old != null) {
@@ -242,14 +278,19 @@ class WorkshopRepository {
         });
       case DownloadDone(:final file):
         if (await file.length() != meta.size) workshopInvalid('workshop_size_mismatch');
-        await _current(entry);
         await _space(installSpace);
+        // Revalidate after the space query, immediately before installer
+        // handoff. Later withdrawals do not revoke an installation in flight.
+        await _current(entry);
         cancelled();
         return packages.install(file, WorkshopReceipt(kind: meta.kind, id: meta.id, version: meta.version, sha256: meta.sha256, origin: client.origin), replaceExisting: replaceExisting);
     }
   });
 
-  Future<void> uninstall(WorkshopInstalled installed) => _exclusive(() => packages.remove(installed));
+  Future<void> uninstall(WorkshopLocalEntry installed) => _exclusive(() {
+    if (installed is! WorkshopInstalled) workshopInvalid('workshop_install_record');
+    return packages.remove(installed);
+  });
 
   /// Exporting is explicit; no account settings or personal state are read.
   Future<WorkshopPreparedUpload> preparePet(PetLibrary library, String localId, File destination, WorkshopPublication publication) => _exclusive(() async {

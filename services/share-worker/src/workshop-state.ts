@@ -22,9 +22,12 @@ export interface Submission {
 }
 export interface Release { kind: WorkshopKind; id: string; version: string; sha256: string; size: number; owner: Owner; approvedAt: string }
 export interface Withdrawal { kind: WorkshopKind; id: string; version: string; reason: string; at: string }
-export interface Report { reportId: string; kind: WorkshopKind; id: string; version: string; reason: string; reporter: Owner; createdAt: string }
+export interface Report {
+  reportId: string; kind: WorkshopKind; id: string; version: string; reason: string; reporter: Owner; createdAt: string;
+  resolution?: { at: string; decision: 'handled' | 'dismissed'; reason: string; actor: 'admin' };
+}
 export interface Audit {
-  eventId: string; at: string; action: 'create' | 'submit' | 'approve' | 'reject' | 'withdraw' | 'report';
+  eventId: string; at: string; action: 'create' | 'submit' | 'approve' | 'reject' | 'withdraw' | 'report' | 'resolve_report';
   actor: Owner | 'admin'; submissionId?: string; releaseId?: string; reportId?: string; reason?: string;
 }
 export interface State {
@@ -82,17 +85,24 @@ function validateState(v: unknown): asserts v is State {
     need(release && sameOwner(release.owner, s.owner) && release.sha256 === s.metadata.sha256 && release.size === s.metadata.size, 'state_invalid', 503);
     need(s.status === 'withdrawn' ? withdrawn.has(releaseId(s.metadata)) : !withdrawn.has(releaseId(s.metadata)), 'state_invalid', 503);
   }
-  const reportIds = new Set<string>();
+  const reports = new Map<string, Report>();
   for (const r of v.reports) {
-    need(record(r) && token(r.reportId) && !reportIds.has(r.reportId) && kind(r.kind) && id(r.id) && validVersion(r.version) && text(r.reason, 2000) && validOwner(r.reporter) && timestamp(r.createdAt), 'state_invalid', 503);
-    need(releases.has(releaseId(r as unknown as Report)), 'state_invalid', 503); reportIds.add(r.reportId);
+    need(record(r) && token(r.reportId) && !reports.has(r.reportId) && kind(r.kind) && id(r.id) && validVersion(r.version) && text(r.reason, 2000) && validOwner(r.reporter) && timestamp(r.createdAt), 'state_invalid', 503);
+    need(r.resolution === undefined || record(r.resolution) && timestamp(r.resolution.at) && r.resolution.at >= r.createdAt &&
+      ['handled', 'dismissed'].includes(r.resolution.decision as string) && text(r.resolution.reason, 2000) && r.resolution.actor === 'admin', 'state_invalid', 503);
+    need(releases.has(releaseId(r as unknown as Report)), 'state_invalid', 503); reports.set(r.reportId, r as unknown as Report);
   }
   const eventIds = new Set<string>();
   for (const e of v.audit) {
-    need(record(e) && token(e.eventId) && !eventIds.has(e.eventId) && timestamp(e.at) && ['create', 'submit', 'approve', 'reject', 'withdraw', 'report'].includes(e.action as string) &&
+    need(record(e) && token(e.eventId) && !eventIds.has(e.eventId) && timestamp(e.at) && ['create', 'submit', 'approve', 'reject', 'withdraw', 'report', 'resolve_report'].includes(e.action as string) &&
       (e.actor === 'admin' || validOwner(e.actor)) && (e.submissionId === undefined || token(e.submissionId) && submissions.has(e.submissionId)) &&
-      (e.releaseId === undefined || typeof e.releaseId === 'string' && releases.has(e.releaseId)) && (e.reportId === undefined || token(e.reportId) && reportIds.has(e.reportId)) &&
+      (e.releaseId === undefined || typeof e.releaseId === 'string' && releases.has(e.releaseId)) && (e.reportId === undefined || token(e.reportId) && reports.has(e.reportId)) &&
       (e.reason === undefined || text(e.reason, 2000)), 'state_invalid', 503); eventIds.add(e.eventId);
+    if (e.action === 'resolve_report') {
+      const report = reports.get(e.reportId as string);
+      need(report?.resolution && e.actor === 'admin' && e.at === report.resolution.at && e.reason === report.resolution.reason &&
+        e.releaseId === releaseId(report), 'state_invalid', 503);
+    }
   }
 }
 function empty(): State { return { schema: 1, revision: 0, updatedAt: '1970-01-01T00:00:00.000Z', submissions: [], releases: [], current: [], withdrawn: [], reports: [], audit: [] }; }
@@ -122,7 +132,14 @@ export async function commitState(env: Env, previous: Snapshot, state: State, no
   const liveRecords = state.submissions.filter(s => s.status !== 'withdrawn').length;
   const activeReleases = state.releases.length - state.withdrawn.length;
   const withdrawalReserve = liveRecords * 24 * 1024 + activeReleases * 12 * 1024;
-  need(bytes.length + withdrawalReserve <= STATE_CAP && state.audit.length + liveRecords + activeReleases <= 20000 &&
+  // Each open report reserves its one resolution and audit event. Two reasons
+  // of 2000 code points occupy at most 16000 UTF-8 bytes under text(); 20KiB also
+  // covers the fixed fields. This is additional to every withdrawal reserve.
+  // Legacy records without resolution read as open; an existing authority
+  // must meet this budget before upgrading. Do not mix old/new writers.
+  const openReports = state.reports.filter(r => r.resolution === undefined).length;
+  need(bytes.length + withdrawalReserve + openReports * 20 * 1024 <= STATE_CAP &&
+    state.audit.length + liveRecords + activeReleases + openReports <= 20000 &&
     state.withdrawn.length + activeReleases <= 4000, 'capacity', 503);
   try {
     const result = await env.BUCKET.put(STATE_KEY, bytes, {
@@ -138,6 +155,12 @@ export async function commitState(env: Env, previous: Snapshot, state: State, no
 export const editState = (snapshot: Snapshot): State => snapshot.state;
 export function audit(state: State, now: string, event: Omit<Audit, 'eventId' | 'at'>): void {
   state.audit.push({ eventId: crypto.randomUUID().replaceAll('-', ''), at: now, ...event });
+}
+export function resolveReport(state: State, report: Report, now: string, decision: 'handled' | 'dismissed', reason: string): void {
+  need(!report.resolution || report.resolution.decision === decision, 'report_state', 409);
+  if (report.resolution) return;
+  report.resolution = { at: now, decision, reason, actor: 'admin' };
+  audit(state, now, { action: 'resolve_report', actor: 'admin', reportId: report.reportId, releaseId: releaseId(report), reason });
 }
 export function approve(state: State, submission: Submission, now: string, reason: string): void {
   need(submission.status === 'pending', 'submission_state', 409);

@@ -23,6 +23,8 @@ export async function user(request: Request, env: Env): Promise<Owner> {
   const key = request.headers.get('User-Api-Key');
   need(key && key.length <= 512 && /^[\x21-\x7e]+$/.test(key), 'forum_auth_required', 401);
   const origin = forumOrigin(env);
+  // This is an assertion about the configured destination, never an upstream URL.
+  need(request.headers.get('X-Workshop-Forum-Origin') === origin, 'forum_origin', 409);
   await limitBurst(request, env, false);
   try {
     // Do not forward a client-selected origin, cookies, Authorization, or

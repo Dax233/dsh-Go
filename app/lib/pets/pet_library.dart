@@ -95,7 +95,17 @@ final petLibraryProvider = Provider<PetLibrary>(
 
 /// The brought pets on this phone.
 class PetLibrary {
-  PetLibrary(this._root, {this.onRestored});
+  PetLibrary(this._root, {this.onRestored}) : _readWorkshopReceipt = WorkshopReceipt.read;
+
+  /// Injects one listing read boundary; installs and receipt-fenced removals
+  /// still use their real files and the ordinary transaction path.
+  @visibleForTesting
+  PetLibrary.withWorkshopReceiptReader(this._root, {
+    required Future<WorkshopReceipt?> Function(Directory) readReceipt,
+    this.onRestored,
+  }) : _readWorkshopReceipt = readReceipt;
+
+  final Future<WorkshopReceipt?> Function(Directory) _readWorkshopReceipt;
 
   /// `<app support>/pets` (tests: a temporary folder).
   final Future<Directory> Function() _root;
@@ -165,20 +175,38 @@ class PetLibrary {
     return receipt;
   });
 
-  Future<Map<String, WorkshopReceipt>> workshopReceipts() => _exclusive(() async {
+  /// One result per workshop directory. A broken pack retains its trusted
+  /// receipt for removal; an unreadable or invalid receipt has no identity.
+  /// Root enumeration failures still fail the listing as a whole.
+  Future<Map<String, ({WorkshopReceipt? receipt, String? issue})>> workshopReceipts() => _exclusive(() async {
     final root = await _root();
     await _tidy(root);
     if (!await root.exists()) return const {};
-    final found = <String, WorkshopReceipt>{};
+    final found = <String, ({WorkshopReceipt? receipt, String? issue})>{};
     await for (final dir in root.list(followLinks: false)) {
       if (dir is! Directory) continue;
       final id = _nameOf(dir);
       if (!isUserPet(id) || !_plainId.hasMatch(id)) continue;
-      final receipt = await WorkshopReceipt.read(dir);
-      if (receipt == null) continue;
-      if (receipt.kind != 'pet' || userPetIdFor(receipt.id) != id) workshopInvalid('workshop_install_record');
-      await _load(root, id);
-      found[id] = receipt;
+      WorkshopReceipt? receipt;
+      try {
+        receipt = await _readWorkshopReceipt(dir);
+        if (receipt == null) continue;
+        if (receipt.kind != 'pet' || userPetIdFor(receipt.id) != id) workshopInvalid('workshop_install_record');
+      } on FileSystemException {
+        found[id] = (receipt: null, issue: 'workshop_storage');
+        continue;
+      } on WorkshopException {
+        found[id] = (receipt: null, issue: 'workshop_install_record');
+        continue;
+      }
+      try {
+        await _load(root, id);
+        found[id] = (receipt: receipt, issue: null);
+      } on FileSystemException {
+        found[id] = (receipt: receipt, issue: 'workshop_storage');
+      } on FormatException {
+        found[id] = (receipt: receipt, issue: 'workshop_pet_bad_pack');
+      }
     }
     return found;
   });

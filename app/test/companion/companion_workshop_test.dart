@@ -404,13 +404,19 @@ void main() {
     final unregister = store.beforeChanges(() async { entered.complete(); await stopped.future; });
     addTearDown(unregister);
     final installing = store.install(workshopZip(temp, {...workshopRuntime(), ...workshopCharacter(name: 'New name')}).path);
-    await entered.future;
-    expect(store.revision, base + 1);
-    expect(jsonDecode(File('${store.pack.path}/character/character.json').readAsStringSync())['name'], 'Private name');
-    stopped.complete();
-    await installing;
-    expect(revisions, [base + 1, base + 2]);
-    expect((await store.character()).name, 'New name');
+    final settled = installing.then<void>((_) {}, onError: (Object _) {});
+    try {
+      await entered.future;
+      expect(store.revision, base + 1);
+      expect(jsonDecode(File('${store.pack.path}/character/character.json').readAsStringSync())['name'], 'Private name');
+      stopped.complete();
+      await installing;
+      expect(revisions, [base + 1, base + 2]);
+      expect((await store.character()).name, 'New name');
+    } finally {
+      if (!stopped.isCompleted) stopped.complete();
+      await settled;
+    }
   });
 
   test('a failed stop-readers hook leaves the old directory intact', () async {
@@ -431,17 +437,26 @@ void main() {
     final unregister = store.beforeChanges(() async { if (++calls == 1) entered.complete(); await release.future; });
     addTearDown(unregister);
     final install = store.install(workshopZip(temp, workshopCharacter()).path);
-    await entered.future;
-    var removed = false;
-    final remove = other.remove().then((_) => removed = true);
-    await Future<void>.delayed(Duration.zero);
-    expect(removed, isFalse);
-    expect(other.revision, store.revision);
-    release.complete();
-    await install;
-    await remove;
-    expect(await store.installed(), isFalse);
-    expect(calls, 2);
+    final installSettled = install.then<void>((_) {}, onError: (Object _) {});
+    Future<void>? removeSettled;
+    try {
+      await entered.future;
+      var removed = false;
+      final remove = other.remove().then((_) => removed = true);
+      removeSettled = remove.then<void>((_) {}, onError: (Object _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(removed, isFalse);
+      expect(other.revision, store.revision);
+      release.complete();
+      await install;
+      await remove;
+      expect(await store.installed(), isFalse);
+      expect(calls, 2);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await installSettled;
+      if (removeSettled != null) await removeSettled;
+    }
   });
 
   test('interrupted promotion restores previous before a read or next installation', () async {

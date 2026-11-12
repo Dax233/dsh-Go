@@ -135,15 +135,28 @@ void main() {
     server = await CompanionServer.start(assets, pack);
     final request = await client.getUrl(server.pageUrl());
     final response = request.close().then<void>((_) {}, onError: (Object _) {});
-    await assets.entered.future;
-    var finished = false;
-    final closing = server.close().then((_) => finished = true);
-    await Future<void>.delayed(Duration.zero);
-    expect(finished, isFalse);
-    assets.release.complete();
-    await closing;
-    await response;
-    expect(finished, isTrue);
-    await server.close(); // Shared close future is idempotent.
+    Future<void>? closingSettled;
+    try {
+      await assets.entered.future;
+      var finished = false;
+      final closing = server.close().then((_) => finished = true);
+      // Observe errors immediately; the original Future still fails the test.
+      closingSettled = closing.then<void>((_) {}, onError: (Object _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(finished, isFalse);
+      assets.release.complete();
+      await closing;
+      await response;
+      expect(finished, isTrue);
+      await server.close(); // Shared close future is idempotent.
+    } finally {
+      if (!assets.release.isCompleted) {
+        assets.release.complete();
+      }
+      if (closingSettled != null) {
+        await closingSettled;
+      }
+      await response;
+    }
   });
 }
