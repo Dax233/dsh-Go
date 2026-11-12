@@ -31766,6 +31766,30 @@ abstract class L10n {
   /// **'给 DSH Go 点个 star'**
   String get starSettingsTitle;
 
+  /// No description provided for @hubStartPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'起始页'**
+  String get hubStartPage;
+
+  /// No description provided for @hubChatSuggestions.
+  ///
+  /// In zh, this message translates to:
+  /// **'聊天建议'**
+  String get hubChatSuggestions;
+
+  /// No description provided for @hubChatSuggestionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示起始页的聊天建议'**
+  String get hubChatSuggestionsHint;
+
+  /// No description provided for @searchKwChatSuggestions.
+  ///
+  /// In zh, this message translates to:
+  /// **'起始页,空白页,新对话,聊天建议,建议卡片'**
+  String get searchKwChatSuggestions;
+
   /// No description provided for @phoneStartupFailureStopping.
   ///
   /// In zh, this message translates to:

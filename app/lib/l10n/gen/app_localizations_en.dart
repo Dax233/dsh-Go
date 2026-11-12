@@ -18352,6 +18352,18 @@ class L10nEn extends L10n {
   String get starSettingsTitle => 'Star DSH Go on GitHub';
 
   @override
+  String get hubStartPage => 'Start page';
+
+  @override
+  String get hubChatSuggestions => 'Chat suggestions';
+
+  @override
+  String get hubChatSuggestionsHint => 'Show chat suggestions on the start page';
+
+  @override
+  String get searchKwChatSuggestions => 'start page,empty page,new chat,chat suggestions,suggestion cards';
+
+  @override
   String get phoneStartupFailureStopping => 'Startup failed; stopping';
 
   @override
