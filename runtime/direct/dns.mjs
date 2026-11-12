@@ -82,6 +82,8 @@ export function createLookup({ resolvConf, hostsFile, Resolver = dns.Resolver, w
   }
 
   async function resolve(hostname, options) {
+    // A failed config read can recover without another event; a dead watcher cannot.
+    if (configurationError && configurationError.syscall !== 'watch') refresh();
     if (configurationError) throw lookupError(hostname, [{ code: 'ESERVFAIL' }]);
     const snapshot = current;
     const family = options.family === 'IPv4' ? 4 : options.family === 'IPv6' ? 6 : (options.family ?? 0);

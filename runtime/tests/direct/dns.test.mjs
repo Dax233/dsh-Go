@@ -172,6 +172,48 @@ test('in-flight families finish on their captured config across invalid and vali
   assert.deepEqual([...types].sort(), [1, 28]);
 });
 
+test('a failed watched config read recovers on lookup without another file change', { timeout: 5000 }, async (t) => {
+  const first = await server(t, false, 7); const second = await server(t, false, 8);
+  const adapter = fixture(t, first.endpoint, true);
+  assert.equal((await adapter.promiseLookup('dual.test', 4)).address, '192.0.2.7');
+  const read = fs.readFileSync;
+  let observed;
+  const failedRead = new Promise(resolve => { observed = resolve; });
+  const injected = t.mock.method(fs, 'readFileSync', (file, ...args) => {
+    if (file === adapter.resolvConf) {
+      observed();
+      throw Object.assign(new Error('isolated config read failure'), { code: 'EMFILE', syscall: 'open' });
+    }
+    return read(file, ...args);
+  });
+  fs.writeFileSync(adapter.resolvConf + '.new', `nameserver ${second.endpoint}\n`);
+  fs.renameSync(adapter.resolvConf + '.new', adapter.resolvConf);
+  await failedRead;
+  await assert.rejects(adapter.promiseLookup('dual.test', 4), { code: 'EAI_AGAIN' });
+  const before = fs.statSync(adapter.resolvConf, { bigint: true });
+  injected.mock.restore();
+  assert.equal((await adapter.promiseLookup('dual.test', 4)).address, '192.0.2.8');
+  assert.equal((await promisify(adapter.lookup)('dual.test', 4)).address, '192.0.2.8');
+  const after = fs.statSync(adapter.resolvConf, { bigint: true });
+  assert.deepEqual([after.ino, after.size, after.mtimeNs], [before.ino, before.size, before.mtimeNs]);
+  assert.equal(first.queries.length, 1, 'the stale resolver is not used after its config read failed');
+  assert.equal(second.queries.length, 2);
+});
+
+test('a failed watcher stays failed even when the config remains readable', async (t) => {
+  const udp = await server(t);
+  const watch = fs.watch;
+  let watcher;
+  const capture = t.mock.method(fs, 'watch', (...args) => (watcher = watch(...args)));
+  const adapter = fixture(t, udp.endpoint, true);
+  capture.mock.restore();
+  // Node closes the native watcher before emitting its syscall="watch" error.
+  watcher.close();
+  watcher.emit('error', Object.assign(new Error('isolated watcher failure'), { code: 'ENOSPC', syscall: 'watch' }));
+  await assert.rejects(adapter.promiseLookup('dual.test', 4), { code: 'EAI_AGAIN' });
+  assert.equal(udp.queries.length, 0);
+});
+
 test('the live directory watcher observes atomic replacement and recovers after invalid DNS config', async (t) => {
   const first = await server(t, false, 7); const second = await server(t, false, 8);
   const adapter = fixture(t, first.endpoint, true);
