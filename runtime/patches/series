@@ -110,6 +110,8 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff
+jsonl-materialize-rename.diff
+jsonl-migration-link-fallback.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-preset-resume-errors.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-entry-lifecycle.diff
@@ -118,6 +120,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller-bundle.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-storage-json-postpublish.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-credentials-record-own-key.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-piai-credential-wait-cancel.diff
+piai-discovery-response-cancel.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff

@@ -208,7 +208,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     /** [dropKept]: give up what a reset kept but cannot be put back (see [KeepFailed]). */
     @Synchronized fun install(dropKept: Boolean = false, onDone: (Throwable?) -> Unit) {
         if (phase == Phase.INSTALLING) return onDone(null)
-        if (installer.isCurrent() && phase != Phase.ERROR && !resetting) {
+        val current = runCatching { installer.isCurrent() }.getOrElse { return onDone(it) }
+        if (current && phase != Phase.ERROR && !resetting) {
             if (phase == Phase.NOT_INSTALLED) setPhase(Phase.INSTALLED)
             return onDone(null)
         }
@@ -438,8 +439,13 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     @Synchronized internal fun startProcess() {
         if (process != null || phase == Phase.INSTALLING || phase == Phase.STOPPING) return
         lastLaunch = null
-        if (!installer.isCurrent()) {
-            error = "runtime not installed"
+        val problem = try {
+            if (installer.isCurrent()) null else "runtime not installed"
+        } catch (e: Exception) {
+            "runtime check failed: ${e.message}"
+        }
+        if (problem != null) {
+            error = problem
             setPhase(Phase.ERROR)
             DshService.stopSelfIfRunning(app, runGen)
             return
@@ -583,7 +589,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         val gen = runGen
         val servers = GuestSetup.pickDns(properties.dnsServers)
         worker.execute {
-            if ((phase == Phase.RUNNING || phase == Phase.STARTING) && installer.isCurrent()) {
+            if (phase == Phase.RUNNING || phase == Phase.STARTING) {
                 // Check ownership where this queued write executes, not only in the callback.
                 // If a stop/start follows this check, its startup DNS write is later on this worker.
                 if (gen != runGen || stopGen >= gen || !networkAccess.isCurrent(watch)) return@execute

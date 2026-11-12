@@ -56,11 +56,35 @@
         }
       }
     },
+    "jsonl-materialize-rename.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "8066d9ade0906e7c4bb6d556e470f87b2773ee0d203787754510f2f57bd3a011",
+          "before": "8a766569e14937ae833441cc75985e14ddbf5d07a201279d6386ef7cc8fea67b"
+        }
+      }
+    },
+    "jsonl-migration-link-fallback.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "267a53ae30ee0e6d33097f7c78fb94c25f905bbffb4896c258d856f1973bc4d3",
+          "before": "8066d9ade0906e7c4bb6d556e470f87b2773ee0d203787754510f2f57bd3a011"
+        }
+      }
+    },
     "piai-anthropic-opus55-thinking.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js": {
           "after": "26430731ff87ce6cd3b7fa038784dbbffd7fcab072bdf70e4ef9132c2af6764b",
           "before": "992daf485e2d479ac1df3886019946d0bf512ef6517ec730ce4c7315f9472ecc"
+        }
+      }
+    },
+    "piai-discovery-response-cancel.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "92830defeec4ddb42a9af7d6f48379274a0012c1baff3431cee52c712bf46731",
+          "before": "0a99a2fc903a4285044b09114b3bd20ee1e612f39aa381e4a71b10d48ee9e9f7"
         }
       }
     },
@@ -115,8 +139,8 @@
           "before": "7e2fb3438bddc44c65a5448842b23397ce8a31b0591490386072a19d6b8ddf6c"
         },
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "f9027ee1b6d27fc029616278442c791785a5ad025c7142181591705b4f552c4d",
-          "before": "0a99a2fc903a4285044b09114b3bd20ee1e612f39aa381e4a71b10d48ee9e9f7"
+          "after": "71bef2194ebc72d9d86a0ce3a0fe24345b808208a4752fb077f71cf6603b04aa",
+          "before": "92830defeec4ddb42a9af7d6f48379274a0012c1baff3431cee52c712bf46731"
         },
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "e498311537374b963f955f57c9628961d55fdb518e9de77e86cc56f33f3562b3",

@@ -6,7 +6,7 @@ import fs, { mkdtemp, mkdir, readFile, writeFile, rm, rename, readdir } from 'no
 import { syncBuiltinESMExports } from 'node:module';
 import { spawnSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { basename, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { CATALOG, HARD_LIMITS, Config, runtimeSnapshot, catalogModel } from '../src/config.js';
 import { createMediaClient, createDescriptor } from '../src/adapters.js';
 import { createHttpTransport } from '../src/http.js';
@@ -131,50 +131,66 @@ test('store preparation failure rolls back staging and releases the unsent hold'
   assert.deepEqual(await readdir(outputDirectory), []);
   await assert.rejects(fs.stat(target), { code: 'ENOENT' });
 });
-for (const destination of ['workspace', 'index']) {
-  test(`${destination} hard-link refusal releases the unsent hold and permits a fresh admission`, async t => {
-    const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
+for (const profile of ['openai-gpt-image', 'ark-video']) {
+  test(`${profile}: publishes with hard links unavailable and same-directory final renames`, async t => {
+    const f = await fixture(t, profile), req = request(profile);
     f.context.admission = await admitGeneration(req, f.context);
-    const firstRid = f.context.admission.rid;
-    const outputDirectory = join(f.workspace, 'generated', f.context.admission.outputDate);
-    const indexDirectory = join(f.context.hostStateDir, 'works', f.context.admission.outputDate);
-    const target = destination === 'workspace' ? outputDirectory : indexDirectory;
-    const originalLink = fs.link;
-    let failures = 0;
-    const injected = t.mock.method(fs, 'link', async function (source, path) {
-      if (String(path).startsWith(target + sep)) {
-        failures++;
-        throw Object.assign(new Error('controlled hard-link EACCES'), { code: 'EACCES' });
+    const { rid, outputDate } = f.context.admission;
+    const indexPath = join(f.context.hostStateDir, 'works', outputDate, rid + '.json');
+    const outputPath = join(f.workspace, 'generated', outputDate, rid + '-1.' + (profile === 'ark-video' ? 'mp4' : 'png'));
+    let links = 0;
+    const finalRenames = [];
+    const originalRename = fs.rename;
+    const blocked = t.mock.method(fs, 'link', async () => {
+      links++;
+      throw Object.assign(new Error('controlled app-domain hard-link refusal'), { code: 'EACCES' });
+    });
+    const observed = t.mock.method(fs, 'rename', async function (source, target) {
+      if (target === outputPath || target === indexPath) {
+        assert.equal(dirname(source), dirname(target));
+        finalRenames.push(target);
       }
-      return originalLink.call(this, source, path);
+      return originalRename.call(this, source, target);
     });
     syncBuiltinESMExports();
-    try {
-      await assert.rejects(generateMedia(req, f.context), error => {
-        assert.equal(f.wires.length, 0);
-        assert.equal(error.code, 'storage');
-        return true;
-      });
-    } finally { injected.mock.restore(); syncBuiltinESMExports(); }
-    assert.equal(failures, 1);
-    const ledger = createBudgetLedger(join(f.context.hostStateDir, 'budget'));
-    assert.equal((await ledger.snapshot()).requests.find(row => row.rid === firstRid).state, 'released');
-    assert.deepEqual(await readdir(outputDirectory), []);
-    assert.deepEqual(await readdir(indexDirectory), []);
-    // One reservation fills the daily budget: success requires the first release.
-    assert.equal(f.context.budget.dailyMicros, f.context.budget.unknownHoldMicros);
-    f.context.admission = await admitGeneration(req, f.context);
-    const result = await generateMedia(req, f.context);
-    assert.equal(f.wires.length, 1);
-    assert.equal(f.wires[0].method, 'POST');
-    assert.deepEqual(await readFile(result.meta.items[0].path), PNG);
-    assert.deepEqual(await readdir(outputDirectory), [f.context.admission.rid + '-1.png']);
-    assert.deepEqual(await readdir(indexDirectory), [f.context.admission.rid + '.json']);
-    const states = await ledger.snapshot();
-    assert.equal(states.requests.find(row => row.rid === firstRid).state, 'released');
-    assert.equal(states.requests.find(row => row.rid === f.context.admission.rid).state, 'settled');
+    let result;
+    try { result = await generateMedia(req, f.context); }
+    finally { observed.mock.restore(); blocked.mock.restore(); syncBuiltinESMExports(); }
+    assert.equal(links, 0);
+    assert.deepEqual(finalRenames, [outputPath, indexPath]);
+    assert.deepEqual(await readFile(outputPath), profile === 'ark-video' ? MP4 : PNG);
+    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).media, result.meta);
+    assert.deepEqual(await readdir(dirname(outputPath)), [basename(outputPath)]);
+    assert.deepEqual(await readdir(dirname(indexPath)), [basename(indexPath)]);
+    assert.equal(f.wires.filter(wire => wire.method === 'POST').length, 1);
+    assert.equal((await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot()).requests[0].state, 'settled');
   });
 }
+test('concurrent requests keep the accepted work when the other session loses permission after publication', async t => {
+  const f = await fixture(t, 'openai-gpt-image'), req = request('openai-gpt-image');
+  f.context.budget.dailyMicros *= 2;
+  const first = { ...f.context }, second = { ...f.context, sessionId: 'session-2' };
+  first.admission = await admitGeneration(req, first);
+  second.admission = await admitGeneration(req, second);
+  const indexDirectory = join(f.context.hostStateDir, 'works', first.admission.outputDate);
+  const firstIndex = join(indexDirectory, first.admission.rid + '.json');
+  first.authorizeWorkspace = async () => {
+    const policy = await f.context.authorizeWorkspace();
+    try { await readFile(firstIndex); return { ...policy, mode: 'read-only' }; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; return policy; }
+  };
+  const [failed, accepted] = await Promise.allSettled([generateMedia(req, first), generateMedia(req, second)]);
+  assert.equal(failed.status, 'rejected');
+  assert.equal(failed.reason.code, 'permission');
+  assert.equal(accepted.status, 'fulfilled');
+  const meta = accepted.value.meta;
+  assert.deepEqual(await readFile(meta.items[0].path), PNG);
+  assert.deepEqual(await readdir(dirname(meta.items[0].path)), [basename(meta.items[0].path)]);
+  assert.deepEqual(await readdir(indexDirectory), [second.admission.rid + '.json']);
+  assert.deepEqual(JSON.parse(await readFile(join(indexDirectory, second.admission.rid + '.json'), 'utf8')).media, meta);
+  assert.equal(f.wires.filter(wire => wire.method === 'POST').length, 2);
+  assert.deepEqual((await createBudgetLedger(join(f.context.hostStateDir, 'budget')).snapshot()).requests.map(row => row.state), ['settled', 'settled']);
+});
 for (const profile of ['openai-gpt-image', 'ark-image', 'ali-wan-image', 'silicon-image']) {
   test(`${profile}: real HTTP generation saves exact original and private index with budget`, async t => {
     const f = await fixture(t, profile), req = request(profile);
