@@ -340,6 +340,57 @@ test("core: manifest read failures recover while malformed content stays cached"
   assert.equal(reads, 3);
 });
 
+for (const code of ["EMFILE", "ENFILE"]) test(`core: first locate retries after ${code} without changing static contributions`, (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000000 });
+  const a = pkgDir(`locate-retry-${code}`, { v: 1, contributes: {
+    "composer.actions": [{ id: "draft", label: "Draft", effect: { type: "insert", text: "static text" } }],
+  } });
+  const core = new NativeCore(fakeHost([a]).ctx, LIMITS, "test");
+  const path = join(a.dir, "package.json"), original = fs.readFileSync;
+  let reads = 0, fail = true;
+  const spy = t.mock.method(fs, "readFileSync", (file, ...args) => {
+    if (file === path) {
+      reads++;
+      if (fail) throw Object.assign(new Error("descriptor limit"), { code });
+    }
+    return original(file, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { spy.mock.restore(); syncBuiltinESMExports(); core.dispose(); });
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  assert.equal(reads, 1);
+  fail = false;
+  t.mock.timers.tick(2000);
+  const recovered = core.contributions(CAPS);
+  assert.equal(recovered.plugins.length, 1, "release descriptors then query; no edit or markDirty");
+  assert.deepEqual(recovered.plugins[0].contributes["composer.actions"][0].effect, [{ type: "insert", text: "static text" }]);
+  assert.equal(recovered.plugins[0].contributes["composer.actions"][0].ready, true);
+  assert.equal(reads, 3, "successful locate and manifest read exactly once each");
+});
+
+test("core: first locate keeps malformed and missing package negative caches", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000000 });
+  const broken = pkgDir("locate-malformed", { v: 1, contributes: {} });
+  const missing = pkgDir("locate-missing", { v: 1, contributes: {} });
+  const plain = pkgDir("locate-no-contributions", undefined);
+  const paths = [broken, missing, plain].map(a => join(a.dir, "package.json"));
+  writeFileSync(paths[0], "{");
+  const core = new NativeCore(fakeHost([broken, missing, plain]).ctx, LIMITS, "test");
+  const original = fs.readFileSync, reads = [0, 0, 0];
+  const spy = t.mock.method(fs, "readFileSync", (file, ...args) => {
+    const index = paths.indexOf(file);
+    if (index >= 0) reads[index]++;
+    if (index === 1) throw Object.assign(new Error("package disappeared before read"), { code: "ENOENT" });
+    return original(file, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { spy.mock.restore(); syncBuiltinESMExports(); core.dispose(); });
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  t.mock.timers.tick(2000);
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  assert.deepEqual(reads, [1, 1, 2], "malformed/missing locations and a valid no-dshGo manifest stay cached");
+});
+
 test("core: service attribution, registration lifecycle, undeclared", () => {
   const a = pkgDir("svc-a", { v: 1, contributes: { panels: [{ id: "p", title: "P" }], "composer.actions": [{ id: "x", label: "X" }] } });
   const host = fakeHost([a]);

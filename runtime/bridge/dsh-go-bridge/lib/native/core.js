@@ -40,7 +40,9 @@ function nearestPackage(moduleUrl, expected) {
       try {
         const name = JSON.parse(readFileSync(candidate, "utf8")).name;
         if (typeof name === "string" && (expected === undefined || name === expected)) return { pkg: name, pkgJsonPath: candidate, dir };
-      } catch {}
+      } catch (error) {
+        if (error?.code === "EMFILE" || error?.code === "ENFILE") throw error;
+      }
     }
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -113,7 +115,8 @@ export class NativeCore {
         }
         found ??= nearestPackage(url, expected);
       }
-    } catch {
+    } catch (error) {
+      if (error?.code === "EMFILE" || error?.code === "ENFILE") return undefined;
       found = undefined;
     }
     if (found?.pkg === SELF || found?.pkg?.startsWith("@deepseek-ai/")) found = undefined;
