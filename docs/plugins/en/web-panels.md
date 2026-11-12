@@ -59,6 +59,22 @@ For example, host configuration `{"version":1,"plugins":{"seats":{"shell.overlay
 
 See the [web overlay and three-slot example](../../../examples/plugins/dsh-go-example-overlay/README.en.md), with no extra dependencies or build chain. The plugin was not installed or run for this work, and physical-device verification has not been performed.
 
+## Touch sizes in the full web page
+
+In the app's full DSH Web page, when **Web phone layout** is enabled and the browser reports `pointer: coarse`, `button`, `[role="button"]`, `select` and `input` under `[data-slot="main"]` receive a **44 × 44 CSS px** minimum size. The main slot also contains the official conversation, so this affects more than plugin pages. Fine pointers do not receive this additional size rule; turning phone layout off removes its injection. Standalone web islands and native Flutter panels do not use this stylesheet.
+
+`role="switch"`, `role="slider"`, `input[type="range"]` and hidden elements are not made visible; switches and tracks keep their authored sizes. Ordinary HTML checkboxes and radios also receive the minimum size. Naturally inline `a[role="button"]` / `span[role="button"]` receive an `inline-block` default so min-size can apply; the whole default layer stylesheet is placed before existing page styles so author `display` rules retain priority. Plugins should verify explicit inline layouts and fixed-size wrappers themselves, without assuming that the host rewrites their internal layout.
+
+Set `data-dsh-adapt="off"` on a control or any ancestor to keep that subtree's own control sizes and display modes. This also works on `html` or the main slot itself:
+
+```html
+<section data-dsh-adapt="off">
+  <!-- The plugin supplies adequate hit areas and room for their neighbours. -->
+</section>
+```
+
+This attribute opts out of the touch-size rule only; safe areas, drawers and other phone-layout rules remain. The minimum occupies real layout space: use rows that can accommodate or wrap their controls, rather than clipping enlarged controls inside compact wrappers. Use the opt-out when a plugin manages its own hit areas; the host does not insert DOM or change event handlers.
+
 ## Hosts and fallback
 
 - Islands still require a host with web pages, the existing route gate and available resource budget.
