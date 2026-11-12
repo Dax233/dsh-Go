@@ -13,6 +13,10 @@ import { createStreamStager } from './stream-staging.js';
 import { MediaError, checkAbort, safeFailure, fail } from './errors.js';
 
 const within = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel); };
+function storageFailure(error) {
+  throw error instanceof MediaError ? error : new MediaError('storage');
+}
+
 export async function readReferences(paths, context) {
   const refs = [];
   for (const path of paths ?? []) {
@@ -70,9 +74,7 @@ export async function generateMedia(request, context) {
     // An interrupted publication may have left an owned-looking file without its index.
     // A recovery attempt gets new names: never overwrite or delete uncertain leftovers.
     store = await prepareImageStore({ ...context, signal, rid, date: outputDate,
-      publicationSuffix: context.resumeTaskId ? randomUUID() : undefined }).catch(error => {
-      throw error instanceof MediaError ? error : new MediaError('storage');
-    });
+      publicationSuffix: context.resumeTaskId ? randomUUID() : undefined }).catch(storageFailure);
     const maximumItems = Array.from({ length: request.n ?? 1 }, (_, i) => ({
       path: store.outputPath(i + 1, request.model.kind === 'video' ? 'mp4' : 'webp'),
       mime: request.model.kind === 'video' ? 'video/mp4' : 'image/jpeg', width: 16384, height: 16384, bytes: context.limits.maxVideoBytes ?? context.limits.maxImageBytes,
@@ -112,9 +114,7 @@ export async function generateMedia(request, context) {
         total += bytes.length;
         if (bytes.length > context.limits.maxImageBytes || total > context.limits.maxTotalImageBytes) fail('too_large');
         const info = inspectImage(bytes);
-        const path = await store.stage(bytes, info.extension).catch(error => {
-          throw error instanceof MediaError ? error : new MediaError('storage');
-        });
+        const path = await store.stage(bytes, info.extension).catch(storageFailure);
         meta.items.push({ path, mime: info.mime, width: info.width, height: info.height, bytes: bytes.length });
       }
     } else {
@@ -135,9 +135,7 @@ export async function generateMedia(request, context) {
             ownDownload: store.ownDownload,
           });
           const info = await inspectVideo(staged.path, signal);
-          const path = await store.stageDownloaded(staged, info.extension).catch(error => {
-            throw error instanceof MediaError ? error : new MediaError('storage');
-          });
+          const path = await store.stageDownloaded(staged, info.extension).catch(storageFailure);
           meta.items.push({ path, mime: info.mime, width: info.width, height: info.height,
             bytes: staged.bytes, duration: info.duration, codec: info.codec });
           break;
@@ -148,8 +146,7 @@ export async function generateMedia(request, context) {
     }
     if (Buffer.byteLength(JSON.stringify({ 'dsh-go/media': meta })) > 8192 || containsSecret(meta, secret)) fail('metadata');
     await context.admission?.settle();
-    try { await store.commit(meta, { sessionId: context.sessionId, createdAt }); }
-    catch (error) { throw error instanceof MediaError ? error : new MediaError('storage'); }
+    await store.commit(meta, { sessionId: context.sessionId, createdAt }).catch(storageFailure);
     return { meta, text: 'AI 生成' + (request.model.kind === 'video' ? '视频' : '图片') + '已保存：\n' + meta.items.map(item => item.path).join('\n') };
   } catch (error) {
     if (providerTask && signal.aborted && !cancelledRemote) {
