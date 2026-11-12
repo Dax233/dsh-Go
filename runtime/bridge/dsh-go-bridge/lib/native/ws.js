@@ -26,10 +26,14 @@ export function encodeFrame(opcode, payload, { mask = false, fin = true } = {}) 
 }
 
 /**
- * Completes the handshake on an upgrade request. Returns a WsConnection, or undefined after
- * answering 400 for a request that is not a valid version-13 WebSocket upgrade.
+ * Completes the handshake on a live upgrade request. Returns a WsConnection, or undefined if
+ * the socket has ended or after answering 400 for an invalid version-13 WebSocket upgrade.
  */
 export function acceptUpgrade(req, socket, head, { maxMessage }) {
+  if (socket.destroyed || socket.readableEnded) {
+    socket.destroy();
+    return undefined;
+  }
   const key = req.headers["sec-websocket-key"];
   const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
   const valid = req.method === "GET" && upgrade === "websocket" && req.headers["sec-websocket-version"] === "13"
