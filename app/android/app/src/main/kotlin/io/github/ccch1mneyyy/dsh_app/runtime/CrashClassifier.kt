@@ -94,6 +94,9 @@ object CrashClassifier {
     private val PROOT_EXEC_FAILED = Regex(
         "^proot error: execve\\(\"/usr/bin/env\"\\): (?:Permission denied|Too many symbolic links encountered)$",
     )
+    // This exact early assertion comes from the pinned PRoot, not an Android kill.
+    private const val PROOT_ASSERT_FAILED =
+        "./tracee/event.c:704: int handle_tracee_event(Tracee *, int): assertion \"IS_IN_SYSENTER(tracee)\" failed"
     private val DIRECT_FAILED = listOf(
         Regex("^\\[dsh-app-direct] launch failed: .+"),
         Regex("^/.*/opt/node/bin/node: (?:error while loading shared libraries: .+|.+: version [`'].+['`] not found.*)$"),
@@ -148,7 +151,7 @@ object CrashClassifier {
         val early = exitCode != 0 && (readyAt == null || now - readyAt <= EARLY_WINDOW_MS)
         val fatal = tail.firstOrNull(::isFatal) ?: tail.firstOrNull { HEAP_OOM.matches(it) }?.takeIf { early }
         val launch = if (readyAt == null && exitCode != 0) tail.firstOrNull {
-            EXEC_FAILED.matches(it) || (!directEngine && PROOT_EXEC_FAILED.matches(it)) ||
+            EXEC_FAILED.matches(it) || (!directEngine && (PROOT_EXEC_FAILED.matches(it) || it == PROOT_ASSERT_FAILED)) ||
                 (directEngine && DIRECT_FAILED.any { pattern -> pattern.matches(it) })
         } ?: (if (directEngine && exitCode == SIGSYS_EXIT) SECCOMP_KILLED else null) else null
         val kind = when {
