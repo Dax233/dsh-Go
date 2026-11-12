@@ -1560,9 +1560,11 @@ class SSHClient {
       _preferredAuthMethods.add(SSHAuthMethod.hostbased);
     }
 
+    // Discover the server's methods, or accept access without credentials,
+    // before invoking a password callback or signing with a private key.
     _authMethodsLeft
-      ..addAll(_preferredAuthMethods)
-      ..add(SSHAuthMethod.none);
+      ..add(SSHAuthMethod.none)
+      ..addAll(_preferredAuthMethods);
 
     _tryNextAuthMethod();
   }

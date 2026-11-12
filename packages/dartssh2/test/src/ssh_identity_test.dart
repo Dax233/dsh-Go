@@ -128,6 +128,65 @@ void main() {
     });
   });
 
+  group('SSHClient initial none authentication', () {
+    for (final credential in ['private key', 'password', 'no credentials']) {
+      test('accepts a none-only gateway before $credential', () async {
+        final socket = _FakeSSHSocket();
+        var credentialCalls = 0;
+        final client = SSHClient(
+          socket,
+          username: 'gateway-user',
+          identities: credential == 'private key'
+              ? [
+                  SSHIdentity.custom(
+                    type: 'ssh-ed25519',
+                    publicKey: SSHRawHostKey(Uint8List.fromList([1, 2, 3])),
+                    signer: (_) {
+                      credentialCalls++;
+                      return SSHRawSignature(Uint8List.fromList([4, 5, 6]));
+                    },
+                  ),
+                ]
+              : null,
+          onPasswordRequest: credential == 'password'
+              ? () {
+                  credentialCalls++;
+                  return 'synthetic-password';
+                }
+              : null,
+          keepAliveInterval: null,
+        );
+        client.sessionId = Uint8List(32);
+        unawaited(client.authenticated.catchError((Object _) {}));
+        addTearDown(client.close);
+
+        client
+            .handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+        await Future<void>.delayed(Duration.zero);
+
+        expect(credentialCalls, 0);
+        client.handlePacket(SSH_Message_Userauth_Success().encode());
+        await client.authenticated;
+      });
+    }
+
+    test('a rejected none request is not retried as a continuing method',
+        () async {
+      final socket = _FakeSSHSocket();
+      final client = SSHClient(socket, username: 'gateway-user');
+      addTearDown(client.close);
+      final rejected = expectLater(
+        client.authenticated,
+        throwsA(isA<SSHAuthFailError>()),
+      );
+      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      client.handlePacket(
+        SSH_Message_Userauth_Failure(methodsLeft: const ['none']).encode(),
+      );
+      await rejected;
+    });
+  });
+
   group('SSHClient with asynchronous SSHIdentity', () {
     test('authenticates successfully with async signer without probe',
         () async {
@@ -152,7 +211,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       expect(signCallCount, 1);
@@ -193,7 +252,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       // Verify signer was NOT called yet because the client sent an unsigned probe.
@@ -251,7 +310,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       expect(identity1SignCount, 0);
@@ -306,7 +365,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       expect(signedIdentities, ['key-1']);
@@ -349,7 +408,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       // Close client while signer is in progress.
@@ -382,7 +441,7 @@ void main() {
       client.sessionId = Uint8List(32);
 
       // Start userauth service.
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
 
       await expectLater(
         client.authenticated,
@@ -446,7 +505,7 @@ void main() {
       );
       client.sessionId = sessionId;
 
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
 
       final reader = SSHMessageReader(signedChallenge);
@@ -492,7 +551,7 @@ void main() {
       );
       client.sessionId = Uint8List(32);
 
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
       expect(attempts, ['first']);
 
@@ -545,7 +604,7 @@ void main() {
       );
       client.sessionId = Uint8List(32);
 
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
       expect(signedIdentities, [1]);
 
@@ -585,7 +644,7 @@ void main() {
       );
       client.sessionId = Uint8List(32);
 
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
       expect(attempts, [1]);
 
@@ -621,7 +680,7 @@ void main() {
       );
       client.sessionId = Uint8List(32);
 
-      client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+      _beginCredentialAuthentication(client);
       await Future<void>.delayed(Duration.zero);
       expect(signCount, 1);
 
@@ -639,6 +698,22 @@ void main() {
       await client.close();
     });
   });
+}
+
+// Credential-specific tests begin after the server rejects the initial none
+// request and advertises the methods it will actually accept (RFC 4252 §5.2).
+void _beginCredentialAuthentication(SSHClient client) {
+  client.handlePacket(SSH_Message_Service_Accept('ssh-userauth').encode());
+  client.handlePacket(
+    SSH_Message_Userauth_Failure(
+      methodsLeft: const [
+        'publickey',
+        'password',
+        'keyboard-interactive',
+        'hostbased'
+      ],
+    ).encode(),
+  );
 }
 
 class _FakeSSHSocket implements SSHSocket {
