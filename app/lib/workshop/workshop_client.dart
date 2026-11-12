@@ -229,14 +229,22 @@ class WorkshopClient {
   }
 
   Future<WorkshopSubmission> createSubmission(WorkshopMetadata metadata, {required String requestId, required bool rightsConfirmed, required WorkshopCredential credential}) async {
-    if (!rightsConfirmed) workshopInvalid('workshop_rights_required');
-    if (!RegExp(r'^[A-Za-z0-9_-]{16,128}$').hasMatch(requestId)) workshopInvalid('workshop_bad_request_id');
-    final caps = await capabilities();
-    if (!caps.features.uploads) workshopInvalid('workshop_upload_disabled');
-    if (metadata.kind == 'companion' && !caps.features.companion) workshopInvalid('workshop_companion_disabled');
-    if (!caps.kinds.contains(metadata.kind) || !metadata.supported) workshopInvalid('workshop_unsupported_kind');
-    if (!caps.licenses.contains(metadata.license) || metadata.size > caps.archiveBytes) workshopInvalid('workshop_bad_metadata');
-    final result = await _json('POST', '/api/workshop/v1/submissions', headers: await _identity(credential, capabilities: caps),
+    final Map<String, String> headers;
+    try {
+      if (!rightsConfirmed) workshopInvalid('workshop_rights_required');
+      if (!RegExp(r'^[A-Za-z0-9_-]{16,128}$').hasMatch(requestId)) workshopInvalid('workshop_bad_request_id');
+      final caps = await capabilities();
+      if (!caps.features.uploads) workshopInvalid('workshop_upload_disabled');
+      if (metadata.kind == 'companion' && !caps.features.companion) workshopInvalid('workshop_companion_disabled');
+      if (!caps.kinds.contains(metadata.kind) || !metadata.supported) workshopInvalid('workshop_unsupported_kind');
+      if (!caps.licenses.contains(metadata.license) || metadata.size > caps.archiveBytes) workshopInvalid('workshop_bad_metadata');
+      headers = await _identity(credential, capabilities: caps);
+    } on Object catch (error) {
+      final failure = workshopTransportError(error);
+      throw WorkshopException(failure.code, status: failure.status, retryAfter: failure.retryAfter,
+        mutationNotSent: true);
+    }
+    final result = await _json('POST', '/api/workshop/v1/submissions', headers: headers,
       body: {'requestId': requestId, ...metadata.toJson()});
     return _mutationResult(() => _submission(result, credential));
   }

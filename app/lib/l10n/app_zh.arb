@@ -13246,6 +13246,383 @@
       }
     }
   },
+  "workshopTitle": "创意工坊",
+  "workshopSubtitle": "大家做的宠物和伙伴，挑喜欢的装上",
+  "workshopEntrySubtitle": "找别人做的宠物和伙伴",
+  "workshopTabBrowse": "发现",
+  "workshopTabMine": "我的投稿",
+  "workshopKindAll": "全部",
+  "workshopKindPet": "像素宠物",
+  "workshopKindCompanion": "伙伴",
+  "workshopSearchHint": "搜索名称或作者",
+  "workshopGet": "获取",
+  "workshopRefresh": "刷新",
+  "workshopByAuthor": "{author} 制作",
+  "@workshopByAuthor": {
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopEmptyTitle": "这里还空着",
+  "workshopEmptyMessage": "还没有人投稿。做了宠物或伙伴的话，可以第一个发上来。",
+  "workshopNoMatchTitle": "没有找到",
+  "workshopNoMatchMessage": "换个名字或作者再试试。",
+  "workshopUnavailableTitle": "暂时打不开工坊",
+  "workshopNotOpenTitle": "工坊还没有开放",
+  "workshopNotOpenMessage": "这个版本还没有接入工坊服务。",
+  "workshopShowingOlder": "没能刷新，显示的是 {when} 取到的内容。",
+  "@workshopShowingOlder": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopLocalUnknown": "读不出本机已装了哪些，「已安装」的标记可能不准。",
+  "workshopStatVersion": "版本",
+  "workshopStatSize": "大小",
+  "workshopStatLicense": "许可",
+  "workshopAbout": "简介",
+  "workshopNoDescription": "作者没有写简介。",
+  "workshopSource": "来源",
+  "workshopMinApp": "需要 DSH Go {version} 或更新的版本。",
+  "@workshopMinApp": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopInstalledVersion": "已安装 {version}",
+  "@workshopInstalledVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopUpdateTo": "更新到 {version}",
+  "@workshopUpdateTo": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopInstalledWithdrawn": "你装的这个版本已经被撤回。它还能用；有新版本就更新，没有的话建议卸载。",
+  "workshopPhasePreparing": "正在准备…",
+  "workshopPhaseDownloading": "正在下载",
+  "workshopPhaseVerifying": "正在校验…",
+  "workshopPhaseCancelling": "正在取消…",
+  "workshopProgressBytes": "{received} / {total}",
+  "@workshopProgressBytes": {
+    "placeholders": {
+      "received": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopInstallDone": "装好了",
+  "workshopInstallDonePet": "装好了，到宠物页就能换上它。",
+  "workshopInstallDoneCompanion": "装好了，到伙伴小屋就能见到她。",
+  "workshopInstallDoneRefreshIssue": "装好了，但列表没能刷新，重新进来就能看到。",
+  "workshopInstallCancelled": "已取消，没有改动本机的内容。",
+  "workshopInstallBusy": "上一个安装或卸载还没结束，等它完成再试。",
+  "workshopReplaceTitle": "覆盖本机已有的？",
+  "workshopReplaceMessage": "本机已经有一个同名的资源，不是从工坊这一条装的。继续会用「{title}」替换它，替换后找不回来。",
+  "@workshopReplaceMessage": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopReplaceConfirm": "覆盖",
+  "workshopReport": "举报",
+  "workshopErrorNetwork": "网络不通，稍后再试。",
+  "workshopErrorTimeout": "等得太久没有回应，稍后再试。",
+  "workshopErrorServer": "工坊服务暂时出了问题，稍后再试。",
+  "workshopErrorRateLimited": "操作太频繁了，过一会儿再试。",
+  "workshopErrorBadData": "工坊返回的内容不对，没有采用。稍后再试。",
+  "workshopErrorCatalogChanged": "这个作品刚刚有变化，请刷新后再看。",
+  "workshopErrorNotFound": "找不到这个作品了，可能已经下架。",
+  "workshopErrorWithdrawn": "这个版本已经被撤回，不能安装。",
+  "workshopErrorMinApp": "App 版本太旧，更新后才能安装。",
+  "workshopErrorUnsupported": "这个版本的 App 还不认识这类作品。",
+  "workshopErrorCompanionOff": "伙伴类作品暂时关闭了。",
+  "workshopErrorUploadOff": "工坊暂时不接收投稿。",
+  "workshopErrorNoSpace": "手机空间不够，腾出一些再试。",
+  "workshopErrorStorage": "没能读写手机上的文件。",
+  "workshopErrorIntegrity": "下载的内容和登记的不一致，已丢弃。请重试。",
+  "workshopErrorDowngrade": "本机装的版本更新，不会换成旧的。",
+  "workshopErrorRuntimeMissing": "要先在伙伴小屋里请过一位角色，才能装别的伙伴。",
+  "workshopErrorReadersBusy": "她正在用着，先离开伙伴小屋或关掉悬浮窗再试。",
+  "workshopErrorInstallRecord": "本机的安装记录对不上，没有动它。",
+  "workshopErrorOtherOrigin": "这是从别的工坊装的。",
+  "workshopErrorSignIn": "需要先登录论坛账号。",
+  "workshopErrorConsent": "需要先同意把登录凭据交给工坊核对身份。",
+  "workshopErrorForumMismatch": "登录的论坛和工坊认的不是同一个，请重新登录。",
+  "workshopErrorForumDown": "论坛暂时联系不上，稍后再试。",
+  "workshopErrorPreferences": "没能保存本机的记录，这一步没有继续。",
+  "workshopErrorBusy": "上一步还没结束，稍等。",
+  "workshopErrorCancelled": "已取消。",
+  "workshopErrorUnknownResult": "不确定有没有成功。先刷新看看，别急着重试。",
+  "workshopErrorGeneric": "没有成功，稍后再试。",
+  "workshopDisclosureTitle": "让工坊核对你的论坛身份",
+  "workshopDisclosureLead": "投稿、管理自己的投稿和举报，工坊都要先知道你是谁。办法是把你的论坛登录凭据（User API Key）发给下面这个工坊服务，由它去问论坛你是哪个账号。",
+  "workshopDisclosureWorker": "收到凭据的工坊",
+  "workshopDisclosureForum": "核对身份的论坛",
+  "workshopDisclosureUse": "投稿、查看或撤回自己的投稿、举报时都会带上它。工坊只拿它向论坛确认身份，不保存。",
+  "workshopDisclosureKept": "本机只记下你同意过这两个地址，不另存凭据；换了其中一个会再问。",
+  "workshopDisclosureStale": "地址刚刚有变化，请按现在显示的重新确认。",
+  "workshopDisclosureAccept": "同意并继续",
+  "workshopDisclosureDecline": "暂不",
+  "workshopDisclosureUnsaved": "这次同意已经生效，但没能记在本机，下次可能再问一遍。",
+  "workshopInstalledEmptyTitle": "还没有从工坊装过东西",
+  "workshopInstalledEmptyMessage": "在「发现」里装上的宠物和伙伴会列在这里。",
+  "workshopInstalledEmptyAction": "去发现",
+  "workshopInstalledLoadFailedTitle": "读不出已安装的内容",
+  "workshopInstalledLoadStale": "没能重新读取，显示的是上一次的。",
+  "workshopInstalledCatalogStale": "更新和撤回的信息可能不是最新的。",
+  "workshopInstalledCatalogUnknown": "暂时查不到更新和撤回的信息。",
+  "workshopInstalledStatusUpdate": "有更新",
+  "workshopInstalledStatusWithdrawn": "这个版本已被撤回",
+  "workshopInstalledStatusOtherOrigin": "来自别的工坊",
+  "workshopInstalledStatusNotListed": "工坊里现在找不到它",
+  "workshopInstalledStatusCompanionOff": "伙伴类作品暂时关闭",
+  "workshopInstalledStatusRewritten": "和工坊里的同一版本不一致",
+  "workshopInstalledStatusRemoving": "正在卸载…",
+  "workshopInstalledStatusRemoveFailed": "没能卸载",
+  "workshopInstalledStatusRemoved": "已卸载",
+  "workshopInstalledIssueBroken": "这个包损坏了",
+  "workshopInstalledIssueUnreadable": "读不出这个包",
+  "workshopInstalledIssueRecord": "安装记录对不上",
+  "workshopInstalledIssueOther": "这一项有问题",
+  "workshopInstalledNoteBroken": "这个包损坏了，可能用不了。",
+  "workshopInstalledNoteUnreadable": "没能读出这个包的文件。",
+  "workshopInstalledNoteRecord": "它的安装记录对不上。",
+  "workshopInstalledNoteOther": "这一项有问题，读不出更多信息。",
+  "workshopInstalledNoteUntrusted": "安装记录不可信，没法从这里卸载它。",
+  "workshopInstalledNoteOtherOrigin": "这是从别的工坊装的，这里查不到它的更新。",
+  "workshopInstalledNoteNotListed": "工坊里现在找不到它，本机的这一份不受影响。",
+  "workshopInstalledNoteRewritten": "工坊里同一版本的内容和本机的不一样，本机的这一份没有改动。",
+  "workshopInstalledNoteMinApp": "工坊里现在的版本需要更新 App 才能安装。",
+  "workshopInstalledNoteUnavailable": "工坊里现在的版本暂时不能安装。",
+  "workshopInstalledNoteGone": "这一项已经不在本机了。",
+  "workshopInstalledNoteUnread": "暂时读不到本机的安装记录，下面是刚才看到的状态。",
+  "workshopInstalledRemoveFailed": "没能卸载。{reason}",
+  "@workshopInstalledRemoveFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopInstalledFactKind": "类型",
+  "workshopInstalledFactId": "作品 ID",
+  "workshopInstalledFactOrigin": "来自",
+  "workshopInstalledFactLocalId": "本机标识",
+  "workshopInstalledRemoveTitle": "卸载「{title}」？",
+  "@workshopInstalledRemoveTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopInstalledRemoveMessage": "会删掉这台手机上的这一份。想再用，要回工坊重新获取。",
+  "workshopInstalledRemoveNoReinstall": "工坊里现在找不到它，卸载后可能装不回来。",
+  "workshopInstalledRemovedRefreshIssue": "已卸载，但列表没能刷新，下拉刷新一下。",
+  "workshopInstalledRemovedLocalIssue": "已卸载，但有些地方没能跟着更新，重新打开 App 就好。",
+  "workshopMinePublish": "投稿",
+  "workshopMinePublishHint": "审核通过后出现在「发现」里",
+  "workshopMineSignInTitle": "投稿记在论坛账号上",
+  "workshopMineSignInMessage": "登录后就能看到自己发过的作品。",
+  "workshopMineConsentTitle": "还差一步确认",
+  "workshopMineConsentMessage": "工坊要用你的论坛登录凭据核对身份，同意后才能看到自己的投稿。",
+  "workshopMineConsentAction": "查看说明",
+  "workshopMineEmptyTitle": "还没有投稿",
+  "workshopMineEmptyMessage": "做了宠物或伙伴的话，可以发上来给大家用。",
+  "workshopMineEmptyFiltered": "没有这类投稿",
+  "workshopMineLoadFailed": "没能读到投稿",
+  "workshopMineStale": "没读到最新内容，下面是之前读到的。",
+  "workshopMineLoadMore": "加载更多",
+  "workshopMineStatusPending": "待审核",
+  "workshopMineStatusApproved": "已通过",
+  "workshopMineStatusRejected": "已拒绝",
+  "workshopMineStatusWithdrawn": "已撤回",
+  "workshopMineStatusDraft": "草稿",
+  "workshopMineDetailTitle": "投稿详情",
+  "workshopMineRefreshOne": "刷新这一条",
+  "workshopMineAboutPending": "已经提交，正在等审核。通过后会出现在「发现」里。",
+  "workshopMineAboutApproved": "审核通过了。现在是否公开，以「发现」里看到的为准。",
+  "workshopMineAboutRejected": "没有通过审核。",
+  "workshopMineAboutWithdrawn": "已经撤回，不能恢复。",
+  "workshopMineAboutDraft": "文件还没有传完，不会进入审核。",
+  "workshopMineReviewReason": "审核意见",
+  "workshopMineWithdrawReason": "撤回原因",
+  "workshopMineWithdrawReasonHint": "比如传错了文件、想改了再发",
+  "workshopMineCreatedAt": "提交时间",
+  "workshopMineUpdatedAt": "最近更新",
+  "workshopMineDetailStale": "这一条没能刷新，显示的是之前读到的状态。",
+  "workshopMineAccountChanged": "账号已经换了",
+  "workshopMineAccountChangedMessage": "这条投稿属于之前的账号，不再显示。",
+  "workshopMineWithdraw": "撤回投稿",
+  "workshopMineWithdrawConfirmTitle": "撤回这条投稿？",
+  "workshopMineWithdrawConfirmMessage": "撤回后不能恢复。如果「{title}」已经公开，所有人都不能再下载这个版本，同一个版本号也不能重新发布。",
+  "@workshopMineWithdrawConfirmMessage": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopMineWithdrawConfirm": "撤回",
+  "workshopMineWithdrawing": "正在撤回…",
+  "workshopMineWithdrawDone": "这条投稿已撤回",
+  "workshopMineWithdrawUnknown": "不确定有没有撤回成功。先查询结果，不要重复撤回。",
+  "workshopMineWithdrawQuery": "查询结果",
+  "workshopMineWithdrawStill": "查到它还没有撤回。需要的话可以再撤回一次。",
+  "workshopMineWithdrawReconciled": "查到它现在已经是撤回状态。",
+  "workshopMineReasonEmpty": "先写下原因。",
+  "workshopMineReasonTooLong": "最多 {max} 字，现在超了。",
+  "@workshopMineReasonTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopMineReasonBadChars": "里面有不能用的字符，删掉后再试。",
+  "workshopMineReasonRejected": "这段原因没有被接受，改一下再试。",
+  "workshopReportTarget": "{title} · {version}",
+  "@workshopReportTarget": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopReportReason": "举报原因",
+  "workshopReportReasonHint": "它有什么问题，比如侵权、内容不合适",
+  "workshopReportNote": "审核员会查看这条举报。作品不会因为举报自动下架。",
+  "workshopReportSubmit": "提交举报",
+  "workshopReportSending": "正在提交…",
+  "workshopReportDone": "举报已送达，审核员会查看。",
+  "workshopReportSignInTitle": "举报需要论坛账号",
+  "workshopReportSignInMessage": "登录后才能提交举报。",
+  "workshopReportConsentMessage": "工坊要用你的论坛登录凭据核对身份，同意后才能举报。",
+  "workshopReportUnknownTitle": "不确定有没有送达",
+  "workshopReportUnknownMessage": "上一次举报可能已经收到，也可能没有，现在查不到结果。再发一次可能变成重复举报。",
+  "workshopReportUnknownOther": "那一次举报的是 {id} {version}。",
+  "@workshopReportUnknownOther": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopReportUnknownAgain": "知道可能重复，重新填写",
+  "workshopPublishTitle": "投稿",
+  "workshopPublishClosedTitle": "工坊暂时不接收投稿",
+  "workshopPublishClosedMessage": "已经交上去的仍然可以在「我的投稿」里看。",
+  "workshopPublishSignInTitle": "先登录论坛账号",
+  "workshopPublishSignInMessage": "工坊靠论坛账号确认投稿的人是谁。",
+  "workshopPublishProfileTitle": "还没读到论坛账号资料",
+  "workshopPublishProfileMessage": "要先知道你是哪个账号，才能投稿。",
+  "workshopPublishCheckFailedTitle": "没能读出上一次投稿的记录",
+  "workshopPublishCheckLocked": "为了不重复投稿，读出来之前不能开始新的。",
+  "workshopPublishWaitingPrevious": "上一个操作还没结束，稍等。",
+  "workshopPublishChooseTitle": "选一个要投稿的",
+  "workshopPublishCompanionCurrent": "现在的伙伴",
+  "workshopPublishSourcesEmptyTitle": "还没有可以投稿的",
+  "workshopPublishSourcesEmptyMessage": "自己导入的像素宠物和现在的伙伴可以投稿。",
+  "workshopPublishSourcesIssue": "没能读出本机可以投稿的内容。",
+  "workshopPublishPetsIssue": "没能读出本机的像素宠物。",
+  "workshopPublishCompanionIssue": "没能读出本机的伙伴。",
+  "workshopPublishNoCompanion": "本机还没有伙伴，先到伙伴小屋请一位。",
+  "workshopPublishSectionSource": "投稿内容",
+  "workshopPublishChange": "更换",
+  "workshopPublishSectionNames": "名称",
+  "workshopPublishTitleZh": "中文名称",
+  "workshopPublishTitleEn": "英文名称",
+  "workshopPublishSectionInfo": "作品信息",
+  "workshopPublishId": "作品 ID",
+  "workshopPublishIdHelper": "小写字母、数字和短横线",
+  "workshopPublishAuthor": "作者",
+  "workshopPublishLicenseAuthor": "作者授权",
+  "workshopPublishSourceLink": "来源链接",
+  "workshopPublishSourceHelper": "作品主页或出处，以 https:// 开头",
+  "workshopPublishSectionAbout": "介绍（选填）",
+  "workshopPublishTags": "标签",
+  "workshopPublishTagsHelper": "用逗号分开，最多 8 个",
+  "workshopPublishNext": "下一步",
+  "workshopPublishPreparing": "正在打包…",
+  "workshopPublishBadTitle": "名称不能为空，最多 120 个字",
+  "workshopPublishBadId": "只能用小写字母、数字和短横线，最多 40 个字符",
+  "workshopPublishBadVersion": "写成 1.0.0 这样的版本号",
+  "workshopPublishBadAuthor": "作者不能为空，最多 256 个字",
+  "workshopPublishBadLicense": "选一个许可",
+  "workshopPublishBadSource": "填一个以 https:// 开头的链接",
+  "workshopPublishBadDescription": "简介最多 512 个字",
+  "workshopPublishBadTags": "最多 8 个标签，每个不超过 32 个字，不能重复",
+  "workshopPublishBadRights": "先确认你有权分享这份内容",
+  "workshopPublishFiles": "包里的文件",
+  "workshopPublishEdit": "修改资料",
+  "workshopPublishRights": "我确认自己有权分享这份内容",
+  "workshopPublishReviewNote": "交上去后先由工坊审核，通过了大家才能看到。",
+  "workshopPublishSubmit": "投稿",
+  "workshopPublishPhaseWorking": "正在处理…",
+  "workshopPublishPhaseUploading": "正在上传",
+  "workshopPublishPhaseWaiting": "已经传完，等工坊确认…",
+  "workshopPublishStay": "离开这一页不会中断。",
+  "workshopPublishDoneTitle": "已交给工坊，等待审核",
+  "workshopPublishDoneMessage": "进度可以在「我的投稿」里看。",
+  "workshopPublishBackToMine": "回到我的投稿",
+  "workshopPublishApprovedTitle": "这份投稿已经通过审核",
+  "workshopPublishApprovedMessage": "有没有上架，以「发现」里看到的为准。",
+  "workshopPublishRejectedTitle": "这份投稿没有通过审核",
+  "workshopPublishWithdrawnTitle": "这份投稿已经撤回",
+  "workshopPublishReason": "原因：{reason}",
+  "@workshopPublishReason": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "workshopPublishAgain": "重新投稿",
+  "workshopPublishAgainMessage": "改好以后可以重新投一次。",
+  "workshopPublishRecordKept": "结果已经确认，但本机的投稿记录没能清掉。",
+  "workshopPublishLeftovers": "本机留下的临时文件没能清掉。",
+  "workshopPublishPendingTitle": "有一份投稿还没结束",
+  "workshopPublishPendingMessage": "上次没有交完。继续会用同一份内容接着交，不会多出一份。",
+  "workshopPublishPendingLocked": "这份投稿的内容已经定下，暂时不能修改，也不能换成别的。问题解决后可以接着交。",
+  "workshopPublishPendingUnsent": "这次还没有发出去。问题解决后可以接着交，也可以回去修改资料或换一个来投。",
+  "workshopPublishEditUnsent": "回去修改",
+  "workshopPublishUnknownTitle": "不确定有没有交上去",
+  "workshopPublishUnknownMessage": "工坊没有回话，结果还不知道。查看结果会拿同一份投稿再问一次：已经交上的不会重复，没交完的接着交。",
+  "workshopPublishContinue": "继续投稿",
+  "workshopPublishCheckResult": "查看结果",
+  "workshopPublishCheckAgain": "重新查询",
+  "workshopPublishErrorInvalid": "有几项资料要改一下。",
+  "workshopPublishErrorMismatch": "打好的包和填写的资料对不上，请再试一次。",
+  "workshopPublishErrorPending": "还有一份投稿没有结束，先把它处理完。",
+  "workshopPublishErrorTooLarge": "包太大了，超过了工坊的上限。",
+  "workshopPublishErrorMetadata": "资料没有通过工坊的检查，改一改再试。",
+  "workshopPublishErrorNotReady": "还没准备好，稍等再试。",
+  "workshopPublishErrorAgain": "现在还不能重新投稿。",
   "workspaceRecoveryTitle": "工作区索引救援",
   "workspaceRecoveryEnable": "启用工作区索引救援",
   "workspaceRecoveryDisable": "恢复使用原索引",

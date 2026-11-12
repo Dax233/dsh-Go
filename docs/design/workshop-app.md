@@ -1,6 +1,6 @@
-# App 创意工坊数据层与导出
+# App 创意工坊：数据层、导出与页面
 
-2026-11-12。**未在真机上验证**，下面的行为依据源码和单元测试，真机要看的步骤在文末。接口以 [Worker v1 合同](../../services/share-worker/docs/workshop-api.md) 为准，Worker 一侧的实现见 [workshop-worker.md](workshop-worker.md)。本文记录 App 侧数据层（`app/lib/workshop/`）、伙伴包的完整性检查与换包门、以及导出和投稿的约定。
+2026-11-12。**未在真机上验证**，下面的行为依据源码和单元测试，真机要看的步骤在文末。接口以 [Worker v1 合同](../../services/share-worker/docs/workshop-api.md) 为准，Worker 一侧的实现见 [workshop-worker.md](workshop-worker.md)。本文记录 App 侧数据层（`app/lib/workshop/`）、伙伴包的完整性检查与换包门、导出和投稿的约定，以及页面（`app/lib/ui/workshop/`）怎么用它们。
 
 ## 目录与缓存
 
@@ -101,6 +101,28 @@ Worker 目标、credential、capabilities 和投稿 owner 响应共用 `workshop
 
 User API Key 的本地格式门与 Worker 一致，为 1–512 个可见 ASCII 字符。本人列表允许 100 条合法多字节记录，所以该接口单独采用 8 MiB 有界响应门（与 Worker 状态对象上限一致）；其他普通 JSON 请求仍限 1 MiB。最大页不是无界读流。
 
+## 页面
+
+页面在 `app/lib/ui/workshop/`，只画 `app/lib/state/workshop_*.dart` 给出的状态，不自己判断能不能装、能不能卸、能不能投。入口有两处：宠物设置页和伙伴小屋菜单各一行「创意工坊」。`workshopAvailableProvider` 为假（构建时没有给 `DSH_WORKSHOP_ORIGIN`）时两行都不出现。
+
+`WorkshopScreen` 是一个列表页，三个页签：
+
+- 发现（`workshop_browse.dart`、`workshop_item_sheet.dart`）：搜索、按种类筛选；先画缓存，再刷新，刷新失败保留旧行并在上方说明。详情弹层里安装，进度按真实字节画，可以取消。要覆盖本机已有资源时先问，回答时交回状态层给的那个请求对象。控制器拒绝受理（已有别的安装在跑）时给一句提示。
+- 已安装（`workshop_installed.dart`、`workshop_installed_sheet.dart`）：列表来自本机记录，目录只往行上加「有更新」「已撤回」之类的状态，不决定某一行在不在。离线、没有配置工坊、作品下架后列表照旧。下拉刷新先读目录，再让本机行取目录带来的变化。卸载的结果从控制器的移除状态读，不看调用的返回值。
+- 我的投稿（`workshop_mine.dart`、`workshop_mine_sheet.dart`）：本人投稿及审核状态，撤回要写原因并二次确认。撤回结果未知时只提供「查询结果」，查到确实没撤回才允许再撤一次。
+
+投稿页（`workshop_publish_page.dart`、`workshop_publish_form.dart`）是一个随状态换步骤的表单页，顺序为：工坊暂不收稿 → 登录论坛 → 凭据说明 → 有没有没交完的投稿 → 选来源 → 填资料 → 查看打好的包并勾选权利声明 → 发送 → 结果。没交完的投稿总是先于新投稿显示；结果未知时只能就同一个请求再问一次，页面上没有办法另发一份顶替它。只有一种情况可以放下没交完的投稿回到表单：状态层确认创建请求从未发出（`canDiscardUnsentSubmission`）。这时页面提供「回去修改」，只清本机记录，不向工坊发任何请求；之前可能发出过、或是重启后恢复出来的投稿没有这个选项。
+
+举报（`workshop_report_sheet.dart`）从详情弹层进入。举报没有幂等合同，结果未知时页面如实说明，不替用户重发。
+
+凭据说明只有一个组件（`workshop_disclosure.dart`）：投稿页把它作为一步显示，我的投稿和举报把同一个视图作为弹层升起。屏幕上的两个地址取自状态层给出的 offer，点「同意并继续」时交回的是同一个对象，所以同意不会落到用户没看到的地址上。同意已生效但没能写进本机时，页面说明下次可能再问。
+
+文案集中在 `workshop_text.dart`、`workshop_mine_text.dart`、`workshop_publish_text.dart`：状态层只给稳定错误码，页面上的每句话都从这里取；不认识的码显示通用的一句，不按码名猜。组件测试检查屏幕上没有 `workshop_` 开头的码和异常原文。
+
+伙伴小屋开着时在工坊里安装或卸载伙伴，换包门会让小屋的舞台先停止读取。从工坊返回时小屋重新检查素材包：有包就为包里现在的角色重建舞台，没有就回到导入页，不停在失败页上。
+
+目录条目目前没有预览图，列表和详情用标题首字加底色的方块代替。
+
 ## 测试覆盖
 
 - `app/test/workshop/`：`workshop_models_test.dart`（模型与版本比较）、`workshop_client_test.dart`（目录缓存与离线重启、撤回与 `blockedVersions`、重定向不带 Key、凭据与投稿 API、分页与响应上限）、`workshop_http_test.dart`（超时后晚到的请求、请求头失败时关闭请求）、`workshop_repository_test.dart`（续传 / 校验 / 取消、低空间、下载中撤回、离线浏览与拒绝离线安装、已装撤回状态、卸载、ENOSPC 映射、伙伴导出的 PNG 门）、`workshop_export_test.dart`（导出目标队列、提交处再次检查目标、悬空链接）。
@@ -108,16 +130,17 @@ User API Key 的本地格式门与 Worker 一致，为 1–512 个可见 ASCII �
 - `app/test/pets/pet_workshop_export_test.dart`：宠物导出。
 - `app/test/companion/companion_workshop_test.dart`：伙伴的完整性门、解压写入失败时的存储错误映射（部分写入、errno 28 / 5、主错误加 close 失败、仅 close 失败、归档错误，并核对旧包与收据逐字节不变、staging 清理）、导出往返与隐私哨兵、换包门（停止读取者、中断恢复、同 root 共享队列与 revision）。这几项使用实际 `ArchiveFile`、真实临时 ZIP / 文件及 `FileHandle` 委托；注入失败不是实盘耗尽测量。
 - `app/test/workshop/workshop_export_contract_test.dart`：显式设置 `DSH_WORKSHOP_CONTRACT_OUT` 到空目录时，保存真实 App 导出的 pet、companion、pet-unicode、companion-unicode 四份 ZIP 和 metadata，供同一协议版本的 Worker 校验；未设置时仍做 App 往返测试，不留下文件。Unicode 用例保留引用路径及原始资源字节。合成 MOC 仅用于格式合同，不能运行 Core。跨运行时往返需要「同一份 App 导出字节被 Worker 接受」的记录才算证据，Node 自行生成的 ZIP 不算。
+- `app/test/ui/workshop/`：`workshop_browse_test.dart`（目录各状态、刷新失败保留旧行、安装与覆盖确认）、`workshop_installed_test.dart`（各行状态、更新、卸载及其结果）、`workshop_mine_test.dart`（登录与同意两道门、列表、撤回及结果未知）、`workshop_report_test.dart`（举报表单与结果未知）、`workshop_publish_test.dart`（投稿页每一步、未完成投稿、结果未知、360dp 宽 1.3 倍字号不溢出）。控制器用状态层自己的替身，不开网络、不写文件。
+- `app/test/companion/companion_room_guard_test.dart`：从工坊返回、素材包已换时小屋重建舞台。
 
 ## 真机上要看的
 
 低空间、断网 / 杀进程后的续传、换包时悬浮窗的销毁重建、已有 runtime 缺失 / 损坏、厂商 WebView / GPU，以及导出后的分享流程。
 
+页面这一层没有在真机上跑过：工坊未部署，App 也没有连过真实的工坊和论坛。上线前要在真机上走一遍浏览、安装、卸载、投稿、撤回和举报，并看小屋开着时安装伙伴后的换人。
+
 ## 还没有做的
 
-- 工坊的浏览、投稿、审核入口页面。
-- 稳定错误码的中英文文案。
-- 覆盖具体资源的确认。
-- 官方论坛账号读取与首次凭据转交的说明。
-- 保存非秘密的 `requestId` / 投稿 ID。
-- 安装 / 卸载后的宠物状态刷新与伙伴舞台重载。
+- 公开预览图：目录条目没有图片字段，页面先用字块代替。
+- 投稿来源列表里的宠物用字块，没有画它自己的图。
+- 页面没有 goldens。

@@ -111,7 +111,9 @@ class WorkshopInstalledController extends Notifier<WorkshopInstalledListState> {
       if (!_current(generation)) return;
       if (previous?.origin != next.origin || !identical(previous?.snapshot, next.snapshot)) {
         final catalogRead = ++_catalogRead;
-        if (previous?.origin != next.origin || next.snapshot == null) {
+        // A deferred catalog must not leave an old projection marked known
+        // if the independent local read fails. Keep the local rows instead.
+        if (_readingLocal || previous?.origin != next.origin || next.snapshot == null) {
           state = state.copyWith(rows: [for (final row in state.rows) WorkshopInstalledRow(local: row.local)],
             catalogStale: null, catalogError: next.refreshError);
         }
@@ -191,7 +193,7 @@ class WorkshopInstalledController extends Notifier<WorkshopInstalledListState> {
       state = state.copyWith(rows: [for (final item in projected)
         WorkshopInstalledRow(local: item.installed,
           remote: item.installed is WorkshopInstalled ? item : null)],
-        loading: false, refreshing: false, catalogError: catalog.refreshError, catalogStale: snapshot.stale);
+        loading: false, refreshing: false, catalogError: currentCatalog.refreshError, catalogStale: snapshot.stale);
     } on Object catch (error) {
       if (current()) {
         state = state.copyWith(catalogError: workshopLocalError(error).code, refreshing: false);

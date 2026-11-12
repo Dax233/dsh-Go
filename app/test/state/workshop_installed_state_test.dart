@@ -209,4 +209,179 @@ void main() {
       expect(container.read(workshopInstalledProvider).loadError, isNull);
     } finally { container.dispose(); }
   });
+
+  for (final localFails in [false, true]) {
+    test('catalog change during a local read: ${localFails ? 'failure drops the old projection' : 'success uses the latest snapshot'}', () async {
+      final entry = stateInstalled();
+      final packages = StatePackages()..rows = [entry];
+      final client = StateClient();
+      final container = stateContainer(packages: packages,
+        sources: [StateSource(client, StateRepository(client, packages))]);
+      final controller = container.read(workshopInstalledProvider.notifier);
+      final catalog = container.read(workshopCatalogProvider.notifier);
+      final local = Completer<List<WorkshopLocalEntry>>(), entered = Completer<void>();
+      final settled = <Future<void>>[];
+      try {
+        await controller.ready;
+        await catalog.ready;
+        await controller.refresh();
+        expect(container.read(workshopInstalledProvider).rows.single.installedWithdrawn, isFalse);
+        var held = false;
+        packages.list = () {
+          if (!held) {
+            held = true;
+            entered.complete();
+            return local.future;
+          }
+          return Future.value(List<WorkshopLocalEntry>.of(packages.rows));
+        };
+        final pending = controller.refresh();
+        settled.add(stateSettled(pending));
+        await stateSignal(entered, pending);
+        client.network = stateSnapshot(entries: [stateEntry(blocked: ['1.0.0'])]);
+        final updated = catalog.refresh();
+        settled.add(stateSettled(updated));
+        await updated;
+        expect(container.read(workshopInstalledProvider).rows.single.local, same(entry));
+        if (localFails) {
+          local.completeError(const WorkshopException('workshop_storage'));
+        } else {
+          local.complete([entry]);
+        }
+        await pending;
+        final state = container.read(workshopInstalledProvider), row = state.rows.single;
+        expect(state.refreshing, isFalse);
+        expect(row.local, same(entry));
+        expect(row.canUninstall, isTrue);
+        if (localFails) {
+          expect(state.loadError, 'workshop_storage');
+          expect(row.remoteKnown, isFalse);
+          expect(row.installedWithdrawn, isNull);
+          expect(row.publicEntry, isNull);
+          expect(state.catalogStale, isNull);
+          packages.list = null;
+          await controller.refresh();
+          expect(container.read(workshopInstalledProvider).loadError, isNull);
+          expect(container.read(workshopInstalledProvider).rows.single.installedWithdrawn, isTrue);
+        } else {
+          expect(state.loadError, isNull);
+          expect(row.remoteKnown, isTrue);
+          expect(row.installedWithdrawn, isTrue);
+        }
+      } finally {
+        if (!local.isCompleted) local.complete([entry]);
+        await Future.wait(settled);
+        await stateSettled(controller.refresh());
+        container.dispose();
+      }
+    });
+  }
+
+  for (final projectionFails in [false, true]) {
+    test('directory failure during enrichment: ${projectionFails ? 'projection failure stays distinct' : 'latest network error survives'}', () async {
+      final entry = stateInstalled();
+      final packages = StatePackages()..rows = [entry];
+      final client = StateClient();
+      final container = stateContainer(packages: packages,
+        sources: [StateSource(client, StateRepository(client, packages))]);
+      final controller = container.read(workshopInstalledProvider.notifier);
+      final catalog = container.read(workshopCatalogProvider.notifier);
+      final projected = Completer<List<WorkshopLocalEntry>>(), entered = Completer<void>();
+      final settled = <Future<void>>[];
+      try {
+        await controller.ready;
+        await catalog.ready;
+        await controller.refresh();
+        var reads = 0;
+        packages.list = () {
+          // The first read belongs to _readLocal; the second is the real
+          // repository.installedStates projection, held independently of HTTP.
+          if (++reads == 2) {
+            entered.complete();
+            return projected.future;
+          }
+          return Future.value(List<WorkshopLocalEntry>.of(packages.rows));
+        };
+        final pending = controller.refresh();
+        settled.add(stateSettled(pending));
+        await stateSignal(entered, pending);
+        final snapshot = container.read(workshopCatalogProvider).snapshot;
+        client.readNetwork = (_) async => throw const WorkshopException('workshop_network');
+        final failed = catalog.refresh();
+        settled.add(stateSettled(failed));
+        await failed;
+        expect(container.read(workshopCatalogProvider).snapshot, same(snapshot));
+        expect(container.read(workshopInstalledProvider).catalogError, 'workshop_network');
+        if (projectionFails) {
+          projected.completeError(const WorkshopException('workshop_storage'));
+        } else {
+          projected.complete([entry]);
+        }
+        await pending;
+        final state = container.read(workshopInstalledProvider);
+        expect(state.loadError, isNull);
+        expect(state.refreshing, isFalse);
+        expect(state.rows.single.local, same(entry));
+        expect(state.rows.single.remoteKnown, !projectionFails);
+        expect(state.catalogError, projectionFails ? 'workshop_storage' : 'workshop_network');
+      } finally {
+        if (!projected.isCompleted) projected.complete([entry]);
+        await Future.wait(settled);
+        await stateSettled(controller.refresh());
+        container.dispose();
+      }
+    });
+  }
+
+  test('enrichment does not restore an error cleared by a still-pending catalog refresh', () async {
+    final entry = stateInstalled();
+    final packages = StatePackages()..rows = [entry];
+    final client = StateClient()..network = stateSnapshot(stale: true,
+      refreshError: const WorkshopException('workshop_timeout'));
+    final container = stateContainer(packages: packages,
+      sources: [StateSource(client, StateRepository(client, packages))]);
+    final controller = container.read(workshopInstalledProvider.notifier);
+    final catalog = container.read(workshopCatalogProvider.notifier);
+    final projected = Completer<List<WorkshopLocalEntry>>(), entered = Completer<void>();
+    final network = Completer<WorkshopCatalogSnapshot>(), networkEntered = Completer<void>();
+    final settled = <Future<void>>[];
+    try {
+      await controller.ready;
+      await catalog.ready;
+      await controller.refresh();
+      expect(container.read(workshopInstalledProvider).catalogError, 'workshop_timeout');
+      var reads = 0;
+      packages.list = () {
+        if (++reads == 2) {
+          entered.complete();
+          return projected.future;
+        }
+        return Future.value(List<WorkshopLocalEntry>.of(packages.rows));
+      };
+      final pending = controller.refresh();
+      settled.add(stateSettled(pending));
+      await stateSignal(entered, pending);
+      client.readNetwork = (_) {
+        networkEntered.complete();
+        return network.future;
+      };
+      final refreshing = catalog.refresh();
+      settled.add(stateSettled(refreshing));
+      await stateSignal(networkEntered, refreshing);
+      projected.complete([entry]);
+      await pending;
+      expect(container.read(workshopCatalogProvider).refreshing, isTrue);
+      expect(container.read(workshopInstalledProvider).rows.single.remoteKnown, isTrue);
+      expect(container.read(workshopInstalledProvider).catalogError, isNull);
+      network.completeError(const WorkshopException('workshop_network'));
+      await refreshing;
+      expect(container.read(workshopInstalledProvider).catalogError, 'workshop_network');
+    } finally {
+      if (!projected.isCompleted) projected.complete([entry]);
+      if (!network.isCompleted) network.complete(stateSnapshot());
+      await Future.wait(settled);
+      await stateSettled(controller.refresh());
+      container.dispose();
+    }
+  });
 }

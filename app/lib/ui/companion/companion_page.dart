@@ -56,6 +56,7 @@ import '../settings/settings_widgets.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/surfaces.dart';
+import '../workshop/workshop_screen.dart';
 import 'companion_ask.dart';
 import 'companion_chrome.dart';
 import 'companion_log.dart';
@@ -2406,6 +2407,25 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     });
   }
 
+  /// Back from the workshop. A companion installed or uninstalled there
+  /// changed the pack under her and the stage left: show whoever is in the
+  /// pack now, or the setup screen when nobody is.
+  Future<void> _afterWorkshop() async {
+    if (!mounted || _phase != _Phase.failed || _failure != companionStagePackChanged) return;
+    final here = await _store?.installed() ?? false;
+    if (!mounted || _phase != _Phase.failed || _failure != companionStagePackChanged) return;
+    if (here) {
+      await _retryStage();
+      return;
+    }
+    setState(() {
+      _phase = _Phase.setup;
+      _failure = null;
+      _stageReady = false;
+    });
+    _syncSignals();
+  }
+
   /// Why she couldn't load, in words: a model too new for the runtime says so.
   String _loadFailureText(L10n l10n) {
     final why = _failure ?? '';
@@ -2829,6 +2849,22 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                         onTap: () {
                           Navigator.of(sheet).pop();
                           unawaited(_restart());
+                        },
+                      ),
+                    // 创意工坊: companions other people made. Only where this build has one to open.
+                    if (ref.read(workshopAvailableProvider))
+                      SettingsTile(
+                        icon: AppIcons.workshop,
+                        tinted: false,
+                        title: l10n.workshopTitle,
+                        subtitle: l10n.workshopEntrySubtitle,
+                        onTap: () {
+                          Navigator.of(sheet).pop();
+                          unawaited(
+                            Navigator.of(context)
+                                .push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen()))
+                                .then((_) => _afterWorkshop()),
+                          );
                         },
                       ),
                     SettingsTile(

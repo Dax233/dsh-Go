@@ -10,12 +10,16 @@ const workshopLicenses = {
 
 /// Stable codes only: never put a key, server body or local path in an error.
 class WorkshopException implements Exception {
-  const WorkshopException(this.code, {this.status, this.retryAfter, this.resultUnknown = false});
+  const WorkshopException(this.code, {this.status, this.retryAfter, this.resultUnknown = false,
+    this.mutationNotSent = false});
   final String code;
   final int? status;
   final Duration? retryAfter;
   /// A write may have reached the server. Reconcile before claiming failure.
   final bool resultUnknown;
+  /// Preflight proved this mutation call did not reach the HTTP transport.
+  /// Earlier attempts with the same requestId may still have reached the server.
+  final bool mutationNotSent;
   @override
   String toString() => 'WorkshopException($code)';
 }

@@ -21,7 +21,7 @@ class WorkshopPublishState {
   WorkshopPublishState({required this.session, this.source, WorkshopPublicationInput? input,
     this.phase = WorkshopPublishPhase.idle, this.busy = false,
     this.waitingForPreviousOperation = false, this.pendingChecked = false,
-    this.hasPending = false, this.preparedMetadata, List<String> files = const [],
+    this.hasPending = false, this.pendingKnownUnsent = false, this.preparedMetadata, List<String> files = const [],
     Map<String, String> fieldErrors = const {}, this.sent = 0, this.total = 0,
     this.result, this.error, this.preferenceError, this.cleanupError})
     : input = input ?? WorkshopPublicationInput(), files = List.unmodifiable(files),
@@ -31,7 +31,7 @@ class WorkshopPublishState {
   final WorkshopPublishSource? source;
   final WorkshopPublicationInput input;
   final WorkshopPublishPhase phase;
-  final bool busy, waitingForPreviousOperation, pendingChecked, hasPending;
+  final bool busy, waitingForPreviousOperation, pendingChecked, hasPending, pendingKnownUnsent;
   final WorkshopMetadata? preparedMetadata;
   final List<String> files;
   final Map<String, String> fieldErrors;
@@ -40,12 +40,13 @@ class WorkshopPublishState {
   final WorkshopException? error, preferenceError, cleanupError;
   bool get working => busy || waitingForPreviousOperation;
   bool get canEditMetadata => pendingChecked && !working && !hasPending;
+  bool get canDiscardUnsentSubmission => !working && hasPending && pendingKnownUnsent;
   bool get canStartNewSubmission => !working && !hasPending &&
       (result?.status == WorkshopSubmissionStatus.rejected || result?.status == WorkshopSubmissionStatus.withdrawn);
 
   WorkshopPublishState copyWith({WorkshopPublishSource? source, bool clearSource = false,
     WorkshopPublicationInput? input, WorkshopPublishPhase? phase, bool? busy,
-    bool? waitingForPreviousOperation, bool? pendingChecked, bool? hasPending,
+    bool? waitingForPreviousOperation, bool? pendingChecked, bool? hasPending, bool? pendingKnownUnsent,
     WorkshopMetadata? preparedMetadata, bool clearPrepared = false,
     List<String>? files, Map<String, String>? fieldErrors, int? sent, int? total,
     WorkshopSubmission? result, bool clearResult = false, WorkshopException? error,
@@ -55,6 +56,7 @@ class WorkshopPublishState {
       input: input ?? this.input, phase: phase ?? this.phase, busy: busy ?? this.busy,
       waitingForPreviousOperation: waitingForPreviousOperation ?? this.waitingForPreviousOperation,
       pendingChecked: pendingChecked ?? this.pendingChecked, hasPending: hasPending ?? this.hasPending,
+      pendingKnownUnsent: pendingKnownUnsent ?? this.pendingKnownUnsent,
       preparedMetadata: clearPrepared ? null : preparedMetadata ?? this.preparedMetadata,
       files: clearPrepared ? const [] : files ?? this.files, fieldErrors: fieldErrors ?? this.fieldErrors,
       sent: sent ?? this.sent, total: total ?? this.total,
@@ -90,11 +92,15 @@ class _DraftLease {
 }
 
 class _PublishIntent {
-  _PublishIntent({required this.scope, required this.pending, required this.lease, this.saved = false});
+  _PublishIntent({required this.scope, required this.pending, required this.lease, this.saved = false,
+    this.mayHaveDispatched = false});
   final String scope;
   final WorkshopPendingSubmission pending;
   final _DraftLease lease;
   bool saved, cleared = false;
+  // A preflight rejection proves only the current create was not sent. Once
+  // any earlier attempt may have been sent, later preflights cannot erase it.
+  bool mayHaveDispatched;
   String? submissionId;
   WorkshopSubmission? result;
 }
@@ -256,9 +262,10 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
           return;
         }
         context.prepared = lease;
-        context.intent = _PublishIntent(scope: context.scope!, pending: pending, lease: lease, saved: true);
+        context.intent = _PublishIntent(scope: context.scope!, pending: pending, lease: lease,
+          saved: true, mayHaveDispatched: true);
         state = state.copyWith(input: WorkshopPublicationInput.fromMetadata(pending.metadata),
-          preparedMetadata: pending.metadata, files: pending.files, hasPending: true,
+          preparedMetadata: pending.metadata, files: pending.files, hasPending: true, pendingKnownUnsent: false,
           phase: WorkshopPublishPhase.ready, fieldErrors: const {});
       } else {
         state = state.copyWith(phase: WorkshopPublishPhase.idle);
@@ -405,7 +412,7 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
     intent.cleared = true;
     intent.lease.draft.retained = false;
     _retire(context, intent.lease);
-    if (_current(context)) state = state.copyWith(hasPending: false, clearPreferenceError: true);
+    if (_current(context)) state = state.copyWith(hasPending: false, pendingKnownUnsent: false, clearPreferenceError: true);
   }
 
   /// Every retry uses the same persisted metadata/request id. In particular,
@@ -461,7 +468,7 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
         // A platform setter can report failure after a write reached disk.
         // Retention is deliberately conservative before the first attempt.
         lease.draft.retained = true;
-        state = state.copyWith(hasPending: true);
+        state = state.copyWith(hasPending: true, pendingKnownUnsent: !intent.mayHaveDispatched);
         try {
           await preferences.savePendingSubmission(intent.scope, intent.pending);
           intent.saved = true;
@@ -475,8 +482,19 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
       }
       _requireCurrent(context);
       state = state.copyWith(clearPreferenceError: true);
-      var result = await authorization.client.createSubmission(intent.pending.metadata,
-        requestId: intent.pending.requestId, rightsConfirmed: true, credential: authorization.credential);
+      final previouslyDispatched = intent.mayHaveDispatched;
+      intent.mayHaveDispatched = true;
+      state = state.copyWith(pendingKnownUnsent: false);
+      late WorkshopSubmission result;
+      try {
+        result = await authorization.client.createSubmission(intent.pending.metadata,
+          requestId: intent.pending.requestId, rightsConfirmed: true, credential: authorization.credential);
+      } on Object catch (error) {
+        if (!previouslyDispatched && error is WorkshopException && error.mutationNotSent) {
+          intent.mayHaveDispatched = false;
+        }
+        rethrow;
+      }
       _checkSubmission(result, intent, authorization);
       _requireCurrent(context);
       if (result.status == WorkshopSubmissionStatus.draft) {
@@ -503,6 +521,7 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
       if (_current(context)) {
         final mapped = workshopLocalError(error);
         state = state.copyWith(error: mapped,
+          pendingKnownUnsent: context.intent != null && !context.intent!.mayHaveDispatched,
           preferenceError: mapped.code == 'workshop_preferences' ? mapped : null,
           phase: WorkshopPublishPhase.failed);
       }
@@ -513,6 +532,46 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
   }
 
   Future<void> retrySubmission() => submit();
+
+  /// Leaves only a locally saved intent whose entire observed history is
+  /// known not to have dispatched create. A restored journal has no such
+  /// proof. The request-id binding is kept, so identical metadata reuses it.
+  /// No authorization refresh, create, upload, or server deletion is sent.
+  Future<void> discardUnsentSubmission() async {
+    final current = state;
+    final context = _context!;
+    if (!current.canDiscardUnsentSubmission) return;
+    final intent = context.intent!;
+    final token = _begin(context, WorkshopPublishPhase.checking);
+    if (token == null) return;
+    final lease = intent.lease;
+    lease.borrowers++;
+    try {
+      final preferences = ref.read(workshopPreferencesProvider);
+      await preferences.clearPendingSubmission(intent.scope, intent.pending.requestId);
+      intent.cleared = true;
+      lease.draft.retained = false;
+      context.intent = null;
+      context.prepared = null;
+      _retire(context, lease);
+      if (_current(context)) {
+        state = state.copyWith(input: current.input.copyWith(rightsConfirmed: false),
+          hasPending: false, pendingKnownUnsent: false, clearPrepared: true, clearResult: true,
+          sent: 0, total: 0, fieldErrors: const {}, phase: WorkshopPublishPhase.idle,
+          clearError: true, clearPreferenceError: true);
+      }
+    } on Object catch (error) {
+      if (_current(context)) {
+        final mapped = workshopLocalError(error);
+        state = state.copyWith(error: mapped,
+          preferenceError: mapped.code == 'workshop_preferences' ? mapped : null,
+          phase: WorkshopPublishPhase.failed);
+      }
+    } finally {
+      lease.borrowers--;
+      try { await _clean(context, lease); } finally { _end(token); }
+    }
+  }
 
   /// A new id for identical metadata is an explicit action, available only
   /// after a known rejected/withdrawn result and successful journal removal.
