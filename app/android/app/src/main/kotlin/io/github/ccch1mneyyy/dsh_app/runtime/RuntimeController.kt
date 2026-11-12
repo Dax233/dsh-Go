@@ -589,7 +589,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         val gen = runGen
         val servers = GuestSetup.pickDns(properties.dnsServers)
         worker.execute {
-            if ((phase == Phase.RUNNING || phase == Phase.STARTING) && installer.isCurrent()) {
+            if (phase == Phase.RUNNING || phase == Phase.STARTING) {
                 // Check ownership where this queued write executes, not only in the callback.
                 // If a stop/start follows this check, its startup DNS write is later on this worker.
                 if (gen != runGen || stopGen >= gen || !networkAccess.isCurrent(watch)) return@execute
