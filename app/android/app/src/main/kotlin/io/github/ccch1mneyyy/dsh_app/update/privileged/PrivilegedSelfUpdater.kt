@@ -87,8 +87,11 @@ class PrivilegedSelfUpdater(context: Context) {
                 if (!preferences.edit().clear().putString("state", "pending").putString("backend", prepared.backend)
                         .putString("requestId", requestId).putLong("versionCode", prepared.versionCode)
                         .putLong("size", prepared.snapshot.size).putString("sha256", prepared.sha256)
-                        .putStringSet("signers", prepared.identity.signers).commit())
+                        .putStringSet("signers", prepared.identity.signers).commit()) {
+                    // commit already changed memory; this attempt never reached the transport.
+                    preferences.edit().clear().apply()
                     throw SelfUpdateException("persistenceFailed")
+                }
                 persisted = true
                 installing = true
             }
