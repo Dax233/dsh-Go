@@ -8731,6 +8731,69 @@ class L10nZh extends L10n {
   String get hubQuickPanelItemsNone => '没有选择，左滑不会打开';
 
   @override
+  String get instaboxSectionTitle => 'InstaBox 主机';
+
+  @override
+  String get instaboxStateLabel => '机器状态';
+
+  @override
+  String get instaboxStateRunning => '运行中';
+
+  @override
+  String get instaboxStatePaused => '已暂停';
+
+  @override
+  String get instaboxStateUnknown => '未知';
+
+  @override
+  String get instaboxRunLimitLabel => '本轮运行上限';
+
+  @override
+  String get instaboxRunElapsedLabel => '本轮已用';
+
+  @override
+  String get instaboxRemainingLabel => '剩余时间';
+
+  @override
+  String instaboxMinutesValue(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String get instaboxKeepaliveLabel => '活动保活';
+
+  @override
+  String instaboxKeepaliveValue(int leases, int work) {
+    return '续约 $leases 次 · 工作 $work 次';
+  }
+
+  @override
+  String get instaboxRefreshAction => '刷新';
+
+  @override
+  String get instaboxResetAction => '重置本轮计时';
+
+  @override
+  String get instaboxResetTitle => '重置本轮运行？';
+
+  @override
+  String get instaboxResetBody => '会先暂停再继续这台机器：SSH 断开几秒后自动重连，进程与数据保留，并开始新的一轮计时。这样不会触发运行上限后的冷却。';
+
+  @override
+  String get instaboxResetDone => '已开始新一轮';
+
+  @override
+  String instaboxResetFailed(String code) {
+    return '重置失败：$code';
+  }
+
+  @override
+  String get instaboxUnread => '尚未读取';
+
+  @override
+  String get instaboxNearLimit => '接近运行上限，建议现在重置';
+
+  @override
   String get launchScreenTitle => '启动画面';
 
   @override

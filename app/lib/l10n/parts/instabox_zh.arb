@@ -1,0 +1,46 @@
+{
+  "@@locale": "zh",
+  "instaboxSectionTitle": "InstaBox 主机",
+  "instaboxStateLabel": "机器状态",
+  "instaboxStateRunning": "运行中",
+  "instaboxStatePaused": "已暂停",
+  "instaboxStateUnknown": "未知",
+  "instaboxRunLimitLabel": "本轮运行上限",
+  "instaboxRunElapsedLabel": "本轮已用",
+  "instaboxRemainingLabel": "剩余时间",
+  "instaboxMinutesValue": "{minutes} 分钟",
+  "@instaboxMinutesValue": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "instaboxKeepaliveLabel": "活动保活",
+  "instaboxKeepaliveValue": "续约 {leases} 次 · 工作 {work} 次",
+  "@instaboxKeepaliveValue": {
+    "placeholders": {
+      "leases": {
+        "type": "int"
+      },
+      "work": {
+        "type": "int"
+      }
+    }
+  },
+  "instaboxRefreshAction": "刷新",
+  "instaboxResetAction": "重置本轮计时",
+  "instaboxResetTitle": "重置本轮运行？",
+  "instaboxResetBody": "会先暂停再继续这台机器：SSH 断开几秒后自动重连，进程与数据保留，并开始新的一轮计时。这样不会触发运行上限后的冷却。",
+  "instaboxResetDone": "已开始新一轮",
+  "instaboxResetFailed": "重置失败：{code}",
+  "@instaboxResetFailed": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "instaboxUnread": "尚未读取",
+  "instaboxNearLimit": "接近运行上限，建议现在重置"
+}

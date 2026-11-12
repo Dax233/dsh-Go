@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../remote/ssh/instabox_activity.dart';
+import '../../remote/ssh/instabox_wake.dart';
 import '../../remote/link_status.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../common/brief_notice.dart';
 import '../common/app_sheet.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
@@ -62,6 +67,11 @@ class _RemoteNetworkDetailsSheetState extends ConsumerState<RemoteNetworkDetails
     final status = ref.watch(hostLinkStatusProvider(widget.host)).value ?? HostLinkStatus.idle;
     final name = ref.watch(hostNameProvider(widget.host)) ?? l10n.commonRemoteHost;
     final relay = widget.host.kind == HostKind.relay;
+    // Only the InstaBox host in this build has a machine record to show.
+    final sshConfig = widget.host.kind == HostKind.ssh
+        ? ref.watch(hostsProvider).sshById(widget.host.id)
+        : null;
+    final instabox = sshConfig != null && instaboxWakePossibleFor(sshConfig.host);
     final connected = status.isConnected;
     final network = connected && relay ? status.network : null;
     final path = connected && relay ? network?.path ?? status.path : null;
@@ -123,6 +133,7 @@ class _RemoteNetworkDetailsSheetState extends ConsumerState<RemoteNetworkDetails
                   ),
               ],
             ),
+            if (instabox) const _InstaboxSection(),
             if (relay)
               Padding(
                 padding: const EdgeInsets.fromLTRB(kSheetGutter, 8, kSheetGutter, 20),
@@ -186,3 +197,129 @@ String _fallbackLabel(L10n l10n, String code) => switch (code) {
   'pathUnverified' => l10n.remoteNetworkFallbackPathUnverified,
   _ => l10n.remoteNetworkFallbackUnknown,
 };
+
+/// InstaBox keeps the run clock on its side: the limit shown here is this run's,
+/// and pausing then resuming ends the run without owing a cooldown.
+class _InstaboxSection extends ConsumerStatefulWidget {
+  const _InstaboxSection();
+
+  @override
+  ConsumerState<_InstaboxSection> createState() => _InstaboxSectionState();
+}
+
+class _InstaboxSectionState extends ConsumerState<_InstaboxSection> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    try {
+      await InstaboxActivityKeeper.readMachine();
+    } catch (_) {
+      // A machine that cannot be read (offline, no key) simply shows nothing.
+    }
+  }
+
+  Future<void> _reset() async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(l10n.instaboxResetTitle),
+        content: Text(l10n.instaboxResetBody),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+          FilledButton(
+            key: const ValueKey("instabox-reset-confirm"),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(l10n.instaboxResetAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    final code = await InstaboxActivityKeeper.resetRun();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    showBriefNotice(
+      context,
+      code == null ? l10n.instaboxResetDone : l10n.instaboxResetFailed(code),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = DshColors.of(context);
+    final keep = InstaboxActivityLog.snapshot();
+    final leases = (keep["leasesOk"] as int?) ?? 0;
+    final work = (keep["workOk"] as int?) ?? 0;
+    return ValueListenableBuilder<InstaboxMachineSnapshot?>(
+      valueListenable: instaboxMachine,
+      builder: (context, snapshot, _) {
+        final state = switch (snapshot?.state) {
+          "running" => l10n.instaboxStateRunning,
+          "suspended" => l10n.instaboxStatePaused,
+          _ => l10n.instaboxStateUnknown,
+        };
+        String minutes(int? value) =>
+            value == null ? l10n.instaboxUnread : l10n.instaboxMinutesValue(value);
+        final startedAt = snapshot?.runStartedAt;
+        final elapsed = startedAt == null
+            ? null
+            : DateTime.now().toUtc().difference(startedAt).inMinutes;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(kSheetGutter, 12, kSheetGutter, 6),
+              child: Text(l10n.instaboxSectionTitle, style: TextStyle(color: colors.textTertiary)),
+            ),
+            SheetGroup(
+              children: [
+                _NetworkValue(label: l10n.instaboxStateLabel, value: state),
+                _NetworkValue(label: l10n.instaboxRunLimitLabel, value: minutes(snapshot?.maxRunMinutes)),
+                _NetworkValue(label: l10n.instaboxRunElapsedLabel, value: minutes(elapsed)),
+                _NetworkValue(label: l10n.instaboxRemainingLabel, value: minutes(snapshot?.remainingMinutes)),
+                _NetworkValue(
+                  label: l10n.instaboxKeepaliveLabel,
+                  value: l10n.instaboxKeepaliveValue(leases, work),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(kSheetGutter, 8, kSheetGutter, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (snapshot?.nearLimit == true) ...[
+                    Text(l10n.instaboxNearLimit, style: TextStyle(color: colors.textTertiary)),
+                    const SizedBox(height: 8),
+                  ],
+                  FilledButton.icon(
+                    key: const ValueKey("instabox-reset"),
+                    onPressed: _busy ? null : _reset,
+                    icon: _busy
+                        ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(AppIcons.refresh, size: 18),
+                    label: Text(l10n.instaboxResetAction),
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: _busy ? null : () => unawaited(_refresh()),
+                    child: Text(l10n.instaboxRefreshAction),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

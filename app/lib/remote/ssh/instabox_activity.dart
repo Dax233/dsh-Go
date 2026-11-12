@@ -3,6 +3,8 @@ import "dart:convert";
 import "dart:io";
 import "dart:math";
 
+import "package:flutter/foundation.dart";
+
 import "instabox_wake.dart";
 
 /// Fixed-size, content-free record of what the keeper last did. Diagnostics
@@ -109,7 +111,7 @@ class InstaboxActivityKeeper {
         .join();
   }
 
-  String get _base => instaboxWakeApiBase.replaceAll(RegExp(r"/+$"), "");
+  static String get _base => instaboxWakeApiBase.replaceAll(RegExp(r"/+$"), "");
 
   Uri _leaseUri() => Uri.parse(
       "$_base/v1/machines/$instaboxWakeMachineId/activity-leases/$taskId");
@@ -117,7 +119,7 @@ class InstaboxActivityKeeper {
   Uri _execUri() =>
       Uri.parse("$_base/v1/machines/$instaboxWakeMachineId/exec");
 
-  Map<String, String> get _headers => {
+  static Map<String, String> get _headers => {
     "X-API-Key": instaboxWakeApiKey,
     "Accept": "application/json",
     "Content-Type": "application/json",
@@ -186,49 +188,20 @@ class InstaboxActivityKeeper {
   Future<void> _state() async {
     if (_disposed || !instaboxActivityConfigured) return;
     try {
-      final body = await _sendForBody("GET", _machineUri()).timeout(requestTimeout);
-      final map = (jsonDecode(body) as Map<dynamic, dynamic>).cast<String, dynamic>();
-      final runtime = map["runtime"] is Map
-          ? (map["runtime"] as Map).cast<String, dynamic>()
-          : const <String, dynamic>{};
-      final started = DateTime.tryParse("${map["runStartedAt"] ?? ""}");
-      final maxRun = map["maxRunMinutes"];
-      int? remaining;
-      if (started != null && maxRun is int && maxRun > 0) {
-        remaining = maxRun - DateTime.now().toUtc().difference(started).inMinutes;
-        if (remaining < 0) remaining = 0;
-      }
+      final snapshot = await readMachine(timeout: requestTimeout);
+      if (snapshot == null) return;
       InstaboxActivityLog.setMachine({
-        "machineState": map["state"],
-        "ready": runtime["ready"] == true,
-        "maxRunMinutes": ?maxRun,
-        "runStartedAt": ?map["runStartedAt"],
-        "remainingMinutes": ?remaining,
+        "machineState": snapshot.state,
+        "ready": snapshot.ready,
+        "maxRunMinutes": ?snapshot.maxRunMinutes,
+        "runStartedAt": ?snapshot.runStartedAt?.toIso8601String(),
+        "remainingMinutes": ?snapshot.remainingMinutes,
       });
       InstaboxActivityLog.add("state",
           ok: true,
-          detail: "state=${map["state"]}${remaining != null ? " remaining=${remaining}m" : ""}");
+          detail: "state=${snapshot.state}${snapshot.remainingMinutes != null ? " remaining=${snapshot.remainingMinutes}m" : ""}");
     } catch (e) {
       InstaboxActivityLog.add("state", ok: false, detail: e);
-    }
-  }
-
-  Uri _machineUri() =>
-      Uri.parse("$_base/v1/machines/$instaboxWakeMachineId");
-
-  Future<String> _sendForBody(String method, Uri uri) async {
-    final client = HttpClient()..connectionTimeout = requestTimeout;
-    try {
-      final request = await client.openUrl(method, uri);
-      _headers.forEach(request.headers.set);
-      final response = await request.close();
-      final text = await response.transform(utf8.decoder).join();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError("http ${response.statusCode}");
-      }
-      return text;
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -249,4 +222,135 @@ class InstaboxActivityKeeper {
       client.close(force: true);
     }
   }
+
+  static Uri _machineUriOf() =>
+      Uri.parse("$_base/v1/machines/$instaboxWakeMachineId");
+
+  /// Reads the machine record. A read never wakes it, so the UI can poll it
+  /// without paying a start.
+  static Future<InstaboxMachineSnapshot?> readMachine(
+      {Duration timeout = const Duration(seconds: 20)}) async {
+    if (!instaboxActivityConfigured) return null;
+    final text = await _requestText("GET", _machineUriOf(), null, timeout);
+    final map = (jsonDecode(text) as Map<dynamic, dynamic>).cast<String, dynamic>();
+    final runtime = map["runtime"] is Map
+        ? (map["runtime"] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final started = DateTime.tryParse("${map["runStartedAt"] ?? ""}");
+    final maxRun = map["maxRunMinutes"];
+    int? remaining;
+    if (started != null && maxRun is int && maxRun > 0) {
+      remaining = maxRun - DateTime.now().toUtc().difference(started).inMinutes;
+      if (remaining < 0) remaining = 0;
+    }
+    final snapshot = InstaboxMachineSnapshot(
+      state: "${map["state"] ?? "unknown"}",
+      ready: runtime["ready"] == true,
+      at: DateTime.now().toUtc(),
+      maxRunMinutes: maxRun is int ? maxRun : null,
+      runStartedAt: started,
+      remainingMinutes: remaining,
+    );
+    instaboxMachine.value = snapshot;
+    return snapshot;
+  }
+
+  /// Ends this run by pausing and resuming: the pause starts no run, so it
+  /// owes no cooldown, and the next resume begins a fresh run with its own
+  /// limit. Processes are kept across the pause.
+  static Future<String?> resetRun({
+    Duration pauseTimeout = const Duration(seconds: 90),
+    Duration resumeTimeout = const Duration(seconds: 180),
+  }) async {
+    if (!instaboxActivityConfigured) return "notConfigured";
+    try {
+      await _requestText("POST", _machineUriOf().resolve("suspend"), "{}",
+          const Duration(seconds: 30));
+    } catch (e) {
+      InstaboxActivityLog.add("resetPause", ok: false, detail: e);
+      return "pauseFailed";
+    }
+    final paused = await _awaitState("suspended", pauseTimeout);
+    if (!paused) {
+      InstaboxActivityLog.add("resetPause", ok: false, detail: "notSuspended");
+      return "pauseTimeout";
+    }
+    try {
+      await _requestText("POST", _machineUriOf().resolve("resume"), "{}",
+          const Duration(seconds: 30));
+    } catch (e) {
+      InstaboxActivityLog.add("resetResume", ok: false, detail: e);
+      return "resumeFailed";
+    }
+    final running = await _awaitState("running", resumeTimeout);
+    if (!running) {
+      InstaboxActivityLog.add("resetResume", ok: false, detail: "notRunning");
+      return "resumeTimeout";
+    }
+    InstaboxActivityLog.add("reset", ok: true);
+    await readMachine();
+    return null;
+  }
+
+  static Future<bool> _awaitState(String wanted, Duration timeout) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final snapshot = await readMachine().catchError((_) => null);
+      if (snapshot == null) return false;
+      if (snapshot.state == wanted && (wanted != "running" || snapshot.ready)) return true;
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    return false;
+  }
+
+  static Future<String> _requestText(
+      String method, Uri uri, String? body, Duration timeout) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client.openUrl(method, uri).timeout(timeout);
+      _headers.forEach(request.headers.set);
+      if (body != null) {
+        final bytes = utf8.encode(body);
+        request.contentLength = bytes.length;
+        request.add(bytes);
+      }
+      final response = await request.close().timeout(timeout);
+      final text = await response.transform(utf8.decoder).join().timeout(timeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError("http ${response.statusCode}");
+      }
+      return text;
+    } finally {
+      client.close(force: true);
+    }
+  }
 }
+
+/// One read of the machine record, for the UI and the diagnostics bundle.
+class InstaboxMachineSnapshot {
+  const InstaboxMachineSnapshot({
+    required this.state,
+    required this.ready,
+    required this.at,
+    this.maxRunMinutes,
+    this.runStartedAt,
+    this.remainingMinutes,
+  });
+
+  final String state;
+  final bool ready;
+  final DateTime at;
+  final int? maxRunMinutes;
+  final DateTime? runStartedAt;
+  final int? remainingMinutes;
+
+  bool get running => state == "running";
+
+  /// True when the platform could end this run soon enough that a reset is
+  /// worth offering instead of a cooldown after a maximum-runtime pause.
+  bool get nearLimit => running && (remainingMinutes ?? 99) <= 15;
+}
+
+/// Latest machine read; null until the first one completes.
+final ValueNotifier<InstaboxMachineSnapshot?> instaboxMachine =
+    ValueNotifier<InstaboxMachineSnapshot?>(null);

@@ -16100,6 +16100,120 @@ abstract class L10n {
   /// **'没有选择，左滑不会打开'**
   String get hubQuickPanelItemsNone;
 
+  /// No description provided for @instaboxSectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'InstaBox 主机'**
+  String get instaboxSectionTitle;
+
+  /// No description provided for @instaboxStateLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'机器状态'**
+  String get instaboxStateLabel;
+
+  /// No description provided for @instaboxStateRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get instaboxStateRunning;
+
+  /// No description provided for @instaboxStatePaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get instaboxStatePaused;
+
+  /// No description provided for @instaboxStateUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get instaboxStateUnknown;
+
+  /// No description provided for @instaboxRunLimitLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'本轮运行上限'**
+  String get instaboxRunLimitLabel;
+
+  /// No description provided for @instaboxRunElapsedLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'本轮已用'**
+  String get instaboxRunElapsedLabel;
+
+  /// No description provided for @instaboxRemainingLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'剩余时间'**
+  String get instaboxRemainingLabel;
+
+  /// No description provided for @instaboxMinutesValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{minutes} 分钟'**
+  String instaboxMinutesValue(int minutes);
+
+  /// No description provided for @instaboxKeepaliveLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'活动保活'**
+  String get instaboxKeepaliveLabel;
+
+  /// No description provided for @instaboxKeepaliveValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'续约 {leases} 次 · 工作 {work} 次'**
+  String instaboxKeepaliveValue(int leases, int work);
+
+  /// No description provided for @instaboxRefreshAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新'**
+  String get instaboxRefreshAction;
+
+  /// No description provided for @instaboxResetAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置本轮计时'**
+  String get instaboxResetAction;
+
+  /// No description provided for @instaboxResetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置本轮运行？'**
+  String get instaboxResetTitle;
+
+  /// No description provided for @instaboxResetBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'会先暂停再继续这台机器：SSH 断开几秒后自动重连，进程与数据保留，并开始新的一轮计时。这样不会触发运行上限后的冷却。'**
+  String get instaboxResetBody;
+
+  /// No description provided for @instaboxResetDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开始新一轮'**
+  String get instaboxResetDone;
+
+  /// No description provided for @instaboxResetFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置失败：{code}'**
+  String instaboxResetFailed(String code);
+
+  /// No description provided for @instaboxUnread.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未读取'**
+  String get instaboxUnread;
+
+  /// No description provided for @instaboxNearLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'接近运行上限，建议现在重置'**
+  String get instaboxNearLimit;
+
   /// No description provided for @launchScreenTitle.
   ///
   /// In zh, this message translates to:

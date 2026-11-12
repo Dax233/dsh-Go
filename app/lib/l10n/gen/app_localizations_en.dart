@@ -9214,6 +9214,70 @@ class L10nEn extends L10n {
   String get hubQuickPanelItemsNone => 'Nothing chosen: a left swipe won\'t open it';
 
   @override
+  String get instaboxSectionTitle => 'InstaBox machine';
+
+  @override
+  String get instaboxStateLabel => 'Machine state';
+
+  @override
+  String get instaboxStateRunning => 'Running';
+
+  @override
+  String get instaboxStatePaused => 'Paused';
+
+  @override
+  String get instaboxStateUnknown => 'Unknown';
+
+  @override
+  String get instaboxRunLimitLabel => 'Run limit';
+
+  @override
+  String get instaboxRunElapsedLabel => 'Elapsed';
+
+  @override
+  String get instaboxRemainingLabel => 'Time left';
+
+  @override
+  String instaboxMinutesValue(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get instaboxKeepaliveLabel => 'Activity keepalive';
+
+  @override
+  String instaboxKeepaliveValue(int leases, int work) {
+    return '$leases lease renewals · $work work commands';
+  }
+
+  @override
+  String get instaboxRefreshAction => 'Refresh';
+
+  @override
+  String get instaboxResetAction => 'Reset this run';
+
+  @override
+  String get instaboxResetTitle => 'Reset this run?';
+
+  @override
+  String get instaboxResetBody =>
+      'The machine pauses and resumes: SSH drops for a few seconds and reconnects, processes and files are kept, and a fresh run starts. This avoids the cooldown after a maximum-runtime pause.';
+
+  @override
+  String get instaboxResetDone => 'A new run has started';
+
+  @override
+  String instaboxResetFailed(String code) {
+    return 'Reset failed: $code';
+  }
+
+  @override
+  String get instaboxUnread => 'Not read yet';
+
+  @override
+  String get instaboxNearLimit => 'Near the run limit; reset now to avoid the cooldown';
+
+  @override
   String get launchScreenTitle => 'Launch screen';
 
   @override
