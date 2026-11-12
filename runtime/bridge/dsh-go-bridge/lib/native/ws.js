@@ -62,7 +62,12 @@ export class WsConnection extends EventEmitter {
     socket.on("data", (chunk) => this.#onData(chunk));
     socket.on("close", () => { clearTimeout(this.#closeTimer); this.#finish(1006); });
     // An upgraded HTTP socket may remain half-open after peer FIN. Release owners now.
-    socket.on("end", () => { socket.end(); this.#finish(1006); });
+    socket.on("end", () => {
+      socket.end();
+      this.#closeTimer ??= setTimeout(() => this.#socket.destroy(), 1000);
+      this.#closeTimer.unref?.();
+      this.#finish(1006);
+    });
     socket.on("error", () => this.#finish(1006));
     if (head && head.length > 0) queueMicrotask(() => this.#onData(head));
   }

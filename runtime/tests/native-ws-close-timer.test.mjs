@@ -19,7 +19,7 @@ function timers(t) {
   return { active, scheduled: () => scheduled };
 }
 
-for (const initiator of ['server', 'client']) test(`ws ${initiator} close retires the destroy deadline after a real TCP close`, async t => {
+for (const initiator of ['server', 'client', 'tcp-fin']) test(`ws ${initiator} close retires the destroy deadline after a real TCP close`, async t => {
   const tracked = timers(t);
   const server = createServer();
   const sockets = [];
@@ -38,7 +38,8 @@ for (const initiator of ['server', 'client']) test(`ws ${initiator} close retire
   const ws = new WsConnection(socket, Buffer.alloc(0), 4096);
   const closed = once(socket, 'close');
   if (initiator === 'server') ws.close();
-  else client.write(encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
+  else if (initiator === 'client') client.write(encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
+  else client.end();
   await closed;
   assert.equal(ws.closed, true);
   assert.equal(socket.destroyed, true);
@@ -50,7 +51,7 @@ for (const initiator of ['server', 'client']) test(`ws ${initiator} close retire
   assert.equal(tracked.active.size, 0);
 });
 
-for (const initiator of ['server', 'client']) test(`ws ${initiator} logical close retains its deadline until the socket actually closes`, t => {
+for (const initiator of ['server', 'client', 'tcp-fin']) test(`ws ${initiator} logical close retains its deadline until the socket actually closes`, t => {
   const tracked = timers(t);
   const socket = new EventEmitter();
   socket.write = () => {};
@@ -59,10 +60,14 @@ for (const initiator of ['server', 'client']) test(`ws ${initiator} logical clos
   socket.destroy = () => { destroyed++; socket.emit('close'); };
   const ws = new WsConnection(socket, Buffer.alloc(0), 4096);
   if (initiator === 'server') ws.close();
-  else socket.emit('data', encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
+  else if (initiator === 'client') socket.emit('data', encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
+  else socket.emit('end');
   assert.equal(ws.closed, true);
   assert.equal(tracked.active.size, 1);
-  t.mock.timers.tick(999);
+  t.mock.timers.tick(500);
+  if (initiator !== 'tcp-fin') socket.emit('end');
+  assert.equal(tracked.scheduled(), 1, 'a later TCP FIN must not replace the existing deadline');
+  t.mock.timers.tick(499);
   assert.equal(destroyed, 0);
   t.mock.timers.tick(1);
   assert.equal(destroyed, 1);
