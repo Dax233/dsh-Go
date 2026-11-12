@@ -60,13 +60,14 @@ internal object ResourceRecovery {
     fun verify(current: Birth, old: Check, pidAbsent: (Int) -> Boolean,
                displays: () -> List<DisplayFact>, tasksEmpty: (Int) -> Boolean): String {
         if (current.boot != old.birth.boot) return "previousBoot"
-        // Some OEMs deny /proc/self/ns to the privileged service; that must not block recovery of a
-        // record from this same boot forever. The recorded absence facts below stay mandatory, so a
-        // live old process or any surviving display/task still refuses recovery.
-        if (old.birth.nsAvailable) {
-            if (!current.nsAvailable || current.nsIno <= 0 || old.birth.nsIno <= 0 ||
-                current.nsDev != old.birth.nsDev || current.nsIno != old.birth.nsIno) throw Failure("recoveryUnknown")
-        }
+        val sameNamespace = current.nsAvailable && old.birth.nsAvailable
+        val noNamespace = !current.nsAvailable && !old.birth.nsAvailable
+        // ColorOS 16 has no /proc/self/ns/pid even for root. Both sides losing the same
+        // namespace proof is a real platform state; the live PID/display/task checks below
+        // still have to prove the old peer is dead. A one-sided loss stays unknown.
+        if (!sameNamespace && !noNamespace) throw Failure("recoveryUnknown")
+        if (sameNamespace && (current.nsIno <= 0 || old.birth.nsIno <= 0 ||
+            current.nsDev != old.birth.nsDev || current.nsIno != old.birth.nsIno)) throw Failure("recoveryUnknown")
         if (!pidAbsent(old.birth.pid)) throw Failure("recoveryUnknown")
         val id = old.displayId ?: throw Failure("recoveryUnknown")
         if (current.uid != 0 && current.uid != 1000 && current.uid != old.birth.uid) throw Failure("recoveryUnknown")

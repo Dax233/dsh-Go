@@ -47,28 +47,34 @@ class ResourceRecoveryTest {
         assertNull(checkNotNull(ResourceRecovery.check(noId.keys, noId::get)).displayId)
     }
 
-    @Test fun recordWithoutRecordedNamespaceFallsBackToMandatoryPhysicalAbsence() {
+    @Test fun oneSidedNamespaceLossNeverReadsPidDisplayOrTasks() {
         val unavailable = current.copy(nsDev = 0L, nsIno = 0L, nsAvailable = false)
-        val before = old().copy(birth = unavailable.copy(pid = 99))
-        val calls = mutableListOf<String>()
-        val kind = ResourceRecovery.verify(unavailable, before,
-            { calls += "pid:$it"; true },
-            { calls += "displays"; listOf(ResourceRecovery.DisplayFact(0, "main", 1000, false)) },
-            { calls += "tasks:$it"; true })
-        assertEquals("deadPeerEmpty", kind)
-        assertEquals(listOf("pid:99", "displays", "tasks:12"), calls)
+        for ((now, before) in listOf(
+            current to old().copy(birth = unavailable.copy(pid = 99)),
+            unavailable to old(),
+        )) {
+            failure("recoveryUnknown") {
+                ResourceRecovery.verify(now, before, { error("namespace unknown: no PID query") },
+                    { error("no display query") }, { error("no task query") })
+            }
+        }
     }
 
-    @Test fun recordWithNamespaceStillNeedsMatchingNamespaceOnBothSides() {
+    @Test fun bothSidesWithoutNamespaceStillProveDeadPeerEmpty() {
         val unavailable = current.copy(nsDev = 0L, nsIno = 0L, nsAvailable = false)
+        val original = old().copy(birth = unavailable.copy(pid = 99))
+        val order = mutableListOf<String>()
+        assertEquals("deadPeerEmpty", ResourceRecovery.verify(unavailable, original,
+            { order += "pid:$it"; true },
+            { order += "displays"; listOf(ResourceRecovery.DisplayFact(0, "main", 1000, false)) },
+            { order += "tasks:$it"; true }))
+        assertEquals(listOf("pid:99", "displays", "tasks:12"), order)
+        val calls = mutableListOf<Int>()
         failure("recoveryUnknown") {
-            ResourceRecovery.verify(unavailable, old(), { error("strict record: no PID query") },
-                { error("no display query") }, { error("no task query") })
+            ResourceRecovery.verify(unavailable, original, { calls += it; false },
+                { error("live PID: no display") }, { error("live PID: no tasks") })
         }
-        failure("recoveryUnknown") {
-            ResourceRecovery.verify(current.copy(nsIno = 0L), old(), { error("invalid namespace") },
-                { error("no display query") }, { error("no task query") })
-        }
+        assertEquals(listOf(99), calls)
     }
 
     @Test fun recordWithoutNamespaceStillRefusesALiveProcessOrSurvivingDisplay() {
