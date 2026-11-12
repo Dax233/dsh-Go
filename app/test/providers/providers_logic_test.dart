@@ -49,6 +49,36 @@ void main() {
     });
   });
 
+  group('header validation', () {
+    test('accepts HTTP tokens, empty values, tabs and Latin-1 bytes', () {
+      expect(
+        providerHeadersError(const [
+          MapEntry('', ''),
+          MapEntry(' x-opencode-session ', 'session-1'),
+          MapEntry('X-Empty', ''),
+          MapEntry('X-Latin', 'café\tvalue'),
+          MapEntry('Authorization', 'token'),
+          MapEntry('anthropic-version', '2023-06-01'),
+        ]),
+        isNull,
+      );
+    });
+
+    test('rejects invalid, duplicate and engine-owned names', () {
+      for (final name in ['', 'bad name', 'name:', '名字']) {
+        expect(providerHeadersError([MapEntry(name, 'value')]), isNotNull, reason: name);
+      }
+      expect(providerHeadersError(const [MapEntry('X-Team', 'one'), MapEntry('x-team', 'two')]), '请求头名称重复（不区分大小写）');
+      expect(providerHeadersError(const [MapEntry('UsEr-AgEnT', 'override')]), 'User-Agent 由引擎设置，请移除此请求头');
+    });
+
+    test('rejects values that the Fetch client cannot send', () {
+      for (final value in ['line\nbreak', 'line\rbreak', 'nul\x00', 'control\x01', 'delete\x7f', '汉']) {
+        expect(providerHeadersError([MapEntry('X-Test', value)]), isNotNull);
+      }
+    });
+  });
+
   group('validation', () {
     test('Base URL: trimmed, no trailing slash; Anthropic drops a trailing /v1', () {
       expect(
@@ -423,9 +453,18 @@ void main() {
       );
       final result = await container
           .read(providerActionsProvider)
-          .discover(api: ProviderApi.openaiCompletions, baseUrl: 'https://gw.example.com', apiKey: 'sk');
+          .discover(
+            api: ProviderApi.openaiCompletions,
+            baseUrl: 'https://gw.example.com',
+            apiKey: 'sk',
+            headers: const {'x-opencode-session': 'session-1'},
+          );
       expect(result.baseUrl, 'https://gw.example.com/v1');
       expect(result.models, hasLength(3));
+      expect(backend.calls.where((c) => c.$1 == 'discover').map((c) => c.$2['headers']), [
+        {'x-opencode-session': 'session-1'},
+        {'x-opencode-session': 'session-1'},
+      ]);
       expect(backend.calls.where((c) => c.$1 == 'discover').map((c) => c.$2['baseURL']), [
         'https://gw.example.com',
         'https://gw.example.com/v1',

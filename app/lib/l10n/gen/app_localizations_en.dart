@@ -6869,6 +6869,39 @@ class L10nEn extends L10n {
   String get engineProviderConnection => 'Connection';
 
   @override
+  String get engineProviderHeaders => 'Request headers (optional)';
+
+  @override
+  String get engineProviderHeadersWarning =>
+      'Headers are stored as plain text and are not redacted from logs. Use API Key or a credential reference for sensitive credentials.';
+
+  @override
+  String get engineProviderHeaderName => 'Name';
+
+  @override
+  String get engineProviderHeaderValue => 'Value';
+
+  @override
+  String get engineProviderHeaderAdd => 'Add header';
+
+  @override
+  String get engineProviderHeaderInvalidName =>
+      'Use letters, digits or HTTP token symbols in header names; no spaces or colons';
+
+  @override
+  String get engineProviderHeaderReserved => 'User-Agent is set by the engine; remove this header';
+
+  @override
+  String get engineProviderHeaderLocked => 'Managed by the engine; the existing setting is preserved';
+
+  @override
+  String get engineProviderHeaderDuplicate => 'Header names must be unique (case-insensitive)';
+
+  @override
+  String get engineProviderHeaderInvalidValue =>
+      'Use single-line Latin-1 values without control characters (tabs are allowed)';
+
+  @override
   String get engineProviderDefaultUrl => 'Default URL';
 
   @override

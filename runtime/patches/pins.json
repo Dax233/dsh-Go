@@ -108,6 +108,46 @@
         }
       }
     },
+    "provider-discovery-headers.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js": {
+          "after": "5545b645c42e7b7387f7153552317cc94e323133d9857e17edf4fba3efa3a411",
+          "before": "7e2fb3438bddc44c65a5448842b23397ce8a31b0591490386072a19d6b8ddf6c"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "f9027ee1b6d27fc029616278442c791785a5ad025c7142181591705b4f552c4d",
+          "before": "0a99a2fc903a4285044b09114b3bd20ee1e612f39aa381e4a71b10d48ee9e9f7"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "e498311537374b963f955f57c9628961d55fdb518e9de77e86cc56f33f3562b3",
+          "before": "57b013af341a490b68573f934173c6ce2b1a2d3e1207b79fae5089b941846ba3"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/typert.host.js": {
+          "after": "911c981a5985c8116b0ef4c756b8456eeec957b314089c976d2ca1b6defc63a4",
+          "before": "f7ad1bf944fb7083c84a0626cf8e77d0ef037e12603ea6c2284794e6f20240de"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/typert.remote-client.d.ts": {
+          "after": "2d1f5fa5fa358957f4315a2889984a83dc624d5d2e582464aa469f53b50bee42",
+          "before": "d6deeb10ab6d7edb5ba6857efd28614df7ea69986ade836ba6d7dd23b8d92fe9"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/typert.remote-client.js": {
+          "after": "4f9413826f8dac7cb1b3a97d3ef0b9d0be403826258f36ce7a79fd798372a402",
+          "before": "fea6401fe00567f6f25bd58057e30167bb38a7c09f00dcd626116e1bc6c1fde6"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts": {
+          "after": "79fbbc98f2685727edb12978e3cb68585b12077201fcdb80708217a231cdf876",
+          "before": "895a2d357b3da2d2ec18eada1271274d43169acaa6591d57bb6e84878e1b88fe"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/types/index.js": {
+          "after": "efb126db36aa547f23077e4523c020cad555ab5e027e769fb93403d3a9753c73",
+          "before": "1058c07851a1cf39bc6fdbe02756861f3d79b3a670b1e52c1d36bf8b0e68af15"
+        },
+        "node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts": {
+          "after": "29ea5d2268eee5da763bd324be45b661bd5bb0b41b78d76a44b902a231ce9510",
+          "before": "456d2f417065b73ea3308437c0c23cb12c895d371a6e669ec8610d032a5ff6e3"
+        }
+      }
+    },
     "route-guard.diff": {
       "0.2.1-rc.2": {
         "node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js": {

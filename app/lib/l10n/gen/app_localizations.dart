@@ -12182,6 +12182,66 @@ abstract class L10n {
   /// **'连接'**
   String get engineProviderConnection;
 
+  /// No description provided for @engineProviderHeaders.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头（可选）'**
+  String get engineProviderHeaders;
+
+  /// No description provided for @engineProviderHeadersWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头以明文保存，不参与日志脱敏。敏感凭据请使用 API Key 或凭据引用。'**
+  String get engineProviderHeadersWarning;
+
+  /// No description provided for @engineProviderHeaderName.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称'**
+  String get engineProviderHeaderName;
+
+  /// No description provided for @engineProviderHeaderValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'值'**
+  String get engineProviderHeaderValue;
+
+  /// No description provided for @engineProviderHeaderAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加请求头'**
+  String get engineProviderHeaderAdd;
+
+  /// No description provided for @engineProviderHeaderInvalidName.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头名称只能包含英文字母、数字或 HTTP 标记符号，不能包含空格或冒号'**
+  String get engineProviderHeaderInvalidName;
+
+  /// No description provided for @engineProviderHeaderReserved.
+  ///
+  /// In zh, this message translates to:
+  /// **'User-Agent 由引擎设置，请移除此请求头'**
+  String get engineProviderHeaderReserved;
+
+  /// No description provided for @engineProviderHeaderLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'由引擎管理，保留现有配置'**
+  String get engineProviderHeaderLocked;
+
+  /// No description provided for @engineProviderHeaderDuplicate.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头名称重复（不区分大小写）'**
+  String get engineProviderHeaderDuplicate;
+
+  /// No description provided for @engineProviderHeaderInvalidValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求头值只能包含单行 Latin-1 文本，不支持换行或控制字符（制表符除外）'**
+  String get engineProviderHeaderInvalidValue;
+
   /// No description provided for @engineProviderDefaultUrl.
   ///
   /// In zh, this message translates to:
