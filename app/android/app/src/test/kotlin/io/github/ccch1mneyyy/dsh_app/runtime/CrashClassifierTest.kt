@@ -15,7 +15,7 @@ class CrashClassifierTest {
         for (name in listOf("VERCEL_TOKEN", "DISCORD_TOKEN", "TELEGRAM_TOKEN", "PYPI_TOKEN",
             "CODECOV_TOKEN", "CSRF_TOKEN", "client_token", "clientToken", "oauth_token",
             "x_auth_token", "gh_token", "bot_token", "ADMIN_TOKEN", "max_access_token")) {
-            for (value in listOf("synthetic-value", "x", "7")) {
+            for (value in listOf("synthetic-value", "x", "7", "123:synthetic+value/x==")) {
                 assertEquals(name, "$name=•••", CrashClassifier.redact("$name=$value"))
             }
         }

@@ -3660,6 +3660,86 @@
         "lientTok",
         "en=•••"
       ]
+    },
+    {
+      "name": "a padded value after a space is a value, not the next field",
+      "inputParts": [
+        "API_KEY=",
+        " YWJjZGV",
+        "mZ2g= x-",
+        "api-key:",
+        " c2VjcmV",
+        "0MTI= cl",
+        "ient_sec",
+        "ret: YWJ",
+        "jZA== PA",
+        "SSWORD= ",
+        "HOST=exa",
+        "mple don",
+        "e"
+      ],
+      "expectedParts": [
+        "API_KEY=",
+        " ••• x-a",
+        "pi-key: ",
+        "••• clie",
+        "nt_secre",
+        "t: ••• P",
+        "ASSWORD=",
+        " HOST=ex",
+        "ample do",
+        "ne"
+      ]
+    },
+    {
+      "name": "a readable cursor value is still scanned for a credential",
+      "inputParts": [
+        "next_tok",
+        "en=https",
+        "://examp",
+        "le.inval",
+        "id/?api_",
+        "key=synt",
+        "hetic-va",
+        "lue page",
+        "_token=\"",
+        "a passwo",
+        "rd=sampl",
+        "e22\" max",
+        "_token=1",
+        "024"
+      ],
+      "expectedParts": [
+        "next_tok",
+        "en=https",
+        "://examp",
+        "le.inval",
+        "id/?api_",
+        "key=••• ",
+        "page_tok",
+        "en=\"a pa",
+        "ssword=•",
+        "••\" max_",
+        "token=10",
+        "24"
+      ]
+    },
+    {
+      "name": "a token value with colon, plus, slash and padding is masked whole",
+      "inputParts": [
+        "TELEGRAM",
+        "_BOT_TOK",
+        "EN=123:s",
+        "ynthetic",
+        "+value/x",
+        "== done"
+      ],
+      "expectedParts": [
+        "TELEGRAM",
+        "_BOT_TOK",
+        "EN=••• d",
+        "one"
+      ]
     }
   ]
 }

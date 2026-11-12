@@ -17,7 +17,7 @@ const _tokenName =
     r'(?!(?:[A-Za-z0-9_.-]*[_.-])?'
     r'(?:(?:max|min|prompt|completion|input|output|next|prev|previous|continuation|page|cursor|total)[_-]?)+'
     r'token(?![A-Za-z0-9_.-]))[A-Za-z0-9_.-]*token';
-final _launchToken = RegExp('(?<![A-Za-z0-9_.-])($_tokenName)=[A-Za-z0-9._~%-]+', caseSensitive: false);
+final _launchToken = RegExp('(?<![A-Za-z0-9_.-])($_tokenName)=[A-Za-z0-9._~%:+/=-]+', caseSensitive: false);
 
 /// `Authorization: Bearer <credential>` (and `Basic`).
 final _bearer = RegExp(r'\b(Bearer|Basic)\s+(?!•)[A-Za-z0-9._~+/=-]+', caseSensitive: false);
@@ -35,7 +35,8 @@ final _assignment = RegExp(
   r'''(?<![A-Za-z0-9_])([A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization|api[_-]?key|apikey|access[_-]?key|private[_-]?key|token)[A-Za-z0-9_.-]*)("?[^\S\r\n]*[:=])''',
   caseSensitive: false,
 );
-final _nextAssignment = RegExp(r'''[A-Za-z0-9_.-]+"?[^\S\r\n]*(?:=|:(?=[^\S\r\n]))''');
+// `name=` at the end of a word is base64 padding (`YWJj=`), not an empty next field.
+final _nextAssignment = RegExp(r'''[A-Za-z0-9_.-]+"?[^\S\r\n]*(?:=(?![=\s]|$)|:(?=[^\S\r\n]))''');
 final _secretName = RegExp(r'passw(?:or)?d|passphrase|secret|credential|cookie|authorization', caseSensitive: false);
 // Explicit credential names do not use value length or numeric content as a proxy.
 // Use the live log's token-name rule, including its count/cursor exclusions.
@@ -208,8 +209,11 @@ String _redactAssignments(String text) {
         ..write(text.substring(copied, valueStart))
         ..write(redactionMark);
       copied = at;
+      cursor = quote != null && at < text.length && text[at] == quote ? at + 1 : at;
+    } else {
+      // A value left readable (a cursor that is a URL) can carry a credential of its own.
+      cursor = valueStart;
     }
-    cursor = quote != null && at < text.length && text[at] == quote ? at + 1 : at;
   }
   return (out..write(text.substring(copied))).toString();
 }

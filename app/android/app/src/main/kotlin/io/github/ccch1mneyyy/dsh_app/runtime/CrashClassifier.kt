@@ -118,7 +118,7 @@ object CrashClassifier {
         "(?!(?:[A-Za-z0-9_.-]*[_.-])?" +
         "(?:(?:max|min|prompt|completion|input|output|next|prev|previous|continuation|page|cursor|total)[_-]?)+" +
         "token(?![A-Za-z0-9_.-]))[A-Za-z0-9_.-]*token"
-    private val TOKEN = Regex("(?<![A-Za-z0-9_.-])($TOKEN_NAME)=[A-Za-z0-9._~%-]+", RegexOption.IGNORE_CASE)
+    private val TOKEN = Regex("(?<![A-Za-z0-9_.-])($TOKEN_NAME)=[A-Za-z0-9._~%:+/=-]+", RegexOption.IGNORE_CASE)
     private const val WEB_MODULES = "/profiles/web/node_modules/"
     private const val SHIPPED_SCOPE = "@deepseek-ai/"
     private const val SUMMARY_MAX = 240

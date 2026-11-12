@@ -80,7 +80,8 @@ class LogRedactor {
             """(?<![A-Za-z0-9_])([A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization|api[_-]?key|apikey|access[_-]?key|private[_-]?key|token)[A-Za-z0-9_.-]*)("?[$INLINE_SPACE]*[:=])""",
             RegexOption.IGNORE_CASE,
         )
-        private val NEXT_ASSIGNMENT = Regex("""[A-Za-z0-9_.-]+"?[$INLINE_SPACE]*(?:=|:(?=[$INLINE_SPACE]))""")
+        // `name=` at the end of a word is base64 padding (`YWJj=`), not an empty next field.
+        private val NEXT_ASSIGNMENT = Regex("""[A-Za-z0-9_.-]+"?[$INLINE_SPACE]*(?:=(?![=$SPACE]|\z)|:(?=[$INLINE_SPACE]))""")
         private val SECRET_NAME = Regex("""passw(?:or)?d|passphrase|secret|credential|cookie|authorization""", RegexOption.IGNORE_CASE)
         // Explicit credential names do not use value length or numeric content as a proxy.
         // Use the live log's token-name rule, including its count/cursor exclusions.
@@ -186,8 +187,11 @@ class LogRedactor {
                         (!name.endsWith("token", true) && value.length >= 8 && value.any { it !in '0'..'9' }))) {
                     out.append(text, copied, valueStart).append(MARK)
                     copied = at
+                    cursor = if (quote != null && text.getOrNull(at) == quote) at + 1 else at
+                } else {
+                    // A value left readable (a cursor that is a URL) can carry a credential of its own.
+                    cursor = valueStart
                 }
-                cursor = if (quote != null && text.getOrNull(at) == quote) at + 1 else at
             }
             return out.append(text, copied, text.length).toString()
         }
