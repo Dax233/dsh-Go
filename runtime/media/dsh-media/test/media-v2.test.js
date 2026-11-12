@@ -132,7 +132,7 @@ test('store preparation failure rolls back staging and releases the unsent hold'
   await assert.rejects(fs.stat(target), { code: 'ENOENT' });
 });
 for (const profile of ['openai-gpt-image', 'ark-video']) {
-  test(`${profile}: publishes with hard links unavailable and same-directory final renames`, async t => {
+  test(`${profile}: publishes directly from staging with hard links unavailable`, async t => {
     const f = await fixture(t, profile), req = request(profile);
     f.context.admission = await admitGeneration(req, f.context);
     const { rid, outputDate } = f.context.admission;
@@ -147,7 +147,7 @@ for (const profile of ['openai-gpt-image', 'ark-video']) {
     });
     const observed = t.mock.method(fs, 'rename', async function (source, target) {
       if (target === outputPath || target === indexPath) {
-        assert.equal(dirname(source), dirname(target));
+        assert.equal(target === outputPath ? dirname(dirname(source)) : dirname(source), dirname(target));
         finalRenames.push(target);
       }
       return originalRename.call(this, source, target);
