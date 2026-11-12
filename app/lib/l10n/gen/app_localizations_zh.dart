@@ -1096,6 +1096,15 @@ class L10nZh extends L10n {
   String get activitySlashEnterArgs => '输入参数后发送';
 
   @override
+  String get activitySlashRunIntent => '命令 · 执行';
+
+  @override
+  String get activitySlashInsertIntent => '命令 · 填入';
+
+  @override
+  String get activitySlashSkillIntent => '技能 · 填入';
+
+  @override
   String get activityStepTitle => '步骤详情';
 
   @override

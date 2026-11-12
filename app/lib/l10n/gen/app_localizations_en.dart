@@ -1102,6 +1102,15 @@ class L10nEn extends L10n {
   String get activitySlashEnterArgs => 'Enter arguments, then send';
 
   @override
+  String get activitySlashRunIntent => 'Command · Run';
+
+  @override
+  String get activitySlashInsertIntent => 'Command · Insert';
+
+  @override
+  String get activitySlashSkillIntent => 'Skill · Insert';
+
+  @override
   String get activityStepTitle => 'Step details';
 
   @override

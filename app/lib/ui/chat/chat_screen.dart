@@ -1354,17 +1354,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     _dismissSlashPalette();
     final value = _input.value;
     final caret = atCaret && value.selection.isValid ? value.selection.end : value.text.length;
-    final leading = value.text.length - value.text.trimLeft().length;
-    final full = parseSlashInput(value.text);
-    // Completing inside an already known command replaces its whole name.
-    // Otherwise preserve the draft to the right of the cursor (e.g. /|hello).
-    final end = full != null && resolveSlashCommand(_commands, full.token) != null
-        ? leading + 1 + full.token.length
-        : caret;
-    final suffix = value.text.substring(end);
-    if ((command.kind == SlashCommandKind.host && command.takesInput) ||
-        command.kind == SlashCommandKind.skill ||
-        suffix.isNotEmpty) {
+    final (:leading, :suffix) = slashCompletionContext(_commands, value.text, caret);
+    if (slashPickInsertsText(command, hasSuffix: suffix.isNotEmpty)) {
       final prefix = '${value.text.substring(0, leading)}/${command.name}';
       final separator = suffix.isEmpty || !RegExp(r'^\s').hasMatch(suffix) ? ' ' : '';
       final text = '$prefix$separator$suffix';

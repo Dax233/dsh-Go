@@ -2228,6 +2228,24 @@ abstract class L10n {
   /// **'输入参数后发送'**
   String get activitySlashEnterArgs;
 
+  /// No description provided for @activitySlashRunIntent.
+  ///
+  /// In zh, this message translates to:
+  /// **'命令 · 执行'**
+  String get activitySlashRunIntent;
+
+  /// No description provided for @activitySlashInsertIntent.
+  ///
+  /// In zh, this message translates to:
+  /// **'命令 · 填入'**
+  String get activitySlashInsertIntent;
+
+  /// No description provided for @activitySlashSkillIntent.
+  ///
+  /// In zh, this message translates to:
+  /// **'技能 · 填入'**
+  String get activitySlashSkillIntent;
+
   /// No description provided for @activityStepTitle.
   ///
   /// In zh, this message translates to:
