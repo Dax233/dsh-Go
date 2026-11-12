@@ -48,19 +48,21 @@ class RuntimeLogsTest {
         assertFalse(lines.joinToString().contains("SYNTHETIC_SECRET"))
     }
 
-    @Test fun fullRulesMaskDiskWhileLiveKeepsTheOriginalTokenRule() = Fixture().use { f ->
+    @Test fun fullRulesMaskDiskWhileLiveUsesTheSameCredentialTokenNames() = Fixture().use { f ->
         val raw = listOf(
             "\u001B[32mBasic setup\u001B[0m",
             "API_KEY=SYNTHETIC_VALUE password='synthetic phrase, tail' token=SYNTHETIC_TOKEN",
+            "oauth_token=sampleXY x_auth_token=sampleXY gh_token=sampleXY bot_token=sampleXY next_token=page-cursor-123",
         )
         raw.forEach { f.logs.accept(it, "stderr") }
         f.flush(); f.drainMain()
-        val live = listOf(raw[0], "API_KEY=SYNTHETIC_VALUE password='synthetic phrase, tail' token=•••")
+        val live = listOf(raw[0], "API_KEY=SYNTHETIC_VALUE password='synthetic phrase, tail' token=•••",
+            "oauth_token=••• x_auth_token=••• gh_token=••• bot_token=••• next_token=page-cursor-123")
         assertEquals(live, f.logs.recent(10))
         assertEquals(live, f.logs.snapshot(10).entries.map { it.line })
         assertEquals(live, f.delivered.map { it.line })
-        assertEquals(listOf("Basic •••", "API_KEY=••• password='•••' token=•••"), f.saved())
-        assertEquals(listOf(1L, 2L), f.delivered.map { it.seq })
+        assertEquals(listOf("Basic •••", "API_KEY=••• password='•••' token=•••", live[2]), f.saved())
+        assertEquals(listOf(1L, 2L, 3L), f.delivered.map { it.seq })
     }
 
     @Test fun streamPrivateKeyStateOnlyChangesTheDiskCopy() = Fixture().use { f ->
@@ -72,7 +74,7 @@ class RuntimeLogsTest {
         f.flush(); f.drainMain()
         assertEquals(raw, f.logs.recent(10))
         assertEquals(raw, f.delivered.map { it.line })
-        assertEquals(listOf("•••", "•••", end, "done"), f.saved())
+        assertEquals(listOf(begin, "•••", end, "done"), f.saved())
     }
 
     @Test fun concurrentAdmissionHasOneOrderAndSnapshotCutoff() = Fixture().use { f ->

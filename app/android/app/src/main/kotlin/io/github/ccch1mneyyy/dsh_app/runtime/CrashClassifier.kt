@@ -110,7 +110,12 @@ object CrashClassifier {
     private val DIAGNOSTICS = Regex("^Full diagnostics: (\\S+)")
     private val REQUIRED_ROW = Regex("^\\s{2}(\\S+) \\(required\\)")
     private val PACKAGE = Regex("^\\s+Package: (\\S+)")
-    private val TOKEN = Regex("token=[A-Za-z0-9._~%-]+")
+    // Singular token names are credentials except explicit counts and pagination cursors.
+    internal const val TOKEN_NAME =
+        "(?!(?:[A-Za-z0-9_.-]*[_.-])?" +
+        "(?:(?:max|min|prompt|completion|input|output|next|prev|previous|continuation|page|cursor|total)[_-]?)+" +
+        "token(?![A-Za-z0-9_.-]))[A-Za-z0-9_.-]*token"
+    private val TOKEN = Regex("(?<![A-Za-z0-9_.-])($TOKEN_NAME)=[A-Za-z0-9._~%-]+", RegexOption.IGNORE_CASE)
     private const val WEB_MODULES = "/profiles/web/node_modules/"
     private const val SHIPPED_SCOPE = "@deepseek-ai/"
     private const val SUMMARY_MAX = 240
@@ -123,7 +128,7 @@ object CrashClassifier {
 
     fun isFatal(line: String): Boolean = FATAL.any { it.containsMatchIn(line) }
 
-    fun redact(line: String): String = TOKEN.replace(line, "token=•••")
+    fun redact(line: String): String = TOKEN.replace(line) { "${it.groupValues[1]}=•••" }
 
     /**
      * [readyAt] and [now] share one monotonic clock (elapsedRealtime); [readyAt] is null when

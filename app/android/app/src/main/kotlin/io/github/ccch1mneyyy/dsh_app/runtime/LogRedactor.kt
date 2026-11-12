@@ -50,7 +50,7 @@ class LogRedactor {
         private val ANSI = Regex("""\x1B\[[0-9;?]*[ -/]*[@-~]""")
         private val KEY_BEGIN = Regex("""-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY-----""")
         private val KEY_END = Regex("""-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----""")
-        private val KEY_BLOCK = Regex("""${KEY_BEGIN.pattern}[\s\S]*?(?:${KEY_END.pattern}|$)""")
+        private val KEY_BLOCK = Regex("""${KEY_BEGIN.pattern}[\s\S]*?(?:${KEY_END.pattern}|\z)""")
         private val ADDRESS = Regex("""(?<![A-Za-z0-9_])[a-z][a-z0-9+.-]{1,15}://[^${SPACE}/:@?#]{0,256}:([^${SPACE}/@?#]+)@""")
         // Different run classes can overlap; scan each before merging the ranges.
         private val PROVIDERS = listOf(
@@ -72,16 +72,20 @@ class LogRedactor {
             "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
             "npm_", "hf_", "sk-", "AIza", "AKIA", "ASIA", "LTAI", "AKID",
         )
-        private val TOKEN = Regex("token=[A-Za-z0-9._~%-]+")
         private val AUTH = Regex("""(?<![A-Za-z0-9_])(Bearer|Basic)[$SPACE]+(?!•)[A-Za-z0-9._~+/=-]+""", RegexOption.IGNORE_CASE)
-        private val AUTH_SCHEME = Regex("""^(?:Bearer|Basic)(?![A-Za-z0-9_])""", RegexOption.IGNORE_CASE)
+        private val AUTH_SCHEME = Regex("""^(?:Bearer|Basic)$""", RegexOption.IGNORE_CASE)
         private val MASKED_AUTH = Regex("""^(?:Bearer|Basic)[$SPACE]+•••$""", RegexOption.IGNORE_CASE)
-        private val SECRET_NAME = Regex(
-            """(?<![A-Za-z0-9_])[A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization)[A-Za-z0-9_.-]*"?[$SPACE]*[:=][$SPACE]*""",
+        private val INLINE_SPACE = SPACE.filterNot { it == '\r' || it == '\n' }
+        private val ASSIGNMENT = Regex(
+            """(?<![A-Za-z0-9_])([A-Za-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|credential|cookie|authorization|api[_-]?key|apikey|access[_-]?key|private[_-]?key|token)[A-Za-z0-9_.-]*)("?[$INLINE_SPACE]*[:=])""",
             RegexOption.IGNORE_CASE,
         )
-        private val KEY_ASSIGNMENT = Regex(
-            """(?<![A-Za-z0-9_])([A-Za-z0-9_.-]*(?:api[_-]?key|apikey|access[_-]?key|private[_-]?key|token)[A-Za-z0-9_.-]*)("?[$SPACE]*[:=][$SPACE]*["']?)(?!•)(?![0-9]+(?:[${SPACE}"',;&]|$))([^${SPACE}"',;&]{8,})""",
+        private val NEXT_ASSIGNMENT = Regex("""[A-Za-z0-9_.-]+"?[$INLINE_SPACE]*(?:=|:(?=[$INLINE_SPACE]))""")
+        private val SECRET_NAME = Regex("""passw(?:or)?d|passphrase|secret|credential|cookie|authorization""", RegexOption.IGNORE_CASE)
+        // Explicit credential names do not use value length or numeric content as a proxy.
+        // Use the live log's token-name rule, including its count/cursor exclusions.
+        private val CREDENTIAL_KEY = Regex(
+            """(?:.*[_.-])?(?:api[_-]?key|access[_-]?key|private[_-]?key)|${CrashClassifier.TOKEN_NAME}""",
             RegexOption.IGNORE_CASE,
         )
 
@@ -118,25 +122,34 @@ class LogRedactor {
                 }
                 text = out.append(text, at, text.length).toString()
             }
-            text = TOKEN.replace(text, "token=$MARK")
+            text = CrashClassifier.redact(text)
             text = AUTH.replace(text) { "${it.groupValues[1]} $MARK" }
-            text = secretAssignments(text)
-            return KEY_ASSIGNMENT.replace(text) { "${it.groupValues[1]}${it.groupValues[2]}$MARK" }
+            return assignments(text)
         }
 
         // Keep quoted values, including a value cut before its closing quote, in one mask.
         // The linear scan also avoids a repeated regex group's host-JVM recursion.
-        private fun secretAssignments(text: String): String {
+        private fun assignments(text: String): String {
             val out = StringBuilder()
             var copied = 0
             var cursor = 0
             while (true) {
-                val name = SECRET_NAME.find(text, cursor) ?: break
-                val start = name.range.last + 1
+                val match = ASSIGNMENT.find(text, cursor) ?: break
+                val name = match.groupValues[1]
+                val start = match.range.last + 1
                 var at = start
-                val quote = text.getOrNull(at)?.takeIf { it == '\'' || it == '"' }
+                while (at < text.length && text[at] in INLINE_SPACE) at++
+                val cookieHeader = (name.equals("cookie", true) || name.equals("set-cookie", true)) &&
+                    match.groupValues[2].endsWith(':') && !match.groupValues[2].startsWith('"')
+                // An empty assignment must not eat the next field or cross a log line.
+                if (!cookieHeader && at > start && assignmentAt(text, at)) {
+                    cursor = at
+                    continue
+                }
+                val quote = text.getOrNull(at)?.takeIf { !cookieHeader && (it == '\'' || it == '"') }
+                if (quote != null) at++
+                val valueStart = at
                 if (quote != null) {
-                    at++
                     while (at < text.length && text[at] != quote && text[at] != '\r' && text[at] != '\n') {
                         if (text[at] == '\\') {
                             if (at + 1 == text.length || text[at + 1] == '\r' || text[at + 1] == '\n') {
@@ -147,33 +160,56 @@ class LogRedactor {
                         }
                         at++
                     }
-                    val value = text.substring(start + 1, at)
-                    out.append(text, copied, start + 1)
-                    out.append(if (value.isEmpty() || MASKED_AUTH.matches(value)) value else MARK)
-                    if (at < text.length && text[at] == quote) out.append(text[at++])
-                    copied = at
-                    cursor = copied
-                    continue
+                } else if (cookieHeader) {
+                    while (at < text.length && text[at] != '\r' && text[at] != '\n') at++
+                } else {
+                    val jsonValue = text.getOrNull(match.range.first - 1) == '"' &&
+                        match.groupValues[2].startsWith('"') && match.groupValues[2].endsWith(':')
+                    while (at < text.length && text[at] !in SPACE && text[at] !in "\"',;&" &&
+                        (!jsonValue || text[at] !in "}]")) at++
+                    val markedEnd = maskedEnd(text, valueStart)
+                    if (markedEnd > valueStart && assignmentAt(text, markedEnd)) {
+                        at = markedEnd
+                    }
                 }
-                val valueStart = start
-                at = valueStart
-                while (at < text.length && text[at] !in SPACE && text[at] !in "\"',;&") at++
+                if (quote == null && !cookieHeader && text.getOrNull(match.range.first - 1) == '(' &&
+                    at > valueStart && text[at - 1] == ')') {
+                    at--
+                }
                 val value = text.substring(valueStart, at)
-                if (value.isNotEmpty() && !value.startsWith('•') &&
-                    !AUTH_SCHEME.containsMatchIn(value)) {
+                val secret = SECRET_NAME.containsMatchIn(name)
+                val authorization = name.endsWith("authorization", true)
+                val alreadyMasked = value == MARK || (!secret && maskedEnd(value, 0) == value.length) ||
+                    (authorization && (MASKED_AUTH.matches(value) || (quote == null && AUTH_SCHEME.matches(value))))
+                if (value.isNotEmpty() && !alreadyMasked &&
+                    (secret || CREDENTIAL_KEY.matches(name) ||
+                        (!name.endsWith("token", true) && value.length >= 8 && value.any { it !in '0'..'9' }))) {
                     out.append(text, copied, valueStart).append(MARK)
                     copied = at
                 }
-                cursor = maxOf(at, start)
+                cursor = if (quote != null && text.getOrNull(at) == quote) at + 1 else at
             }
             return out.append(text, copied, text.length).toString()
         }
 
+        // A generic URI scheme is a value, not an empty field followed by an assignment.
+        private fun assignmentAt(text: String, start: Int): Boolean =
+            NEXT_ASSIGNMENT.find(text, start)?.range?.first == start ||
+                ASSIGNMENT.find(text, start)?.range?.first == start
+
+        private fun maskedEnd(text: String, start: Int): Int {
+            if (text.startsWith(MARK, start)) return start + MARK.length
+            val prefix = PREFIXES.firstOrNull { text.startsWith(it + MARK, start) } ?: return start
+            return start + prefix.length + MARK.length
+        }
+
         private fun mask(value: String): String {
             if (value.startsWith("-----BEGIN")) {
+                val begin = KEY_BEGIN.find(value)?.value ?: return MARK
+                if (value == begin) return begin
                 if (!value.contains('\n')) return MARK
                 val end = KEY_END.find(value)?.value
-                return KEY_BEGIN.find(value)!!.value + "\n$MARK" + (end?.let { "\n$it" } ?: "")
+                return begin + "\n$MARK" + (end?.let { "\n$it" } ?: "")
             }
             return (PREFIXES.firstOrNull { value.startsWith(it) } ?: "") + MARK
         }
