@@ -35,9 +35,11 @@ async function fixture(t, declaration = manifest) {
     on(n, fn) { hooks.set(n, fn); }, inject(deps, fn) { fn(ctx); },
     webServer: { register(r) { routes.push(r); return () => {}; }, registerUpgrade(r) { upgrades.push(r); return () => {}; } } };
   apply(ctx, { persist: false, guardRoutes: false });
-  const responses = []; let holdMedia = false;
-  const server = createServer((req, res) => {
+  const responses = []; let holdMedia = false, mediaRouteGate;
+  const server = createServer(async (req, res) => {
     if (req.url.startsWith('/dsh-go/v1/media/')) {
+      const gate = mediaRouteGate; mediaRouteGate = undefined;
+      if (gate) { gate.arrived.resolve(res); await gate.resume.promise; }
       responses.push(res);
       if (holdMedia) {
         holdMedia = false;
@@ -89,6 +91,11 @@ async function fixture(t, declaration = manifest) {
     return Object.assign(Object.create(services.dshGo), { ctx: { fiber: { entry: extra }, effect: ctx.effect } });
   }
   return { service, ws, request, invoke, mediaPath, entry, hooks, addPlugin, port, responses,
+    holdNextMediaRoute() {
+      const gate = { arrived: Promise.withResolvers(), resume: Promise.withResolvers() };
+      mediaRouteGate = gate;
+      return { arrived: gate.arrived.promise, resume: gate.resume.resolve };
+    },
     holdNextMediaResponse: () => { holdMedia = true; }, guardCalls: () => guardCalls };
 }
 
@@ -137,6 +144,27 @@ test('media stop aborts pending handler; disconnect revokes lease', async t => {
   const w = await f.ws(['audio']); const e = (await f.invoke(w)).effects[0]; const pending = f.request(f.mediaPath(e)); await started;
   op = 'stop'; assert.equal((await f.invoke(w)).effects[0].lease, e.lease); assert.equal((await pending).status, 410); assert.equal(signal.aborted, true);
   w.socket.destroy(); await delay(25); assert.equal((await f.request(f.mediaPath(e))).status, 404);
+});
+
+test('media disconnected before dispatch leaves its plugin slot available', async t => {
+  const f = await fixture(t); let calls = 0;
+  f.service.media('clip', () => { calls++; return { body: Buffer.from('audio'), contentType: 'audio/wav' }; });
+  f.service.on('go', () => ({ type: 'audio', op: 'play', instance: 'a', src: 'media:clip' }));
+  const w = await f.ws(['audio']), effect = (await f.invoke(w)).effects[0], path = f.mediaPath(effect);
+  // Peer for the WebServer's awaited Connection guard; the request, close event,
+  // lease, dispatch and subsequent retry use the real HTTP/native implementation.
+  const gate = f.holdNextMediaRoute();
+  const socket = connect(f.port, '127.0.0.1'); t.after(() => socket.destroy());
+  await once(socket, 'connect');
+  socket.write(`GET /dsh-go/v1/${path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer test\r\n\r\n`);
+  const response = await gate.arrived, closed = once(response, 'close');
+  socket.destroy(); await closed;
+  assert.equal(response.destroyed, true);
+  gate.resume();
+  const retry = await f.request(path);
+  assert.equal(retry.status, 200);
+  assert.equal(await retry.text(), 'audio');
+  assert.equal(calls, 1, 'only the live retry may produce audio');
 });
 
 test('media bounds and registration disposal fail closed', async t => {

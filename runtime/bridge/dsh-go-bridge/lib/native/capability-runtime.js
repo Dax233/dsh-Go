@@ -139,6 +139,7 @@ export class CapabilityRuntime {
       || !e.roles.has('audio') || e.audioStopping || e.conn.ws.closed || !this.alive(e)) fail(404, 'not-found', 'no active media lease');
     const reg = this.core.registration(pkg, 'media', id);
     if (!reg || reg.token !== e.mediaToken) { this.revoke(e); fail(404, 'not-found', 'media was unloaded'); }
+    if (req.aborted || res.destroyed) fail(410, 'cancelled', 'media cancelled');
     if (this.mediaBusy.size >= L.mediaConcurrent || this.mediaBusy.has(pkg)) fail(429, 'rate-limited', 'media busy');
     this.mediaBusy.add(pkg);
     const controller = new AbortController();
