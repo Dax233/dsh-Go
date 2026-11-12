@@ -62,7 +62,7 @@ class PrivilegedSelfUpdater(context: Context) {
             runCatching { transport?.close() }
             runCatching { snapshot?.close() }
             synchronized(globalGuard) { if (reservation === ticket) reservation = null }
-            throw stable(error)
+            throw stableSelfUpdateFailure(error)
         }
     }
 
@@ -100,7 +100,7 @@ class PrivilegedSelfUpdater(context: Context) {
                     SelfUpdateReceipt("success", submitted = true) else SelfUpdatePolicy.unknown()
             }
         } catch (error: Exception) {
-            receipt = if (persisted) SelfUpdatePolicy.unknown() else SelfUpdateReceipt("unavailable", stable(error).code)
+            receipt = if (persisted) SelfUpdatePolicy.unknown() else SelfUpdateReceipt("unavailable", stableSelfUpdateFailure(error).code)
         } finally {
             synchronized(globalGuard) { installing = false }
         }
@@ -214,17 +214,17 @@ class PrivilegedSelfUpdater(context: Context) {
         }
     }
 
-    private fun stable(error: Exception): SelfUpdateException = when {
-        error is SelfUpdateException -> error
-        // Os.open throws errno directly; FileOutputStream.write wraps it in IOException.
-        (error as? ErrnoException ?: error.cause as? ErrnoException)?.errno == OsConstants.ENOSPC ->
-            SelfUpdateException("storage")
-        else -> SelfUpdateException("unavailable")
-    }
-
     private companion object {
         val globalGuard = Any()
         var reservation: Any? = null
         var installing = false
     }
+}
+
+internal fun stableSelfUpdateFailure(error: Exception): SelfUpdateException = when {
+    error is SelfUpdateException -> error
+    // Os.open throws errno directly; FileOutputStream.write wraps it in IOException.
+    (error as? ErrnoException ?: error.cause as? ErrnoException)?.errno == OsConstants.ENOSPC ->
+        SelfUpdateException("storage")
+    else -> SelfUpdateException("unavailable")
 }
