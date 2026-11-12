@@ -135,6 +135,7 @@ function parseReport(body) {
 
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
+    if (req.aborted || req.destroyed) return reject(new Error("request body was interrupted"));
     const chunks = [];
     let size = 0;
     let over = false;
