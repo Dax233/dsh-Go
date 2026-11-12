@@ -90,17 +90,19 @@ export function createStreamStager({ allowLoopback = false, lookup = dnsLookup }
       if (!same(await directoryHandle.stat({ bigint: true }), dirIdentity)) fail('permission');
       // Probe/sync even an existing directory. Existence is not a durability receipt.
       await storageOperation(directoryHandle.sync());
-      // Persist the selected directory's name too, even when it already existed.
-      // No caller-created ancestor is assumed durable merely because stat found it.
-      for (let ancestor = dirname(directory); ; ancestor = dirname(ancestor)) {
-        const parent = await open(ancestor, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
+      // The installed Direct root already has a durability barrier. Repair every
+      // ancestor below it, including entries another creator left unsynced.
+      // Paths outside that root retain the full filesystem-root barrier.
+      const directRoot = globalThis[Symbol.for('dsh.go.direct')]?.root;
+      for (let ancestor = directory; ancestor !== directRoot && dirname(ancestor) !== ancestor;) {
+        ancestor = dirname(ancestor);
+        const parent = await storageOperation(open(ancestor, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0)));
         try {
           await storageOperation(parent.sync());
         } finally {
           await storageOperation(parent.close());
         }
         active();
-        if (dirname(ancestor) === ancestor) break;
       }
       await guardDirectory();
       const literal = isIP(host);
