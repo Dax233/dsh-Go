@@ -865,24 +865,36 @@ function trial (args) {
   const seconds = function (ms) { return Math.round(ms / 1000) }
   const capture = function (stream) {
     let pending = ''
+    let line = ''
+    const saveLine = function () {
+      if (line) {
+        const text = line.length > 2000 ? line.slice(0, 2000).replace(/[\uD800-\uDBFF]$/, '') + '…' : line
+        tail.push(redact(text))
+        if (tail.length > 60) tail.shift()
+      }
+      line = ''
+    }
+    stream.setEncoding('utf8')
     stream.on('data', function (chunk) {
       const text = pending + String(chunk)
       if (!upAt && text.indexOf('token=') >= 0) upAt = Date.now()
       // A pipe can split the six-byte marker anywhere; streams stay separate.
       pending = text.slice(-5)
-      for (const line of String(chunk).split('\n')) {
-        if (!line) continue
-        tail.push(redact(line))
-        if (tail.length > 60) tail.shift()
+      const lines = String(chunk).split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        // One extra character records truncation without retaining an unbounded line.
+        line += lines[i].slice(0, 2001 - line.length)
+        if (i + 1 < lines.length) saveLine()
       }
     })
+    return saveLine
   }
-  capture(child.stdout)
-  capture(child.stderr)
+  const flushOutput = [capture(child.stdout), capture(child.stderr)]
   const finish = function (code, text, showTail) {
     if (finished) return
     finished = true
     clearInterval(timer)
+    flushOutput.forEach(function (flush) { flush() })
     out(text)
     if (showTail) out(tail.slice(-40).join('\n'))
     else {
