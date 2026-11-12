@@ -242,6 +242,10 @@ window.__ModuleLoader__.load({
 				timer = setTimeout(report, REPORT_DELAY_MS);
 			};
 			ctx.on("slots/changed", schedule);
+			ctx.on("connection/reset", () => {
+				lastSent = "";
+				schedule();
+			});
 			// Tab names live in their own registry; a rename or a new type reports too.
 			let tabsWatched;
 			const watchTabs = (registry) => {
