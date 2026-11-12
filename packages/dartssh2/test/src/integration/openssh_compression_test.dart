@@ -81,8 +81,11 @@ Future<void> _echo(SSHClient client, Uint8List payload) async {
   final errors = session.stderr.expand((data) => data).toList();
   // Many SSH packets, preserving the same compression dictionary throughout.
   for (var offset = 0; offset < payload.length; offset += 8192) {
+    final flushed = client.flush();
     session.stdin.add(Uint8List.sublistView(
         payload, offset, min(offset + 8192, payload.length)));
+    await flushed;
+    await session.flush();
   }
   await session.stdin.close();
   expect(await output, payload);

@@ -535,7 +535,7 @@ class SSHTransport {
       buffer.add(encryptedPayload);
       buffer.add(macBytes);
 
-      socket.sink.add(buffer.takeBytes());
+      _writeSocket(buffer.takeBytes());
     } else {
       // For standard encryption or no encryption:
       // Use the original packet packing logic
@@ -546,7 +546,7 @@ class SSHTransport {
       final packet = SSHPacket.pack(data, align: packetAlign);
 
       if (_encryptCipher == null) {
-        socket.sink.add(packet);
+        _writeSocket(packet);
       } else {
         final mac = _localMac!;
         final encryptedPacket = _encryptCipher!.processAll(packet);
@@ -559,7 +559,7 @@ class SSHTransport {
         mac.updateAll(packet);
         buffer.add(mac.finish());
 
-        socket.sink.add(buffer.takeBytes());
+        _writeSocket(buffer.takeBytes());
       }
     }
 
@@ -586,7 +586,7 @@ class SSHTransport {
       randomBytes(paddingLength),
     );
 
-    socket.sink.add(cipher.encryptPacket(packet, _localPacketSN.value));
+    _writeSocket(cipher.encryptPacket(packet, _localPacketSN.value));
   }
 
   /// Sends a packet encrypted using AEAD (e.g. AES-GCM).
@@ -619,7 +619,7 @@ class SSHTransport {
       ..add(aad)
       ..add(encrypted);
 
-    socket.sink.add(buffer.takeBytes());
+    _writeSocket(buffer.takeBytes());
   }
 
   /// Computes the correct padding length required to align the total packet size to [align] blocks.
@@ -677,7 +677,12 @@ class SSHTransport {
       SSHStateError('Transport closed before the key exchange completed'),
       StackTrace.current,
     );
-    await socket.close();
+    final pending = _pendingSocketWrite;
+    try {
+      if (pending != null) await pending;
+    } finally {
+      await socket.close();
+    }
   }
 
   /// Closes the SSH transport and completes the [done] future with an [error].
@@ -692,9 +697,35 @@ class SSHTransport {
     socket.destroy();
   }
 
-  /// Force flush any buffered outgoing data to the socket.
-  Future<void> flush() async {
-    await socket.flush();
+  // A native IOSink is bound while flush is pending. Keep writes synchronous
+  // otherwise; packets arriving during a flush retain their encoded byte order.
+  Future<void>? _pendingSocketWrite;
+
+  void _writeSocket(List<int> bytes) {
+    final pending = _pendingSocketWrite;
+    if (pending == null) {
+      socket.sink.add(bytes);
+    } else {
+      _trackSocketWrite(pending.then((_) => socket.sink.add(bytes)));
+    }
+  }
+
+  Future<void> _trackSocketWrite(Future<void> operation) {
+    _pendingSocketWrite = operation;
+    operation.then((_) {
+      if (identical(_pendingSocketWrite, operation)) {
+        _pendingSocketWrite = null;
+      }
+    }, onError: _onSocketError);
+    return operation;
+  }
+
+  /// Flush encoded bytes already queued for the socket.
+  Future<void> flush() {
+    final pending = _pendingSocketWrite;
+    return _trackSocketWrite(pending == null
+        ? Future<void>.sync(socket.flush)
+        : pending.then((_) => socket.flush()));
   }
 
   /// Subscribes to the underlying socket stream to handle incoming data and status events.
@@ -724,7 +755,7 @@ class SSHTransport {
   /// Callback triggered when the socket stream is closed by the remote peer.
   void _onSocketDone() {
     printDebug?.call('SSHTransport._onSocketDone');
-    close();
+    close().catchError(_onSocketError);
   }
 
   void _scheduleProcessData() {
@@ -828,7 +859,7 @@ class SSHTransport {
       // RFC compatibility: SSH-1.99 banners indicate SSH-2 support with SSH-1 fallback.
       if (!(versionString.startsWith('SSH-2.0-') ||
           versionString.startsWith('SSH-1.99-'))) {
-        socket.sink.add(latin1.encode('Protocol mismatch\r\n'));
+        _writeSocket(latin1.encode('Protocol mismatch\r\n'));
         throw SSHHandshakeError('Invalid version: $versionString');
       }
 
@@ -1261,7 +1292,7 @@ class SSHTransport {
 
   /// Initiates the SSH version exchange handshake.
   void _startHandshake() {
-    socket.sink.add(latin1.encode('$_localVersion\r\n'));
+    _writeSocket(latin1.encode('$_localVersion\r\n'));
 
     if (isClient) {
       _sendKexInit();
