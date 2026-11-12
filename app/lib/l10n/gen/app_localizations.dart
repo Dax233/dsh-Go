@@ -32846,6 +32846,12 @@ abstract class L10n {
   /// **'这个对话已经不在了'**
   String get stateChatMissing;
 
+  /// No description provided for @stateChatFormatUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前引擎无法读取此对话的日志格式，请导出诊断包排查'**
+  String get stateChatFormatUnsupported;
+
   /// No description provided for @stateEngineUnsupported.
   ///
   /// In zh, this message translates to:

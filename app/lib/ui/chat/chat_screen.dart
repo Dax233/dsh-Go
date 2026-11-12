@@ -1560,6 +1560,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 singleQuestion: s.singleQuestion != null,
                 model: s.model,
                 error: s.error,
+                syncError: s.syncError,
                 defaultModelSaveFailed: s.defaultModelSaveFailed,
                 notice: s.notice,
                 autoApprove: s.autoApprove,
@@ -1952,9 +1953,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                         ? Padding(
                                             padding: const EdgeInsets.only(bottom: 8),
                                             child: ErrorBanner(
+                                              maxLines: null,
                                               info: !(chat?.streamLost ?? false),
                                               message: chat?.streamLost ?? false
-                                                  ? l10n.stateChatSyncInterrupted
+                                                  ? chat?.syncError ?? l10n.stateChatSyncInterrupted
                                                   : l10n.stateChatSynchronizing,
                                               action: chat?.resyncing ?? false
                                                   ? null

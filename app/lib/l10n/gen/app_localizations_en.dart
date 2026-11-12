@@ -18898,6 +18898,10 @@ class L10nEn extends L10n {
   String get stateChatMissing => 'This chat is gone';
 
   @override
+  String get stateChatFormatUnsupported =>
+      'This engine cannot read this chat\'s log format. Export diagnostics to investigate.';
+
+  @override
   String get stateEngineUnsupported => 'Not supported by this engine version';
 
   @override

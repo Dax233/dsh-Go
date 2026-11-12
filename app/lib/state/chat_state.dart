@@ -279,6 +279,7 @@ class ChatState {
     this.loading = true,
     this.loadingOlder = false,
     this.error,
+    this.syncError,
     this.defaultModelSaveFailed = false,
     this.notice,
     this.connection,
@@ -315,6 +316,9 @@ class ChatState {
   final bool loading;
   final bool loadingOlder;
   final String? error;
+
+  /// The current history follow failure, separate from action errors.
+  final String? syncError;
 
   /// The session model changed, but remembering it for new chats failed.
   /// Independent of transient send/sync errors; only explicit dismissal or a
@@ -385,6 +389,8 @@ class ChatState {
     bool? loadingOlder,
     String? error,
     bool clearError = false,
+    String? syncError,
+    bool clearSyncError = false,
     bool? defaultModelSaveFailed,
     String? notice,
     bool clearNotice = false,
@@ -407,6 +413,7 @@ class ChatState {
     loading: loading ?? this.loading,
     loadingOlder: loadingOlder ?? this.loadingOlder,
     error: clearError ? null : (error ?? this.error),
+    syncError: clearSyncError ? null : (syncError ?? this.syncError),
     defaultModelSaveFailed: defaultModelSaveFailed ?? this.defaultModelSaveFailed,
     notice: clearNotice ? null : (notice ?? this.notice),
     connection: connection,
@@ -700,7 +707,9 @@ class ChatController extends Notifier<ChatState> {
     if (_syncReady.isCompleted) _syncReady = Completer<bool>();
     _stopTimeout?.cancel();
     _stoppingOperation = null;
-    if (!building) state = state.copyWith(syncing: true, stopping: false, loadingOlder: false);
+    if (!building) {
+      state = state.copyWith(syncing: true, stopping: false, loadingOlder: false, clearSyncError: epoch != null);
+    }
   }
 
   /// A first prompt may arrive immediately after session/create. Wait for the
@@ -904,11 +913,8 @@ class ChatController extends Notifier<ChatState> {
               return;
             }
             appErrorLog.record(AppErrorSource.session, e, stack);
-            state = state.copyWith(
-              error: chatErrorText(e, action: appL10n.stateChatSyncInterrupted),
-              streamLost: true,
-              loading: false,
-            );
+            final message = chatErrorText(e, action: appL10n.stateChatSyncInterrupted);
+            state = state.copyWith(error: message, syncError: message, streamLost: true, loading: false);
           },
           onDone: () {
             if (!current()) return;
@@ -1187,6 +1193,7 @@ class ChatController extends Notifier<ChatState> {
       loading: false,
       loadingOlder: state.loadingOlder,
       error: freshSnapshot ? null : state.error,
+      syncError: freshSnapshot ? null : state.syncError,
       defaultModelSaveFailed: _defaultModelSaveFailed,
       notice: freshSnapshot ? null : state.notice,
       connection: _transcript.connectionState,
@@ -1889,6 +1896,7 @@ class ChatController extends Notifier<ChatState> {
         loading: state.loading,
         loadingOlder: state.loadingOlder,
         error: chatErrorText(e, action: appL10n.stateChatModelSwitchFailed),
+        syncError: state.syncError,
         defaultModelSaveFailed: _defaultModelSaveFailed,
         connection: state.connection,
         model: previous,

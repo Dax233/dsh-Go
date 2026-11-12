@@ -62,7 +62,7 @@ class IslandHost extends ChangeNotifier {
   Future<void> _loadDevice() async {
     _device = await platform.device();
     if (kDebugMode) debugPrint('[island] device: webView=${_device.webView ?? 'unknown'}');
-    notifyListeners();
+    notifyListenersIfLive();
   }
 
   List<LiveIsland> get _liveView => [

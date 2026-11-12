@@ -17923,6 +17923,9 @@ class L10nZh extends L10n {
   String get stateChatMissing => '这个对话已经不在了';
 
   @override
+  String get stateChatFormatUnsupported => '当前引擎无法读取此对话的日志格式，请导出诊断包排查';
+
+  @override
   String get stateEngineUnsupported => '当前引擎版本不支持';
 
   @override

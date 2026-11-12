@@ -190,6 +190,14 @@
         }
       }
     },
+    "session-format-error.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
+          "after": "8c9aa37cb3b8884d3da84c9d2e7216be3ea0e0aca91671b728d12e3c3220e8cb",
+          "before": "7c48bc2b02595c987149f0187239a2599eccbc73f876fe30c722495a8ad36523"
+        }
+      }
+    },
     "session-title-word-prefix.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-session-title/lib/index.js": {
