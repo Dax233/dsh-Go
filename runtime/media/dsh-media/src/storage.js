@@ -300,16 +300,9 @@ export async function prepareImageStore({
         const expected = join(dated, fileStem + '-' + (i + 1) + '.'
           + staged[i].path.split('.').at(-1));
         if (target !== expected) fail('invalid_request');
-        // Reserve the destination-directory temporary name exclusively. Move the
-        // already synced original into it without making a second media copy.
-        const output = await writeNew(join(dated, '.' + rid + '.' + randomUUID() + '.tmp'), Buffer.alloc(0),
-          signal, entry => published.push(entry));
-        await rename(staged[i].path, output.path);
-        output.identity = staged[i].identity;
-        staged[i].path = output.path;
         await requireAbsent(target);
-        await rename(output.path, target);
-        output.path = target;
+        await rename(staged[i].path, target);
+        published.push({ path: target, identity: staged[i].identity });
         await guard();
       }
       // Persist both the move out of staging and the published names before the index.
