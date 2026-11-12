@@ -222,6 +222,14 @@
         }
       }
     },
+    "session-queue-steer-deletion.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
+          "after": "3b24a3b02a80a859bc3cae31e081cee2a2e16d152d19f70bfd9fe4d981e0a790",
+          "before": "8c9aa37cb3b8884d3da84c9d2e7216be3ea0e0aca91671b728d12e3c3220e8cb"
+        }
+      }
+    },
     "session-title-word-prefix.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-session-title/lib/index.js": {
