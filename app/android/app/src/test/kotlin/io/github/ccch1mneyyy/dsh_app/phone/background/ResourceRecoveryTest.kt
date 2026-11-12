@@ -47,20 +47,41 @@ class ResourceRecoveryTest {
         assertNull(checkNotNull(ResourceRecovery.check(noId.keys, noId::get)).displayId)
     }
 
-    @Test fun unavailableNamespaceOnEitherSideNeverReadsPidDisplayOrTasks() {
+    @Test fun recordWithoutRecordedNamespaceFallsBackToMandatoryPhysicalAbsence() {
         val unavailable = current.copy(nsDev = 0L, nsIno = 0L, nsAvailable = false)
-        for (now in listOf(current, unavailable)) {
-            for (before in listOf(old(), old().copy(birth = unavailable.copy(pid = 99)))) {
-                if (now.nsAvailable && before.birth.nsAvailable) continue
-                failure("recoveryUnknown") {
-                    ResourceRecovery.verify(now, before, { error("namespace unknown: no PID query") },
-                        { error("no display query") }, { error("no task query") })
-                }
-            }
+        val before = old().copy(birth = unavailable.copy(pid = 99))
+        val calls = mutableListOf<String>()
+        val kind = ResourceRecovery.verify(unavailable, before,
+            { calls += "pid:$it"; true },
+            { calls += "displays"; listOf(ResourceRecovery.DisplayFact(0, "main", 1000, false)) },
+            { calls += "tasks:$it"; true })
+        assertEquals("deadPeerEmpty", kind)
+        assertEquals(listOf("pid:99", "displays", "tasks:12"), calls)
+    }
+
+    @Test fun recordWithNamespaceStillNeedsMatchingNamespaceOnBothSides() {
+        val unavailable = current.copy(nsDev = 0L, nsIno = 0L, nsAvailable = false)
+        failure("recoveryUnknown") {
+            ResourceRecovery.verify(unavailable, old(), { error("strict record: no PID query") },
+                { error("no display query") }, { error("no task query") })
         }
         failure("recoveryUnknown") {
             ResourceRecovery.verify(current.copy(nsIno = 0L), old(), { error("invalid namespace") },
                 { error("no display query") }, { error("no task query") })
+        }
+    }
+
+    @Test fun recordWithoutNamespaceStillRefusesALiveProcessOrSurvivingDisplay() {
+        val unavailable = current.copy(nsDev = 0L, nsIno = 0L, nsAvailable = false)
+        val before = old().copy(birth = unavailable.copy(pid = 99))
+        failure("recoveryUnknown") {
+            ResourceRecovery.verify(unavailable, before, { false },
+                { error("no display query") }, { error("no task query") })
+        }
+        failure("recoveryPresent") {
+            ResourceRecovery.verify(unavailable, before, { true },
+                { listOf(ResourceRecovery.DisplayFact(27, ResourceRecovery.tag(owner), 2000, true)) },
+                { error("no task query") })
         }
     }
 
