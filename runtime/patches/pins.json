@@ -1,5 +1,13 @@
 {
   "patches": {
+    "attachment-link-fallback.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "d530f581e816f0238f454388bcedb1541f98692286efbc3dbed7bd8b3e154d44",
+          "before": "d99fe87a115b5d4eda5858d67a463ebf1a01d87c3bda891b25590ee3f01d4f51"
+        }
+      }
+    },
     "cordis-effect-dispose-completion.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/cordis/lib/index.js": {
@@ -39,6 +47,14 @@
         "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
           "after": "ef9b20789c0575f5db1cbfbfe69062a8fbdbe3b7a65aca8b1b39aa54fcb5e9be",
           "before": "d6d3115d4584a236746929d654ede98a0bc365fa4247567ba110971657fd7f90"
+        }
+      }
+    },
+    "fs-create-link-denial.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "04fb3c9fe8a4a3eacdcf2b73fa72cb8d3fd9a10489c1e8c8fea68546fdf239fd",
+          "before": "d22c2ead8df5061e7f5b5633959152143e3bc871c42fff81d2ac14de07cbfb00"
         }
       }
     },
