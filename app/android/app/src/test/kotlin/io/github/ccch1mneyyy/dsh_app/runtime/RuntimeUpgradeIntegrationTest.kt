@@ -52,7 +52,7 @@ class RuntimeUpgradeIntegrationTest {
             base.deleteRecursively(); base.mkdirs()
             installed(layered); stage()
             // A legacy swap can be killed during retired-tree cleanup, after its ready marker.
-            val retired = write("rootfs.old/usr/bin/retired-tool", "retired user tool")
+            write("rootfs.old/usr/bin/retired-tool", "retired user tool")
             activate()
             assertEquals("user gh", File(base, "rootfs/usr/bin/gh").readText())
             assertEquals("user package database", File(base, "rootfs/var/lib/dpkg/status").readText())
@@ -61,7 +61,7 @@ class RuntimeUpgradeIntegrationTest {
             assertEquals("user work", File(base, "rootfs/root/workspace/project").readText())
             assertEquals("new engine", File(base, "rootfs/opt/dsh/version").readText())
             assertEquals("new", File(base, "rootfs.version").readText())
-            assertEquals("retired user tool", retired.readText())
+            assertFalse(File(base, "rootfs.old").exists())
             assertFalse(File(base, "staging").exists())
         }
     }

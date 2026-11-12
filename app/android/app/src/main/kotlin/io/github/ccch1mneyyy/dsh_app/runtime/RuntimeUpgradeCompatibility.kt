@@ -24,11 +24,12 @@ internal fun checkEngineCompatibility(baseDir: File, raw: JSONObject, version: S
     val previous = readRuntimeInfo(rootfs)
     if (File(baseDir, "rootfs.old").exists()) {
         // Legacy activation wrote this marker after restoring home and syncing data,
-        // before deleting rootfs.old. Keep that retired tree; upgrade only the engine.
+        // before deleting rootfs.old. A matching marker leaves only retired-tree cleanup.
         val committed = runCatching { File(baseDir, "rootfs.version").readText() }.getOrNull()
         if (committed.isNullOrEmpty() || committed != previous.optString("runtimeVersion")) {
             throw RuntimeUpgradeBlocked("legacy_interrupted")
         }
+        File(baseDir, "rootfs.old").deleteRecursivelySafely()
     }
     if (previous.optString("abi") != abi || shipped.optString("abi") != abi ||
         osIdentity(rootfs) != (base?.osRelease ?: osIdentity(staging))) throw RuntimeUpgradeBlocked("base")
