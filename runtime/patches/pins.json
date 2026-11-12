@@ -1,5 +1,13 @@
 {
   "patches": {
+    "attachment-direct-boundary.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "3c17ef1ee80f8e1c9dc9229df4dd680e63387af750a4d26c3d9d056841e2911d",
+          "before": "d530f581e816f0238f454388bcedb1541f98692286efbc3dbed7bd8b3e154d44"
+        }
+      }
+    },
     "attachment-link-fallback.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
