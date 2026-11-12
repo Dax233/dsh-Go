@@ -208,7 +208,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     /** [dropKept]: give up what a reset kept but cannot be put back (see [KeepFailed]). */
     @Synchronized fun install(dropKept: Boolean = false, onDone: (Throwable?) -> Unit) {
         if (phase == Phase.INSTALLING) return onDone(null)
-        if (installer.isCurrent() && phase != Phase.ERROR && !resetting) {
+        val current = runCatching { installer.isCurrent() }.getOrElse { return onDone(it) }
+        if (current && phase != Phase.ERROR && !resetting) {
             if (phase == Phase.NOT_INSTALLED) setPhase(Phase.INSTALLED)
             return onDone(null)
         }
