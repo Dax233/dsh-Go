@@ -58,12 +58,12 @@ elif name == 'tar':
             raise SystemExit(23)
     elif '-xJf' in args:
         program(dev / 'flutter/bin/flutter')
-        source = dev / 'flutter/packages/flutter_tools/gradle/src/main/FlutterExtension.kt'
-        source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text('val ndkVersion = "28.2.13676358"\nval compileSdkVersion = 36\n')
         if scenario == 'flutter-failure':
             print('fixture: Flutter extraction failed (23)', file=sys.stderr)
             raise SystemExit(23)
+        source = dev / 'flutter/packages/flutter_tools/gradle/src/main/FlutterExtension.kt'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('val ndkVersion = "28.2.13676358"\nval compileSdkVersion = 36\n')
     else: raise SystemExit(97)
 elif name == 'unzip':
     if Path(args[-1]).read_bytes() != b'local toolchain fixture, not an archive\n':
@@ -138,6 +138,33 @@ class SetupToolchainTest(unittest.TestCase):
         with self.fixture(scenario) as (root, script, env):
             return self.invoke(root, script, env)
 
+    def test_install_root_survives_working_directory_changes(self):
+        for kind in ("relative", "absolute", "default"):
+            with self.subTest(kind=kind), self.fixture("success") as (root, script, env):
+                program(root / "dev/jdk-17/bin/java")
+                dev = root / "dev"
+                if kind == "default":
+                    env.pop("DEV_ROOT")
+                    env["HOME"] = str(root)
+                else:
+                    dev = root / "dev tools"
+                    (root / "dev").rename(dev)
+                    env["DEV_ROOT"] = dev.name if kind == "relative" else str(dev)
+                result = self.invoke(root, script, env)
+                self.assertEqual(result["exit"], 0, result["stderr"])
+                app = root / "repo/app"
+                app.mkdir()
+                probe = subprocess.run(
+                    ["bash", "-e", "-c", 'source "$1"; cd "$2"; command -v java; '
+                     'command -v flutter; command -v sdkmanager; '
+                     'printf "%s\\n" "$JAVA_HOME" "$ANDROID_HOME" "$ANDROID_SDK_ROOT"',
+                     "probe", str(script.parent / "env.sh"), str(app)],
+                    cwd=root, env=dict(env, PATH=os.defpath), text=True, capture_output=True, timeout=10)
+                self.assertEqual(probe.returncode, 0, probe.stdout + probe.stderr)
+                self.assertEqual(probe.stdout.splitlines(), [str(dev / suffix) for suffix in (
+                    "jdk-17/bin/java", "flutter/bin/flutter", "android-sdk/cmdline-tools/latest/bin/sdkmanager",
+                    "jdk-17", "android-sdk", "android-sdk")])
+
     def assert_download_retry(self, target):
         with self.fixture("cache-" + target) as (root, script, env):
             cache = root / "dev/.downloads" / CACHE_NAMES[target]
@@ -161,6 +188,33 @@ class SetupToolchainTest(unittest.TestCase):
 
     def test_cmdline_partial_download_can_retry_without_manual_cache_removal(self):
         self.assert_download_retry("cmdline")
+
+    def test_failed_extraction_is_repeated_before_installation_can_be_reused(self):
+        for target, directory, flag in (("jdk", "jdk-17", "-xzf"), ("flutter", "flutter", "-xJf")):
+            with self.subTest(target=target), self.fixture(target + "-failure") as (root, script, env):
+                marker = root / "dev" / directory / ".dsh-toolchain-incomplete"
+                first = self.invoke(root, script, env)
+                self.assertEqual(first["exit"], 23, first["stderr"])
+                self.assertTrue(marker.is_file())
+                if target == "flutter":
+                    self.assertFalse((root / "dev/flutter/packages/flutter_tools/gradle/src/main/FlutterExtension.kt").exists())
+                env["TOOLCHAIN_TEST_SCENARIO"] = "success"
+                retry = self.invoke(root, script, env)
+                self.assertEqual(retry["exit"], 0, retry["stderr"])
+                self.assertEqual(sum(c["command"] == "tar" and flag in c["args"] for c in retry["calls"]), 1)
+                self.assertFalse(marker.exists())
+                repeated = self.invoke(root, script, env)
+                self.assertEqual(repeated["exit"], 0, repeated["stderr"])
+                self.assertFalse(any(c["command"] in ("curl", "tar") for c in repeated["calls"]))
+
+    def test_existing_installations_without_markers_are_reused_without_download(self):
+        with self.fixture("success") as (root, script, env):
+            program(root / "dev/jdk-17/bin/java")
+            result = self.invoke(root, script, env)
+            self.assertEqual(result["exit"], 0, result["stderr"])
+            self.assertFalse(any(c["command"] in ("curl", "tar") for c in result["calls"]))
+            for directory in ("jdk-17", "flutter"):
+                self.assertFalse((root / "dev" / directory / ".dsh-toolchain-incomplete").exists())
 
     def test_existing_complete_caches_are_reused_without_download(self):
         for target, name in CACHE_NAMES.items():
@@ -236,6 +290,27 @@ class SetupToolchainTest(unittest.TestCase):
         self.assertNotIn("done; source tooling/env.sh", result["stdout"])
         self.assertFalse(any(c["command"] in ("sdkmanager", "flutter") for c in result["calls"]))
         return result
+
+    def test_flutter_defaults_use_the_declaration_file_in_either_creation_order(self):
+        sources = {
+            "AgpCommonExtensionWrapper.kt": "    var ndkVersion: String\n",
+            "FlutterExtension.kt": '    val compileSdkVersion: Int = 36\n    val ndkVersion: String = "28.2.13676358"\n',
+        }
+        for order in (tuple(sources), tuple(reversed(sources))):
+            with self.subTest(order=order), self.fixture("success") as (root, script, env):
+                main = root / "dev/flutter/packages/flutter_tools/gradle/src/main"
+                (main / "FlutterExtension.kt").unlink()
+                kotlin = main / "kotlin"
+                kotlin.mkdir()
+                for name in order:
+                    (kotlin / name).write_text(sources[name])
+                result = self.invoke(root, script, env)
+                self.assertEqual(result["exit"], 0, result["stderr"])
+                self.assertIn("Flutter defaults: compileSdk=36 ndk=28.2.13676358", result["stdout"])
+                packages = next(c["args"] for c in result["calls"]
+                                if c["command"] == "sdkmanager" and "--licenses" not in c["args"])
+                self.assertIn("platforms;android-36", packages)
+                self.assertIn("ndk;28.2.13676358", packages)
 
     def test_success_still_configures_and_writes_environment(self):
         result = self.run_script("success")

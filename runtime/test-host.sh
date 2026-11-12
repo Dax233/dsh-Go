@@ -15,7 +15,7 @@
 #   DIRECT_ONLY=1 DIRECT_ROOTFS=/disposable/rootfs DIRECT_MANIFEST=/fixture/manifest.json \
 #     DIRECT_PROOT=/path/to/pinned-source-proot KOTLINC=kotlinc runtime/test-host.sh
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABI=x86_64
 PORT="${1:-38080}"
 NETWORK="${NETWORK:-1}"
@@ -71,6 +71,7 @@ run() {  # run [extra bwrap args...] -- argv...
 pass() { printf '  \033[32mPASS\033[0m %s\n' "$*"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$*"; FAILED=1; }
 FAILED=0
+trap 'kill $(jobs -pr) 2>/dev/null || true; wait' EXIT
 
 echo "== versions"
 run -- "${GUEST[@]:0:${#GUEST[@]}-3}" /bin/bash -c 'set -eo pipefail; node --version; npm --version; dsh --version 2>&1 | sed -n "1,3p"; head -2 /etc/os-release' || fail versions

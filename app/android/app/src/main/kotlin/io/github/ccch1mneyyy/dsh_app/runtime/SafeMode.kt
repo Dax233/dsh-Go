@@ -627,6 +627,8 @@ function withLock (file, fn) {
       fs.writeFileSync(lock, process.pid + '\n', { flag: 'wx', mode: 0o600 })
       break
     } catch (e) {
+      // write/close errors follow our exclusive create; an open error owns no lock.
+      if (e.syscall === 'write' || e.syscall === 'close') fs.rmSync(lock, { force: true })
       if (e.code !== 'EEXIST') throw e
       const pid = parseInt(String(readText(lock) || '').trim(), 10)
       if (pid > 0 && !alive(pid)) {

@@ -55,6 +55,8 @@ test('Ark query error exemption stays within the matching failed receipt and kee
     ['top-level code', { ...failed, code: 'QueryFailure' }, 200, 'provider'],
     ['nested policy', { ...failed, error: { code: 'DataInspectionFailed' } }, 200, 'policy'],
     ['Ark output policy', { ...failed, error: { code: 'OutputVideoSensitiveContentDetected' } }, 200, 'policy'],
+    ['Ark input text policy', { ...failed, error: { code: 'InputTextSensitiveContentDetected' } }, 200, 'policy'],
+    ['Ark input image policy', { ...failed, error: { code: 'InputImageSensitiveContentDetected' } }, 200, 'policy'],
     ['top-level policy', { ...failed, code: 'content_policy_violation' }, 200, 'policy'],
     ['policy before generic HTTP failure', { ...failed, error: { code: 'DataInspectionFailed' } }, 503, 'policy'],
   ]) {
@@ -66,6 +68,21 @@ test('Ark query error exemption stays within the matching failed receipt and kee
   const other = { ...request, service: { profile: 'ali-video', baseUrl: 'https://dashscope.aliyuncs.com' } };
   await assert.rejects(f.client.query(other, id, 'synthetic-credential'), { code: 'provider' });
   assert.deepEqual(f.calls, [{ method: 'GET', path: '/api/v1/tasks/' + id }]);
+});
+
+test('Ark HTTP 400 creation moderation errors remain definite policy failures', async () => {
+  for (const [profile, codes] of [
+    ['ark-video', ['InputTextSensitiveContentDetected', 'InputImageSensitiveContentDetected']],
+    ['ark-image', ['InputTextSensitiveContentDetected', 'InputImageSensitiveContentDetected', 'OutputImageSensitiveContentDetected']],
+  ]) {
+    const selected = { ...request, service: { ...request.service, profile },
+      model: CATALOG.models.find(model => model.profile === profile) };
+    for (const code of codes) {
+      const f = fixture(response({ error: { code, message: 'synthetic private detail' } }, 400));
+      await assert.rejects(f.client.create(selected, [], 'synthetic-credential'), { code: 'policy' }, code);
+      assert.deepEqual(f.calls, [{ method: 'POST', path: CATALOG.profiles[profile].path }]);
+    }
+  }
 });
 
 test('public options cannot enable a task-query error exemption on create', async () => {

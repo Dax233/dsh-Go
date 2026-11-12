@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, createConnection } from 'node:net';
 import { EventEmitter, once } from 'node:events';
-import { WsConnection } from '../bridge/dsh-go-bridge/lib/native/ws.js';
+import { WsConnection, encodeFrame } from '../bridge/dsh-go-bridge/lib/native/ws.js';
 
 function timers(t) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -19,7 +19,7 @@ function timers(t) {
   return { active, scheduled: () => scheduled };
 }
 
-test('ws close retires the destroy deadline after a real TCP close', async t => {
+for (const initiator of ['server', 'client']) test(`ws ${initiator} close retires the destroy deadline after a real TCP close`, async t => {
   const tracked = timers(t);
   const server = createServer();
   const sockets = [];
@@ -37,7 +37,8 @@ test('ws close retires the destroy deadline after a real TCP close', async t => 
   sockets.push(socket);
   const ws = new WsConnection(socket, Buffer.alloc(0), 4096);
   const closed = once(socket, 'close');
-  ws.close();
+  if (initiator === 'server') ws.close();
+  else client.write(encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
   await closed;
   assert.equal(ws.closed, true);
   assert.equal(socket.destroyed, true);
@@ -49,7 +50,7 @@ test('ws close retires the destroy deadline after a real TCP close', async t => 
   assert.equal(tracked.active.size, 0);
 });
 
-test('ws logical close retains its deadline until the socket actually closes', t => {
+for (const initiator of ['server', 'client']) test(`ws ${initiator} logical close retains its deadline until the socket actually closes`, t => {
   const tracked = timers(t);
   const socket = new EventEmitter();
   socket.write = () => {};
@@ -57,7 +58,8 @@ test('ws logical close retains its deadline until the socket actually closes', t
   let destroyed = 0;
   socket.destroy = () => { destroyed++; socket.emit('close'); };
   const ws = new WsConnection(socket, Buffer.alloc(0), 4096);
-  ws.close();
+  if (initiator === 'server') ws.close();
+  else socket.emit('data', encodeFrame(0x8, Buffer.from([0x03, 0xe8]), { mask: true }));
   assert.equal(ws.closed, true);
   assert.equal(tracked.active.size, 1);
   t.mock.timers.tick(999);

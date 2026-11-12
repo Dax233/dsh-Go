@@ -179,6 +179,8 @@ export class WsConnection extends EventEmitter {
         if (!this.closed) {
           try { this.#socket.write(encodeFrame(0x8, payload.subarray(0, 2))); } catch {}
           this.#socket.end();
+          this.#closeTimer = setTimeout(() => this.#socket.destroy(), 1000);
+          this.#closeTimer.unref?.();
         }
         this.#finish(code);
         return;

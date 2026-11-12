@@ -2,6 +2,7 @@ package io.github.ccch1mneyyy.dsh_app.update.privileged
 
 import android.content.Context
 import android.os.Process
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
@@ -213,8 +214,13 @@ class PrivilegedSelfUpdater(context: Context) {
         }
     }
 
-    private fun stable(error: Exception): SelfUpdateException =
-        if (error is SelfUpdateException) error else SelfUpdateException("unavailable")
+    private fun stable(error: Exception): SelfUpdateException = when {
+        error is SelfUpdateException -> error
+        // Os.open throws errno directly; FileOutputStream.write wraps it in IOException.
+        (error as? ErrnoException ?: error.cause as? ErrnoException)?.errno == OsConstants.ENOSPC ->
+            SelfUpdateException("storage")
+        else -> SelfUpdateException("unavailable")
+    }
 
     private companion object {
         val globalGuard = Any()

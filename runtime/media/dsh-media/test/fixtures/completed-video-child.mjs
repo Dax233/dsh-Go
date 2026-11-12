@@ -6,9 +6,10 @@
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
-import {mkdtemp, mkdir, readFile, writeFile, readdir, realpath, rm} from 'node:fs/promises';
+import fs, {mkdtemp, mkdir, readFile, writeFile, readdir, realpath, rm} from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {join, resolve, basename, sep} from 'node:path';
 import {CATALOG, HARD_LIMITS} from '../../src/config.js';
 import {createMediaClient} from '../../src/adapters.js';
 import {createStreamStager} from '../../src/stream-staging.js';
@@ -22,6 +23,24 @@ const workspace = join(root, 'workspace');
 await mkdir(workspace);
 const home = join(root, 'host-home');
 const hostStateDir = join(home, 'media', 'dsh-media');
+const originalOpen = fs.open, originalLink = fs.link;
+let indexWriteFailures = 0, stageLinkFailures = 0;
+if (scenario === 'index-storage-failure') {
+  fs.open = async function (path, ...args) {
+    const handle = await originalOpen.call(this, path, ...args);
+    if (String(path).startsWith(join(hostStateDir, 'works') + sep) && String(path).endsWith('.tmp')) {
+      const write = handle.writeFile.bind(handle);
+      handle.writeFile = async bytes => {
+        await write(bytes.subarray(0, 5));
+        assert.equal((await handle.stat()).size, 5);
+        indexWriteFailures++;
+        throw Object.assign(new Error('controlled index write ENOSPC'), {code: 'ENOSPC'});
+      };
+    }
+    return handle;
+  };
+  syncBuiltinESMExports();
+}
 let xfszSignals = 0;
 process.on('SIGXFSZ', () => {xfszSignals++;});
 const original = Buffer.from((await readFile(new URL('./video.base64', import.meta.url), 'utf8')).trim(), 'base64');
@@ -31,6 +50,17 @@ const padding = Buffer.alloc(65536);
 padding.writeUInt32BE(padding.length, 0);
 padding.write('free', 4, 'ascii');
 const payload = Buffer.concat([original, padding]);
+if (scenario === 'stage-link-storage-failure') {
+  fs.link = async function(source, destination) {
+    if (destination.startsWith(join(workspace, 'generated') + sep) && basename(destination) === '1.mp4') {
+      assert.equal((await fs.stat(source)).size, payload.length);
+      stageLinkFailures++;
+      throw Object.assign(new Error('Synthetic stage directory ENOSPC'), {code: 'ENOSPC'});
+    }
+    return originalLink.call(this, source, destination);
+  };
+  syncBuiltinESMExports();
+}
 let downloadRequests = 0;
 const sockets = new Set();
 const server = createServer((_req, response) => {
@@ -160,7 +190,7 @@ try {
   }
   if (result.meta.status === 'done') assert.equal(filesMatch, true);
   record = {scenario, pid: process.pid, uid: process.getuid?.(),
-    payloadBytes: payload.length, xfszSignals, providerWires, downloadRequests,
+    payloadBytes: payload.length, xfszSignals, providerWires, downloadRequests, indexWriteFailures, stageLinkFailures,
     progress, stageError, stageSignalAborted, wholeDeadlineAborted: wholeDeadline.signal.aborted,
     wholeDeadlineReason: wholeDeadline.signal.reason?.name, outcome, result,
     ledger: {state: saved.state, providerTaskId: saved.providerTaskId,
@@ -171,6 +201,8 @@ try {
     limits: 'provider receipts/services/job registry modeled; no real provider or Host; whole deadline uses a 10ms native AbortSignal.timeout, not the production 30 minute elapsed duration',
   };
 } finally {
+  fs.open = originalOpen; fs.link = originalLink;
+  syncBuiltinESMExports();
   await installed?.dispose();
   for (const socket of sockets) socket.destroy();
   await new Promise(resolve => server.close(resolve));

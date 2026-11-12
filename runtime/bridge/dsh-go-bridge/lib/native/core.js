@@ -131,9 +131,15 @@ export class NativeCore {
     const stamp = `${st.mtimeMs}:${st.size}`;
     const cached = this.manifests.get(loc.pkgJsonPath);
     if (cached?.stamp === stamp) return cached;
+    let text;
+    try {
+      text = readFileSync(loc.pkgJsonPath, "utf8");
+    } catch {
+      return undefined;
+    }
     let parsed = null;
     try {
-      const pkgJson = JSON.parse(readFileSync(loc.pkgJsonPath, "utf8"));
+      const pkgJson = JSON.parse(text);
       if (isPlainObject(pkgJson) && pkgJson.dshGo !== undefined) parsed = parseManifest(pkgJson, loc.dir);
     } catch {
       parsed = null;

@@ -197,6 +197,9 @@ def store_stream(source, obj, store):
                 output.write(chunk)
                 digest.update(chunk)
             if digest.hexdigest() != obj["digest"]:
+                # Bounded HTTP reads can reach EOF without raising IncompleteRead.
+                if isinstance(source, http.client.HTTPResponse) and source.length:
+                    raise TransportError("input read failed: incomplete HTTP body")
                 raise InputError("checksum mismatch: " + obj["key"])
             if obj["size"] is not None and size != obj["size"]:
                 raise InputError("size mismatch: " + obj["key"])

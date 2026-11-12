@@ -3,8 +3,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import fs, { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { Duplex } from "node:stream";
 
@@ -301,6 +302,42 @@ test("core: scan, cache invalidation by toggle and package.json edit", async () 
   await new Promise((r) => setTimeout(r, 400));
   assert.ok(changed >= 1, "changed was broadcast");
   core.dispose();
+});
+
+test("core: manifest read failures recover while malformed content stays cached", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000000 });
+  const a = pkgDir("manifest-retry", { v: 1, title: "Initial", contributes: {} });
+  const core = new NativeCore(fakeHost([a]).ctx, LIMITS, "test");
+  const path = join(a.dir, "package.json");
+  assert.equal(core.contributions(CAPS).plugins[0].title, "Initial");
+  const original = fs.readFileSync;
+  let reads = 0, fail = false;
+  const spy = t.mock.method(fs, "readFileSync", (file, ...args) => {
+    if (file === path) {
+      reads++;
+      if (fail) throw Object.assign(new Error("descriptor limit"), { code: "EMFILE" });
+    }
+    return original(file, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { spy.mock.restore(); syncBuiltinESMExports(); core.dispose(); });
+
+  writeFileSync(path, "{");
+  t.mock.timers.tick(2000);
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  t.mock.timers.tick(2000);
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  assert.equal(reads, 1, "malformed JSON keeps its negative cache at the same stamp");
+
+  writeFileSync(path, JSON.stringify({ ...a.pkg, dshGo: { ...a.pkg.dshGo, title: "Recovered" } }));
+  fail = true;
+  t.mock.timers.tick(2000);
+  assert.equal(core.contributions(CAPS).plugins.length, 0);
+  assert.equal(reads, 2);
+  fail = false;
+  t.mock.timers.tick(2000);
+  assert.equal(core.contributions(CAPS).plugins[0]?.title, "Recovered", "I/O recovery needs no further edit or markDirty");
+  assert.equal(reads, 3);
 });
 
 test("core: service attribution, registration lifecycle, undeclared", () => {

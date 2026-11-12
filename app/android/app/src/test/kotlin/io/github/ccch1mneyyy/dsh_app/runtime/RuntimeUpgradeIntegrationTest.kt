@@ -50,7 +50,10 @@ class RuntimeUpgradeIntegrationTest {
     @Test fun productionRouteKeepsTheEntireUserSystemForLegacyAndLayeredUpgrades() {
         for (layered in listOf(false, true)) {
             base.deleteRecursively(); base.mkdirs()
-            installed(layered); stage(); activate()
+            installed(layered); stage()
+            // A legacy swap can be killed during retired-tree cleanup, after its ready marker.
+            val retired = write("rootfs.old/usr/bin/retired-tool", "retired user tool")
+            activate()
             assertEquals("user gh", File(base, "rootfs/usr/bin/gh").readText())
             assertEquals("user package database", File(base, "rootfs/var/lib/dpkg/status").readText())
             assertEquals("user npm package", File(base, "rootfs/usr/local/lib/node_modules/user/index.js").readText())
@@ -58,7 +61,37 @@ class RuntimeUpgradeIntegrationTest {
             assertEquals("user work", File(base, "rootfs/root/workspace/project").readText())
             assertEquals("new engine", File(base, "rootfs/opt/dsh/version").readText())
             assertEquals("new", File(base, "rootfs.version").readText())
+            assertEquals("retired user tool", retired.readText())
             assertFalse(File(base, "staging").exists())
+        }
+    }
+
+    @Test fun incompleteLegacySwapStillBlocksBeforeChangingAnyTree() {
+        for (state in listOf("missing-marker", "empty-marker", "torn-marker", "different-marker", "carry", "missing-root")) {
+            base.deleteRecursively(); base.mkdirs()
+            installed(false); stage()
+            val retired = write("rootfs.old/usr/bin/retired-tool", "retired user tool")
+            val marker = File(base, "rootfs.version")
+            when (state) {
+                "missing-marker" -> assertTrue(marker.delete())
+                "empty-marker" -> marker.writeText("")
+                "torn-marker" -> marker.writeText("ol")
+                "different-marker" -> marker.writeText("older")
+                "carry" -> write("home.carry/workspace/project", "carried user work")
+                "missing-root" -> assertTrue(File(base, "rootfs").deleteRecursively())
+            }
+            val before = if (marker.exists()) marker.readText() else null
+            val error = assertThrows(RuntimeUpgradeBlocked::class.java) { activate() }
+            assertEquals(state, "runtime_upgrade_blocked:legacy_interrupted", error.message)
+            assertEquals(state, before, if (marker.exists()) marker.readText() else null)
+            assertEquals("retired user tool", retired.readText())
+            assertTrue(File(base, "staging/opt/dsh/version").isFile)
+            assertFalse(File(base, "engine.upgrade").exists())
+            if (state == "missing-root") assertFalse(File(base, "rootfs").exists())
+            else assertEquals("user work", File(base, "rootfs/root/workspace/project").readText())
+            if (state == "carry") {
+                assertEquals("carried user work", File(base, "home.carry/workspace/project").readText())
+            }
         }
     }
 

@@ -114,7 +114,7 @@ export function createStreamStager({ allowLoopback = false, lookup = dnsLookup }
       const selected = addresses[0];
       await guardDirectory();
       path = join(directory, '.media-download-' + randomUUID() + '.part');
-      handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+      handle = await storageOperation(open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600));
       created = true;
       identity = await handle.stat({ bigint: true });
       await guardFile();

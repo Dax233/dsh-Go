@@ -30,7 +30,7 @@
 # `npm ci` afterwards; pnpm's tarball integrity is additionally pinned below).
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE="$HERE/.cache"
 WORK="$HERE/.work"
 OUT="${RUNTIME_OUT:-$HERE/out}"   # the app build reads runtime/out; RUNTIME_OUT stages a build elsewhere

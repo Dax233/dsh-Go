@@ -169,9 +169,6 @@ internal fun activateRuntimeUpdate(
     onLog: (String) -> Unit = {},
 ) {
     val rootfs = File(base, "rootfs")
-    if (File(base, "home.carry").exists() || File(base, "rootfs.old").exists()) {
-        throw RuntimeUpgradeBlocked("legacy_interrupted")
-    }
     if (Files.exists(rootfs.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         val spec = checkEngineCompatibility(base, raw, version, abi)
         // Finish an interrupted first install before the engine journal can mark it ready.
@@ -180,6 +177,9 @@ internal fun activateRuntimeUpdate(
         EngineUpgrade(base, sync).activate(version, spec)
         File(base, "staging").deleteRecursivelySafely()
     } else {
+        if (File(base, "home.carry").exists() || File(base, "rootfs.old").exists()) {
+            throw RuntimeUpgradeBlocked("legacy_interrupted")
+        }
         // Only first install (or an explicit user-confirmed reset) may activate
         // an entire rootfs. Never use this as an incompatible-upgrade fallback.
         if (raw.optInt("schema", 1) == 2) {

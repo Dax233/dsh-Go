@@ -8,8 +8,9 @@ import org.json.JSONObject
 internal fun checkEngineCompatibility(baseDir: File, raw: JSONObject, version: String, abi: String): EngineUpgradeSpec {
     val rootfs = File(baseDir, "rootfs")
     val staging = File(baseDir, "staging")
-    if (Files.isSymbolicLink(rootfs.toPath()) || File(baseDir, "home.carry").exists() ||
-        File(baseDir, "rootfs.old").exists()) throw RuntimeUpgradeBlocked("legacy_interrupted")
+    if (Files.isSymbolicLink(rootfs.toPath()) || File(baseDir, "home.carry").exists()) {
+        throw RuntimeUpgradeBlocked("legacy_interrupted")
+    }
     val next = parseUpgrade(raw)
     val shipped = readRuntimeInfo(staging)
     if (parseUpgrade(shipped) != next || shipped.optString("runtimeVersion") != version) {
@@ -21,6 +22,14 @@ internal fun checkEngineCompatibility(baseDir: File, raw: JSONObject, version: S
         }
     } else null
     val previous = readRuntimeInfo(rootfs)
+    if (File(baseDir, "rootfs.old").exists()) {
+        // Legacy activation wrote this marker after restoring home and syncing data,
+        // before deleting rootfs.old. Keep that retired tree; upgrade only the engine.
+        val committed = runCatching { File(baseDir, "rootfs.version").readText() }.getOrNull()
+        if (committed.isNullOrEmpty() || committed != previous.optString("runtimeVersion")) {
+            throw RuntimeUpgradeBlocked("legacy_interrupted")
+        }
+    }
     if (previous.optString("abi") != abi || shipped.optString("abi") != abi ||
         osIdentity(rootfs) != (base?.osRelease ?: osIdentity(staging))) throw RuntimeUpgradeBlocked("base")
     if (previous.has("upgrade")) {
