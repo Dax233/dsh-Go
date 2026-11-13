@@ -10,6 +10,11 @@
 > project; this fork is **not affiliated with it** and does not speak for it.
 > The code stays AGPL-3.0; provenance, copyright and third-party notices are in
 > [NOTICE](NOTICE).
+> 
+> **This fork contains no roleplay/tavern feature.** It is a work tool for a personal
+> agent, not an entertainment client, and it ships with usage reporting and automatic
+> update checks turned off.
+
 
 <p align="center">
   <picture>

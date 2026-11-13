@@ -18,3 +18,12 @@ Changes in this fork (保持与原仓库相同的 AGPL-3.0 许可):
 
 Upstream remains the body of this project; this fork only adapts it to InstaBox and
 keeps the changes above.
+
+Deliberately excluded from this fork:
+
+- Upstream's roleplay / tavern ("酒馆") feature set and its runtime pieces.
+  This build is a work tool for a personal agent; the character-card roleplay
+  client is not part of it and will not be merged, so no tavern code, assets,
+  runtime launcher or mode appears here.
+- Usage reporting: UsageBuild.active is false, so nothing is counted or sent.
+- Automatic update checks: updating stays a manual action under Settings.
