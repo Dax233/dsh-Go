@@ -1102,6 +1102,15 @@ class L10nEn extends L10n {
   String get activitySlashEnterArgs => 'Enter arguments, then send';
 
   @override
+  String get activitySlashRunIntent => 'Command · Run';
+
+  @override
+  String get activitySlashInsertIntent => 'Command · Insert';
+
+  @override
+  String get activitySlashSkillIntent => 'Skill · Insert';
+
+  @override
   String get activityStepTitle => 'Step details';
 
   @override
@@ -2959,6 +2968,51 @@ class L10nEn extends L10n {
   String get botsPetAlways => 'Always';
 
   @override
+  String get botsPetOverlayShows => 'Show in the floating window';
+
+  @override
+  String get botsPetOverlayPixel => 'Pixel pet';
+
+  @override
+  String get botsPetOverlayCompanion => 'Room companion';
+
+  @override
+  String botsPetOverlayCompanionNamed(String name) {
+    return '$name from the Room';
+  }
+
+  @override
+  String get botsPetOverlayNoPack => 'Invite a character in the Companion Room first';
+
+  @override
+  String get botsPetOverlayPackBroken => 'The character pack is incomplete. Import it again in the Companion Room';
+
+  @override
+  String get botsPetOverlayUnavailable => 'This phone can\'t show your companion right now';
+
+  @override
+  String get botsPetOverlayCompanionHint =>
+      'Tap to play with her, tap twice to open the chat. Uses more battery than the pixel pet. It stops when the screen is off or the window is hidden';
+
+  @override
+  String get botsPetOverlayLoading => 'Bringing your companion out…';
+
+  @override
+  String get botsPetOverlayFallback => 'Your companion couldn\'t come out. The pixel pet is filling in';
+
+  @override
+  String get botsPetOverlayFraming => 'Framing';
+
+  @override
+  String get botsPetOverlayFramingFull => 'Full body';
+
+  @override
+  String get botsPetOverlayFramingHalf => 'Half body';
+
+  @override
+  String get botsPetOverlayFramingHint => 'Changing the framing reloads the character';
+
+  @override
   String get botsPetSwitchDisabled => 'Switch disabled';
 
   @override
@@ -3941,6 +3995,15 @@ class L10nEn extends L10n {
   String get chatAnswerHint => 'Type your answer…';
 
   @override
+  String get chatAnswerMode => 'Send text as an answer';
+
+  @override
+  String get chatMessageMode => 'Send a new message';
+
+  @override
+  String get chatQuestionAnswered => 'Answered';
+
+  @override
   String get chatStarting => 'Starting';
 
   @override
@@ -4792,6 +4855,43 @@ class L10nEn extends L10n {
   String get chatNoDetails => 'No details yet';
 
   @override
+  String chatOutputHiddenLines(int count, String shown) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$shown lines hidden',
+      one: '1 line hidden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatOutputHiddenChars(String count) {
+    return '$count characters hidden';
+  }
+
+  @override
+  String chatOutputSummary(int count, String lines, String chars) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$lines lines', one: '1 line');
+    return '$_temp0 · $chars characters';
+  }
+
+  @override
+  String get chatOutputViewAll => 'View all';
+
+  @override
+  String get chatOutputCopyAll => 'Copy all';
+
+  @override
+  String get chatOutputCopied => 'Copied the full text';
+
+  @override
+  String get chatOutputToEnd => 'Jump to end';
+
+  @override
+  String get chatOutputToStart => 'Back to top';
+
+  @override
   String get chatErrApiKey => 'API key is invalid or expired';
 
   @override
@@ -4804,7 +4904,7 @@ class L10nEn extends L10n {
   String get chatErrRateLimit => 'Too many requests. Try again later.';
 
   @override
-  String get chatErrContextLength => 'Chat too long. Send /compact, then try again.';
+  String get chatErrContextLength => 'Chat too long. If /compact fails, try a new chat or model.';
 
   @override
   String get chatErrModelUnavailable => 'Model service temporarily unavailable';
@@ -5235,6 +5335,10 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get companionFailedBodyPlain =>
+      'Your companion didn\'t load just now. Try again first; if that doesn\'t help, import the asset pack again.';
+
+  @override
   String get companionPackBroken => 'This file can\'t be opened. It may not be an asset pack, or it may be damaged.';
 
   @override
@@ -5342,6 +5446,15 @@ class L10nEn extends L10n {
 
   @override
   String get companionTease3 => 'Don\'t you have anything better to do?';
+
+  @override
+  String get companionShake1 => 'Whoa, stop shaking!';
+
+  @override
+  String get companionShake2 => 'I\'m so dizzy… the water\'s sloshing everywhere.';
+
+  @override
+  String get companionShake3 => 'Keep that up and I\'ll start blowing bubbles!';
 
   @override
   String get companionStatusIdle => 'Daydreaming';
@@ -6353,6 +6466,9 @@ class L10nEn extends L10n {
   String get engineGeneralWebSending => 'Web sending';
 
   @override
+  String get engineGeneralWebOnlyHint => 'These settings only affect this host’s web app, not native chat.';
+
+  @override
   String get engineGeneralData => 'Data';
 
   @override
@@ -6760,6 +6876,39 @@ class L10nEn extends L10n {
 
   @override
   String get engineProviderConnection => 'Connection';
+
+  @override
+  String get engineProviderHeaders => 'Request headers (optional)';
+
+  @override
+  String get engineProviderHeadersWarning =>
+      'Headers are stored as plain text and are not redacted from logs. Use API Key or a credential reference for sensitive credentials.';
+
+  @override
+  String get engineProviderHeaderName => 'Name';
+
+  @override
+  String get engineProviderHeaderValue => 'Value';
+
+  @override
+  String get engineProviderHeaderAdd => 'Add header';
+
+  @override
+  String get engineProviderHeaderInvalidName =>
+      'Use letters, digits or HTTP token symbols in header names; no spaces or colons';
+
+  @override
+  String get engineProviderHeaderReserved => 'User-Agent is set by the engine; remove this header';
+
+  @override
+  String get engineProviderHeaderLocked => 'Managed by the engine; the existing setting is preserved';
+
+  @override
+  String get engineProviderHeaderDuplicate => 'Header names must be unique (case-insensitive)';
+
+  @override
+  String get engineProviderHeaderInvalidValue =>
+      'Use single-line Latin-1 values without control characters (tabs are allowed)';
 
   @override
   String get engineProviderDefaultUrl => 'Default URL';
@@ -13006,6 +13155,24 @@ class L10nEn extends L10n {
   String get plugInputGestureRequired => 'This effect requires a user tap';
 
   @override
+  String get seamsTitle => 'In-app interface';
+
+  @override
+  String get seamsOverlay => 'Chat overlay';
+
+  @override
+  String get seamsOverlayNote => 'Stays over the chat and yields when memory is tight';
+
+  @override
+  String get seamsSidebarPage => 'Sidebar entry';
+
+  @override
+  String get seamsSettingsPage => 'Plugin settings page';
+
+  @override
+  String get seamsDetailPage => 'Plugin detail extension';
+
+  @override
   String get pluginsOperationHostChanged => 'Host changed — nothing was done';
 
   @override
@@ -14739,6 +14906,61 @@ class L10nEn extends L10n {
   String get readListFailed => 'Not updated · previous results';
 
   @override
+  String get remoteDshMode => 'Instance management';
+
+  @override
+  String get remoteManaged => 'Managed';
+
+  @override
+  String get remoteAttachOnly => 'Attach only';
+
+  @override
+  String get remoteManagedHelp =>
+      'Start or reuse app-managed DSH. A live instance that cannot be reused is never replaced automatically.';
+
+  @override
+  String get remoteAttachOnlyHelp =>
+      'Forward only to a fixed port on remote 127.0.0.1. Never start, stop or restart DSH.';
+
+  @override
+  String get remoteDshPort => 'Remote DSH port';
+
+  @override
+  String get remoteDshToken => 'DSH launch token';
+
+  @override
+  String get remoteDshTokenHelp =>
+      'Enter the token from the existing instance’s launch URL. It stays in secure storage on this phone.';
+
+  @override
+  String get remoteAttachWorkingDirectoryHelp =>
+      'Existing instances are not probed for a home directory. Use a remote absolute path, or leave empty for DSH’s default.';
+
+  @override
+  String get remoteSshCompression => 'SSH compression';
+
+  @override
+  String get remoteSshCompressionHelp =>
+      'On by default. Negotiate compression after authentication; use uncompressed transport if unsupported.';
+
+  @override
+  String get remoteRestartManaged => 'Restart managed DSH';
+
+  @override
+  String get remoteRestartManagedWarning =>
+      'This stops the remote DSH recorded by the app and starts it again. Other clients and active chats may be interrupted. Continue only after checking nobody else is using it. Normal connection tests never do this.';
+
+  @override
+  String get remoteErrSharedInstance =>
+      'Remote managed DSH is still running, but its start command differs or its launch log is missing. To protect shared use, it was not restarted. Check the settings, use Attach only, or explicitly choose Restart managed DSH in Edit host.';
+
+  @override
+  String get remoteErrAttachSettings => 'Enter a valid remote DSH port and launch token';
+
+  @override
+  String get remoteDshAttached => 'Connected to existing DSH';
+
+  @override
   String get remoteStartupSection => 'On launch';
 
   @override
@@ -14909,7 +15131,8 @@ class L10nEn extends L10n {
   String get remoteDshStarted => 'Started DSH on the host';
 
   @override
-  String get remoteErrDshTokenRejected => 'Remote DSH rejected the sign-in token';
+  String get remoteErrDshTokenRejected =>
+      'Remote DSH rejected the token; it was not restarted. Check the token, or explicitly restart the managed instance in Edit host.';
 
   @override
   String get remoteErrDshSignIn => 'Couldn’t sign in to remote DSH';
@@ -15541,7 +15764,11 @@ class L10nEn extends L10n {
   String get remoteSelfHostedServer => 'Self-hosted server';
 
   @override
-  String get remoteSelfHostedSignInHelp => 'Sign in to your own liguobao/ds-harness-remote with email and password';
+  String get remoteSelfHostedSignInHelp =>
+      'Enter your server address. Sign in with email and password, or use this server to choose another sign-in method.';
+
+  @override
+  String get remoteUseServer => 'Use this server';
 
   @override
   String get remoteServerAddress => 'Server address';
@@ -16803,6 +17030,12 @@ class L10nEn extends L10n {
   String get searchKwPetDisplayWhen => 'pet display,when to show';
 
   @override
+  String get searchKwPetOverlayShows => 'floating companion,room companion,pixel pet,live2d';
+
+  @override
+  String get searchKwPetOverlayFraming => 'framing,full body,half body';
+
+  @override
   String get searchKwBlur => 'blur,glass,frosted';
 
   @override
@@ -17089,7 +17322,7 @@ class L10nEn extends L10n {
 
   @override
   String get shellDeleteWarning =>
-      'The selected chat history will be permanently deleted from this host. This cannot be undone and is not archive.\n\nWorking directories, generated files, forks, shared attachments and published cloud shares are kept. Cloud shares must be removed separately. Active or related chats may be refused by the host.';
+      'The selected chat history will be permanently deleted from this host. This cannot be undone and is not archive.\n\nWorking directories, generated files, forks, shared attachments and published cloud shares are kept. Cloud shares must be removed separately. Subagent chats are deleted along with the chat. The host refuses a running chat or one with scheduled tasks.';
 
   @override
   String get shellDeleteOwnerChanged =>
@@ -17126,7 +17359,7 @@ class L10nEn extends L10n {
       'Stop running work before deleting. The host also checks active tasks and schedules.';
 
   @override
-  String get shellDeleteRelated => 'This chat has related subagent work. The host refused deletion to protect it.';
+  String get shellDeleteRelated => 'This chat still has scheduled tasks. The host refused deletion to protect them.';
 
   @override
   String get shellDeleteWriterHeld => 'Another process is using this chat. Close it there and try again.';
@@ -18205,6 +18438,18 @@ class L10nEn extends L10n {
   String get starSettingsTitle => 'Star DSH Go on GitHub';
 
   @override
+  String get hubStartPage => 'Start page';
+
+  @override
+  String get hubChatSuggestions => 'Chat suggestions';
+
+  @override
+  String get hubChatSuggestionsHint => 'Show chat suggestions on the start page';
+
+  @override
+  String get searchKwChatSuggestions => 'start page,empty page,new chat,chat suggestions,suggestion cards';
+
+  @override
   String get phoneStartupFailureStopping => 'Startup failed; stopping';
 
   @override
@@ -18728,6 +18973,10 @@ class L10nEn extends L10n {
 
   @override
   String get stateChatMissing => 'This chat is gone';
+
+  @override
+  String get stateChatFormatUnsupported =>
+      'This engine cannot read this chat\'s log format. Export diagnostics to investigate.';
 
   @override
   String get stateEngineUnsupported => 'Not supported by this engine version';
@@ -19661,7 +19910,7 @@ class L10nEn extends L10n {
 
   @override
   String get updateInstallBlockedMessage =>
-      'Allow installation in the system prompt, or download from the release page.';
+      'Allow installation in the system prompt. If the system blocks it outright (Xiaomi and others), try Shizuku or on-device ADB under Installation route; that needs no new signature.';
 
   @override
   String get updateInstallIncomplete => 'Installation incomplete';
@@ -19749,6 +19998,24 @@ class L10nEn extends L10n {
 
   @override
   String get updateSystemInstallerFailed => 'Couldn\'t open the system installer';
+
+  @override
+  String get updateExportApk => 'Save the package';
+
+  @override
+  String get updateExportApkTitle => 'Save the package?';
+
+  @override
+  String get updateExportApkMessage =>
+      'Copies the package downloaded and verified now into Downloads/DSH-Go, so you can sign it yourself (MT Manager and the like) and install that.\n\nA package you signed has a different signature from ours: in-app updates then always report a signature mismatch, and every later version has to be signed and installed by hand.\n\nIf the system simply blocks the install (Xiaomi and other vendors), try Shizuku or on-device ADB under Installation route first; that needs no signing.';
+
+  @override
+  String updateExportApkDone(String path) {
+    return 'Saved to Downloads/$path';
+  }
+
+  @override
+  String get updateExportApkFailed => 'Couldn\'t save the package';
 
   @override
   String get updateStarProject => 'Star it';
@@ -21815,6 +22082,878 @@ class L10nEn extends L10n {
   String webConnectHostFirst(String name) {
     return 'Connect to “$name” to open DSH Web';
   }
+
+  @override
+  String get workshopTitle => 'Workshop';
+
+  @override
+  String get workshopSubtitle => 'Pets and companions made by others. Install the ones you like';
+
+  @override
+  String get workshopEntrySubtitle => 'Find pets and companions made by others';
+
+  @override
+  String get workshopTabBrowse => 'Browse';
+
+  @override
+  String get workshopTabMine => 'My uploads';
+
+  @override
+  String get workshopKindAll => 'All';
+
+  @override
+  String get workshopKindPet => 'Pixel pets';
+
+  @override
+  String get workshopKindCompanion => 'Companions';
+
+  @override
+  String get workshopSearchHint => 'Search by name or author';
+
+  @override
+  String get workshopGet => 'Get';
+
+  @override
+  String get workshopRefresh => 'Refresh';
+
+  @override
+  String workshopByAuthor(String author) {
+    return 'By $author';
+  }
+
+  @override
+  String get workshopEmptyTitle => 'Nothing here yet';
+
+  @override
+  String get workshopEmptyMessage =>
+      'No one has uploaded anything. If you made a pet or a companion, yours can be the first.';
+
+  @override
+  String get workshopNoMatchTitle => 'No matches';
+
+  @override
+  String get workshopNoMatchMessage => 'Try another name or author.';
+
+  @override
+  String get workshopUnavailableTitle => 'The Workshop can\'t be opened right now';
+
+  @override
+  String get workshopNotOpenTitle => 'The Workshop isn\'t open yet';
+
+  @override
+  String get workshopNotOpenMessage => 'This version isn\'t connected to a Workshop service.';
+
+  @override
+  String workshopShowingOlder(String when) {
+    return 'Couldn\'t refresh. Showing what was fetched $when.';
+  }
+
+  @override
+  String get workshopLocalUnknown =>
+      'Couldn\'t read what is installed on this phone, so the Installed marks may be wrong.';
+
+  @override
+  String get workshopStatVersion => 'Version';
+
+  @override
+  String get workshopStatSize => 'Size';
+
+  @override
+  String get workshopStatLicense => 'License';
+
+  @override
+  String get workshopAbout => 'About';
+
+  @override
+  String get workshopNoDescription => 'The author didn\'t write a description.';
+
+  @override
+  String get workshopSource => 'Source';
+
+  @override
+  String workshopMinApp(String version) {
+    return 'Needs DSH Go $version or later.';
+  }
+
+  @override
+  String workshopInstalledVersion(String version) {
+    return 'Installed $version';
+  }
+
+  @override
+  String workshopUpdateTo(String version) {
+    return 'Update to $version';
+  }
+
+  @override
+  String get workshopInstalledWithdrawn =>
+      'The version you installed has been withdrawn. It still works; update if a newer version is listed, otherwise consider removing it.';
+
+  @override
+  String get workshopPhasePreparing => 'Getting ready…';
+
+  @override
+  String get workshopPhaseDownloading => 'Downloading';
+
+  @override
+  String get workshopPhaseVerifying => 'Verifying…';
+
+  @override
+  String get workshopPhaseCancelling => 'Cancelling…';
+
+  @override
+  String workshopProgressBytes(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get workshopInstallDone => 'Installed';
+
+  @override
+  String get workshopInstallDonePet => 'Installed. Pick it on the Pets page.';
+
+  @override
+  String get workshopInstallDoneCompanion => 'Installed. She\'s in the Companion room.';
+
+  @override
+  String get workshopInstallDoneRefreshIssue =>
+      'Installed, but the list couldn\'t refresh. Open this page again to see it.';
+
+  @override
+  String get workshopInstallCancelled => 'Cancelled. Nothing on this phone was changed.';
+
+  @override
+  String get workshopInstallBusy => 'Another install or removal is still running. Try again when it finishes.';
+
+  @override
+  String get workshopReplaceTitle => 'Replace what\'s on this phone?';
+
+  @override
+  String workshopReplaceMessage(String title) {
+    return 'This phone already has something with the same name that didn\'t come from this Workshop entry. Continuing replaces it with \"$title\", and the old one can\'t be brought back.';
+  }
+
+  @override
+  String get workshopReplaceConfirm => 'Replace';
+
+  @override
+  String get workshopReport => 'Report';
+
+  @override
+  String get workshopErrorNetwork => 'No connection. Try again later.';
+
+  @override
+  String get workshopErrorTimeout => 'No response in time. Try again later.';
+
+  @override
+  String get workshopErrorServer => 'The Workshop service has a problem right now. Try again later.';
+
+  @override
+  String get workshopErrorRateLimited => 'Too many requests. Try again in a while.';
+
+  @override
+  String get workshopErrorBadData => 'The Workshop sent something unexpected, so it wasn\'t used. Try again later.';
+
+  @override
+  String get workshopErrorCatalogChanged => 'This item just changed. Refresh and look again.';
+
+  @override
+  String get workshopErrorNotFound => 'This item can\'t be found. It may have been taken down.';
+
+  @override
+  String get workshopErrorWithdrawn => 'This version has been withdrawn and can\'t be installed.';
+
+  @override
+  String get workshopErrorMinApp => 'This app is too old. Update it to install this.';
+
+  @override
+  String get workshopErrorUnsupported => 'This version of the app doesn\'t know this kind of item.';
+
+  @override
+  String get workshopErrorCompanionOff => 'Companion items are turned off for now.';
+
+  @override
+  String get workshopErrorUploadOff => 'The Workshop isn\'t taking uploads right now.';
+
+  @override
+  String get workshopErrorNoSpace => 'Not enough storage on this phone. Free some up and try again.';
+
+  @override
+  String get workshopErrorStorage => 'Couldn\'t read or write files on this phone.';
+
+  @override
+  String get workshopErrorIntegrity =>
+      'The download didn\'t match what was registered, so it was discarded. Try again.';
+
+  @override
+  String get workshopErrorDowngrade => 'The version on this phone is newer and won\'t be replaced with an older one.';
+
+  @override
+  String get workshopErrorRuntimeMissing =>
+      'Invite a character in the Companion room first. Then other companions can be installed.';
+
+  @override
+  String get workshopErrorReadersBusy =>
+      'She\'s in use. Leave the Companion room or close the floating window, then try again.';
+
+  @override
+  String get workshopErrorInstallRecord => 'The install record on this phone doesn\'t match, so nothing was changed.';
+
+  @override
+  String get workshopErrorOtherOrigin => 'This was installed from a different Workshop.';
+
+  @override
+  String get workshopErrorSignIn => 'Sign in to the forum first.';
+
+  @override
+  String get workshopErrorConsent => 'Agree to let the Workshop check your sign-in first.';
+
+  @override
+  String get workshopErrorForumMismatch =>
+      'The forum you signed in to isn\'t the one this Workshop uses. Sign in again.';
+
+  @override
+  String get workshopErrorForumDown => 'The forum can\'t be reached right now. Try again later.';
+
+  @override
+  String get workshopErrorPreferences => 'Couldn\'t save the record on this phone, so this step didn\'t continue.';
+
+  @override
+  String get workshopErrorBusy => 'The previous step is still running. One moment.';
+
+  @override
+  String get workshopErrorCancelled => 'Cancelled.';
+
+  @override
+  String get workshopErrorUnknownResult =>
+      'It\'s unclear whether that went through. Refresh and check before trying again.';
+
+  @override
+  String get workshopErrorGeneric => 'That didn\'t work. Try again later.';
+
+  @override
+  String get workshopDisclosureTitle => 'Let the Workshop confirm who you are';
+
+  @override
+  String get workshopDisclosureLead =>
+      'To submit, manage your submissions or report something, the Workshop needs to know who you are. To find out, your forum sign-in credential (a User API Key) is sent to the Workshop service below, which asks the forum which account it belongs to.';
+
+  @override
+  String get workshopDisclosureWorker => 'Workshop that receives the credential';
+
+  @override
+  String get workshopDisclosureForum => 'Forum that confirms who you are';
+
+  @override
+  String get workshopDisclosureUse =>
+      'It is sent when you submit, view or withdraw your submissions, or report something. The Workshop only uses it to confirm your identity with the forum and does not keep it.';
+
+  @override
+  String get workshopDisclosureKept =>
+      'This phone only remembers that you agreed to these two addresses, with no extra copy of the credential. If either changes, you\'ll be asked again.';
+
+  @override
+  String get workshopDisclosureStale => 'The addresses just changed. Please confirm the ones shown now.';
+
+  @override
+  String get workshopDisclosureAccept => 'Agree and continue';
+
+  @override
+  String get workshopDisclosureDecline => 'Not now';
+
+  @override
+  String get workshopDisclosureUnsaved =>
+      'Your consent counts for now, but it couldn\'t be saved on this phone. You may be asked again.';
+
+  @override
+  String get workshopInstalledEmptyTitle => 'Nothing from the Workshop yet';
+
+  @override
+  String get workshopInstalledEmptyMessage => 'Pets and companions you get in Browse show up here.';
+
+  @override
+  String get workshopInstalledEmptyAction => 'Browse';
+
+  @override
+  String get workshopInstalledLoadFailedTitle => 'Can\'t read what\'s installed';
+
+  @override
+  String get workshopInstalledLoadStale => 'Couldn\'t read this phone again. Showing the last result.';
+
+  @override
+  String get workshopInstalledCatalogStale => 'Update and withdrawal info may be out of date.';
+
+  @override
+  String get workshopInstalledCatalogUnknown => 'Update and withdrawal info isn\'t available right now.';
+
+  @override
+  String get workshopInstalledStatusUpdate => 'Update available';
+
+  @override
+  String get workshopInstalledStatusWithdrawn => 'This version was withdrawn';
+
+  @override
+  String get workshopInstalledStatusOtherOrigin => 'From a different Workshop';
+
+  @override
+  String get workshopInstalledStatusNotListed => 'Not in the Workshop right now';
+
+  @override
+  String get workshopInstalledStatusCompanionOff => 'Companion items are off for now';
+
+  @override
+  String get workshopInstalledStatusRewritten => 'Differs from the same version in the Workshop';
+
+  @override
+  String get workshopInstalledStatusRemoving => 'Uninstalling…';
+
+  @override
+  String get workshopInstalledStatusRemoveFailed => 'Couldn\'t uninstall';
+
+  @override
+  String get workshopInstalledStatusRemoved => 'Uninstalled';
+
+  @override
+  String get workshopInstalledIssueBroken => 'This pack is damaged';
+
+  @override
+  String get workshopInstalledIssueUnreadable => 'This pack can\'t be read';
+
+  @override
+  String get workshopInstalledIssueRecord => 'Install record doesn\'t match';
+
+  @override
+  String get workshopInstalledIssueOther => 'Something is wrong with this item';
+
+  @override
+  String get workshopInstalledNoteBroken => 'This pack is damaged and may not work.';
+
+  @override
+  String get workshopInstalledNoteUnreadable => 'Couldn\'t read this pack\'s files.';
+
+  @override
+  String get workshopInstalledNoteRecord => 'Its install record doesn\'t match.';
+
+  @override
+  String get workshopInstalledNoteOther => 'Something is wrong with this item, and nothing more can be read.';
+
+  @override
+  String get workshopInstalledNoteUntrusted =>
+      'Its install record can\'t be trusted, so it can\'t be uninstalled from here.';
+
+  @override
+  String get workshopInstalledNoteOtherOrigin =>
+      'This came from a different Workshop, so its updates can\'t be checked here.';
+
+  @override
+  String get workshopInstalledNoteNotListed =>
+      'The Workshop doesn\'t list it right now. The copy on this phone isn\'t affected.';
+
+  @override
+  String get workshopInstalledNoteRewritten =>
+      'The same version in the Workshop has different contents. The copy on this phone wasn\'t changed.';
+
+  @override
+  String get workshopInstalledNoteMinApp => 'The version now in the Workshop needs a newer app.';
+
+  @override
+  String get workshopInstalledNoteUnavailable => 'The version now in the Workshop can\'t be installed right now.';
+
+  @override
+  String get workshopInstalledNoteGone => 'This item is no longer on this phone.';
+
+  @override
+  String get workshopInstalledNoteUnread =>
+      'The install records on this phone can\'t be read right now. This is what was there a moment ago.';
+
+  @override
+  String workshopInstalledRemoveFailed(String reason) {
+    return 'Couldn\'t uninstall. $reason';
+  }
+
+  @override
+  String get workshopInstalledFactKind => 'Kind';
+
+  @override
+  String get workshopInstalledFactId => 'Item ID';
+
+  @override
+  String get workshopInstalledFactOrigin => 'From';
+
+  @override
+  String get workshopInstalledFactLocalId => 'Local ID';
+
+  @override
+  String workshopInstalledRemoveTitle(String title) {
+    return 'Uninstall \"$title\"?';
+  }
+
+  @override
+  String get workshopInstalledRemoveMessage =>
+      'This deletes the copy on this phone. To use it again, get it from the Workshop again.';
+
+  @override
+  String get workshopInstalledRemoveNoReinstall =>
+      'The Workshop doesn\'t list it right now, so you may not be able to get it back.';
+
+  @override
+  String get workshopInstalledRemovedRefreshIssue =>
+      'Uninstalled, but the list couldn\'t refresh. Pull down to refresh it.';
+
+  @override
+  String get workshopInstalledRemovedLocalIssue =>
+      'Uninstalled, but some places didn\'t catch up. Reopen the app to bring them up to date.';
+
+  @override
+  String get workshopMinePublish => 'Submit';
+
+  @override
+  String get workshopMinePublishHint => 'Shows up in Discover once approved';
+
+  @override
+  String get workshopMineSignInTitle => 'Submissions belong to a forum account';
+
+  @override
+  String get workshopMineSignInMessage => 'Sign in to see what you have sent in.';
+
+  @override
+  String get workshopMineConsentTitle => 'One more step';
+
+  @override
+  String get workshopMineConsentMessage =>
+      'The workshop checks who you are with your forum sign-in. Agree to that to see your submissions.';
+
+  @override
+  String get workshopMineConsentAction => 'See details';
+
+  @override
+  String get workshopMineEmptyTitle => 'No submissions yet';
+
+  @override
+  String get workshopMineEmptyMessage => 'Made a pet or a companion? Send it in for others to use.';
+
+  @override
+  String get workshopMineEmptyFiltered => 'Nothing with this status';
+
+  @override
+  String get workshopMineLoadFailed => 'Couldn\'t load your submissions';
+
+  @override
+  String get workshopMineStale => 'Couldn\'t get the latest. Showing what was loaded before.';
+
+  @override
+  String get workshopMineLoadMore => 'Load more';
+
+  @override
+  String get workshopMineStatusPending => 'In review';
+
+  @override
+  String get workshopMineStatusApproved => 'Approved';
+
+  @override
+  String get workshopMineStatusRejected => 'Rejected';
+
+  @override
+  String get workshopMineStatusWithdrawn => 'Withdrawn';
+
+  @override
+  String get workshopMineStatusDraft => 'Draft';
+
+  @override
+  String get workshopMineDetailTitle => 'Submission';
+
+  @override
+  String get workshopMineRefreshOne => 'Refresh this one';
+
+  @override
+  String get workshopMineAboutPending => 'Sent and waiting for review. It shows up in Discover once approved.';
+
+  @override
+  String get workshopMineAboutApproved => 'Approved. Whether it is public right now is what Discover shows.';
+
+  @override
+  String get workshopMineAboutRejected => 'Not approved.';
+
+  @override
+  String get workshopMineAboutWithdrawn => 'Withdrawn. This can\'t be undone.';
+
+  @override
+  String get workshopMineAboutDraft => 'The file hasn\'t finished uploading, so it isn\'t in review.';
+
+  @override
+  String get workshopMineReviewReason => 'Reviewer\'s note';
+
+  @override
+  String get workshopMineWithdrawReason => 'Reason for withdrawing';
+
+  @override
+  String get workshopMineWithdrawReasonHint => 'For example: wrong file, want to change it first';
+
+  @override
+  String get workshopMineCreatedAt => 'Submitted';
+
+  @override
+  String get workshopMineUpdatedAt => 'Last updated';
+
+  @override
+  String get workshopMineDetailStale => 'Couldn\'t refresh this one. Showing the status loaded before.';
+
+  @override
+  String get workshopMineAccountChanged => 'The account has changed';
+
+  @override
+  String get workshopMineAccountChangedMessage =>
+      'This submission belongs to the previous account and is no longer shown.';
+
+  @override
+  String get workshopMineWithdraw => 'Withdraw';
+
+  @override
+  String get workshopMineWithdrawConfirmTitle => 'Withdraw this submission?';
+
+  @override
+  String workshopMineWithdrawConfirmMessage(String title) {
+    return 'This can\'t be undone. If \"$title\" is already public, nobody will be able to download this version, and the same version number can\'t be published again.';
+  }
+
+  @override
+  String get workshopMineWithdrawConfirm => 'Withdraw';
+
+  @override
+  String get workshopMineWithdrawing => 'Withdrawing…';
+
+  @override
+  String get workshopMineWithdrawDone => 'Submission withdrawn';
+
+  @override
+  String get workshopMineWithdrawUnknown =>
+      'Not sure whether it was withdrawn. Check the result first; don\'t withdraw again yet.';
+
+  @override
+  String get workshopMineWithdrawQuery => 'Check result';
+
+  @override
+  String get workshopMineWithdrawStill => 'It hasn\'t been withdrawn. You can withdraw it again if you still want to.';
+
+  @override
+  String get workshopMineWithdrawReconciled => 'It is withdrawn now.';
+
+  @override
+  String get workshopMineReasonEmpty => 'Write a reason first.';
+
+  @override
+  String workshopMineReasonTooLong(String max) {
+    return 'At most $max characters. This is too long.';
+  }
+
+  @override
+  String get workshopMineReasonBadChars => 'It contains characters that can\'t be used. Remove them and try again.';
+
+  @override
+  String get workshopMineReasonRejected => 'This reason wasn\'t accepted. Change it and try again.';
+
+  @override
+  String workshopReportTarget(String title, String version) {
+    return '$title · $version';
+  }
+
+  @override
+  String get workshopReportReason => 'Reason';
+
+  @override
+  String get workshopReportReasonHint => 'What\'s wrong with it, e.g. infringement or unsuitable content';
+
+  @override
+  String get workshopReportNote =>
+      'A reviewer will look at this report. Reporting doesn\'t take the item down by itself.';
+
+  @override
+  String get workshopReportSubmit => 'Send report';
+
+  @override
+  String get workshopReportSending => 'Sending…';
+
+  @override
+  String get workshopReportDone => 'Report received. A reviewer will look at it.';
+
+  @override
+  String get workshopReportSignInTitle => 'Reporting needs a forum account';
+
+  @override
+  String get workshopReportSignInMessage => 'Sign in to send a report.';
+
+  @override
+  String get workshopReportConsentMessage =>
+      'The workshop checks who you are with your forum sign-in. Agree to that to report.';
+
+  @override
+  String get workshopReportUnknownTitle => 'Not sure it arrived';
+
+  @override
+  String get workshopReportUnknownMessage =>
+      'The last report may or may not have been received, and there is no way to check. Sending again could create a duplicate.';
+
+  @override
+  String workshopReportUnknownOther(String id, String version) {
+    return 'That report was about $id $version.';
+  }
+
+  @override
+  String get workshopReportUnknownAgain => 'I understand, write it again';
+
+  @override
+  String get workshopPublishTitle => 'Submit';
+
+  @override
+  String get workshopPublishClosedTitle => 'The Workshop isn\'t taking submissions right now';
+
+  @override
+  String get workshopPublishClosedMessage => 'What you already sent is still under My uploads.';
+
+  @override
+  String get workshopPublishSignInTitle => 'Sign in to the forum first';
+
+  @override
+  String get workshopPublishSignInMessage => 'The Workshop uses your forum account to know who is submitting.';
+
+  @override
+  String get workshopPublishProfileTitle => 'Couldn\'t read your forum account yet';
+
+  @override
+  String get workshopPublishProfileMessage => 'Submitting needs to know which account you are.';
+
+  @override
+  String get workshopPublishCheckFailedTitle => 'Couldn\'t read the record of your last submission';
+
+  @override
+  String get workshopPublishCheckLocked => 'To avoid sending something twice, a new one can\'t start until it is read.';
+
+  @override
+  String get workshopPublishWaitingPrevious => 'The previous step is still finishing.';
+
+  @override
+  String get workshopPublishChooseTitle => 'Choose what to submit';
+
+  @override
+  String get workshopPublishCompanionCurrent => 'Your current companion';
+
+  @override
+  String get workshopPublishSourcesEmptyTitle => 'Nothing to submit yet';
+
+  @override
+  String get workshopPublishSourcesEmptyMessage =>
+      'Pixel pets you imported and your current companion can be submitted.';
+
+  @override
+  String get workshopPublishSourcesIssue => 'Couldn\'t read what can be submitted from this phone.';
+
+  @override
+  String get workshopPublishPetsIssue => 'Couldn\'t read the pixel pets on this phone.';
+
+  @override
+  String get workshopPublishCompanionIssue => 'Couldn\'t read the companion on this phone.';
+
+  @override
+  String get workshopPublishNoCompanion =>
+      'There\'s no companion on this phone yet. Invite one in the Companion room first.';
+
+  @override
+  String get workshopPublishSectionSource => 'What to submit';
+
+  @override
+  String get workshopPublishChange => 'Change';
+
+  @override
+  String get workshopPublishSectionNames => 'Name';
+
+  @override
+  String get workshopPublishTitleZh => 'Chinese name';
+
+  @override
+  String get workshopPublishTitleEn => 'English name';
+
+  @override
+  String get workshopPublishSectionInfo => 'Details';
+
+  @override
+  String get workshopPublishId => 'Item ID';
+
+  @override
+  String get workshopPublishIdHelper => 'Lowercase letters, digits and hyphens';
+
+  @override
+  String get workshopPublishAuthor => 'Author';
+
+  @override
+  String get workshopPublishLicenseAuthor => 'Author permission';
+
+  @override
+  String get workshopPublishSourceLink => 'Source link';
+
+  @override
+  String get workshopPublishSourceHelper => 'Its home page or where it comes from, starting with https://';
+
+  @override
+  String get workshopPublishSectionAbout => 'About (optional)';
+
+  @override
+  String get workshopPublishTags => 'Tags';
+
+  @override
+  String get workshopPublishTagsHelper => 'Separate with commas, up to 8';
+
+  @override
+  String get workshopPublishNext => 'Next';
+
+  @override
+  String get workshopPublishPreparing => 'Packing…';
+
+  @override
+  String get workshopPublishBadTitle => 'Enter a name, up to 120 characters';
+
+  @override
+  String get workshopPublishBadId => 'Lowercase letters, digits and hyphens only, up to 40 characters';
+
+  @override
+  String get workshopPublishBadVersion => 'Write a version like 1.0.0';
+
+  @override
+  String get workshopPublishBadAuthor => 'Enter an author, up to 256 characters';
+
+  @override
+  String get workshopPublishBadLicense => 'Choose a license';
+
+  @override
+  String get workshopPublishBadSource => 'Enter a link starting with https://';
+
+  @override
+  String get workshopPublishBadDescription => 'Up to 512 characters';
+
+  @override
+  String get workshopPublishBadTags => 'Up to 8 tags of 32 characters each, with no repeats';
+
+  @override
+  String get workshopPublishBadRights => 'Confirm that you have the right to share this first';
+
+  @override
+  String get workshopPublishFiles => 'Files in the package';
+
+  @override
+  String get workshopPublishEdit => 'Edit details';
+
+  @override
+  String get workshopPublishRights => 'I confirm I have the right to share this';
+
+  @override
+  String get workshopPublishReviewNote => 'The Workshop reviews it first. Others see it once it is approved.';
+
+  @override
+  String get workshopPublishSubmit => 'Submit';
+
+  @override
+  String get workshopPublishPhaseWorking => 'Working…';
+
+  @override
+  String get workshopPublishPhaseUploading => 'Uploading';
+
+  @override
+  String get workshopPublishPhaseWaiting => 'All sent. Waiting for the Workshop…';
+
+  @override
+  String get workshopPublishStay => 'Leaving this page won\'t interrupt it.';
+
+  @override
+  String get workshopPublishDoneTitle => 'Sent to the Workshop, waiting for review';
+
+  @override
+  String get workshopPublishDoneMessage => 'Follow it under My uploads.';
+
+  @override
+  String get workshopPublishBackToMine => 'Back to My uploads';
+
+  @override
+  String get workshopPublishApprovedTitle => 'This submission has been approved';
+
+  @override
+  String get workshopPublishApprovedMessage => 'Whether it is listed is what Browse shows.';
+
+  @override
+  String get workshopPublishRejectedTitle => 'This submission wasn\'t approved';
+
+  @override
+  String get workshopPublishWithdrawnTitle => 'This submission was withdrawn';
+
+  @override
+  String workshopPublishReason(String reason) {
+    return 'Reason: $reason';
+  }
+
+  @override
+  String get workshopPublishAgain => 'Submit again';
+
+  @override
+  String get workshopPublishAgainMessage => 'Fix it and you can submit it again.';
+
+  @override
+  String get workshopPublishRecordKept => 'The result is confirmed, but the record on this phone couldn\'t be cleared.';
+
+  @override
+  String get workshopPublishLeftovers => 'Temporary files left on this phone couldn\'t be removed.';
+
+  @override
+  String get workshopPublishPendingTitle => 'One submission isn\'t finished';
+
+  @override
+  String get workshopPublishPendingMessage =>
+      'It didn\'t finish last time. Continuing sends the same content on, without creating a second one.';
+
+  @override
+  String get workshopPublishPendingLocked =>
+      'Its details are fixed for now: they can\'t be edited or swapped for something else. Once the problem is solved you can continue.';
+
+  @override
+  String get workshopPublishPendingUnsent =>
+      'This one hasn\'t been sent yet. You can continue once the problem is solved, or go back to edit it or pick something else.';
+
+  @override
+  String get workshopPublishEditUnsent => 'Go back and edit';
+
+  @override
+  String get workshopPublishUnknownTitle => 'Not sure whether it was sent';
+
+  @override
+  String get workshopPublishUnknownMessage =>
+      'The Workshop didn\'t answer, so the result isn\'t known. Checking asks again about the same submission: if it arrived it isn\'t repeated, and if it didn\'t it carries on.';
+
+  @override
+  String get workshopPublishContinue => 'Continue';
+
+  @override
+  String get workshopPublishCheckResult => 'Check result';
+
+  @override
+  String get workshopPublishCheckAgain => 'Check again';
+
+  @override
+  String get workshopPublishErrorInvalid => 'A few details need fixing.';
+
+  @override
+  String get workshopPublishErrorMismatch => 'The package doesn\'t match the details you entered. Please try again.';
+
+  @override
+  String get workshopPublishErrorPending => 'Another submission isn\'t finished. Deal with it first.';
+
+  @override
+  String get workshopPublishErrorTooLarge => 'The package is larger than the Workshop accepts.';
+
+  @override
+  String get workshopPublishErrorMetadata => 'The Workshop didn\'t accept these details. Change them and try again.';
+
+  @override
+  String get workshopPublishErrorNotReady => 'Not ready yet. Try again in a moment.';
+
+  @override
+  String get workshopPublishErrorAgain => 'It can\'t be submitted again right now.';
 
   @override
   String get workspaceRecoveryTitle => 'Workspace index recovery';

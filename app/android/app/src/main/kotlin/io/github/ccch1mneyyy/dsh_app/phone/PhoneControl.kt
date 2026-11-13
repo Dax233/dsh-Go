@@ -192,6 +192,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         journal = taskJournal,
         recoveryAdmission = { background.resourceAdmission() },
         backgroundCapacity = { background.parallelism().effectiveLimit },
+        screenRecoveryReady = { isEnabled() && !isLocked() },
         prepareBackground = { task, owner -> background.prepareForTask(owner) { task.tasks.isCurrent(owner) } },
         startSkillScope = skillLifecycle::startManaged,
         completeSkillScope = skillLifecycle::completeDrained,
@@ -721,7 +722,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                 selfCheck.stop()
                 preview.refresh()
                 background.requestInterrupt {
-                    sessions.stopAll("熄屏") // l10n:keep agent stop reason
+                    sessions.stopAll("熄屏", PhoneTasks.StopSource.SCREEN_OFF) // l10n:keep agent stop reason
                 }
                 cleanupIo.execute { background.finishInterrupt() }
             }
@@ -1018,7 +1019,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     override fun shownControls(): TaskControls? =
         displaySelection.controls { task, owner, reason -> stopOwner(task, owner, reason) }
 
-    override fun onStopAllRequested(reason: String) { shell.cancelAll(); selfCheck.stop(); sessions.stopAll(reason) }
+    override fun onStopAllRequested(reason: String, source: PhoneTasks.StopSource) { shell.cancelAll(); selfCheck.stop(); sessions.stopAll(reason, source) }
 
     override fun onAccessibilityChanged(connected: Boolean) = emitStatus()
 

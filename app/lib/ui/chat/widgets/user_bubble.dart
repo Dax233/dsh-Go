@@ -208,7 +208,7 @@ class _PendingSlotState extends State<_PendingSlot> {
   );
 }
 
-/// 乐观气泡下方的一行:状态("排队中 · 本轮结束后发送")+ 文字操作。
+/// 乐观气泡下方的状态与文字操作;放不下时按可用宽度换行。
 ///
 /// 右端与气泡的直边对齐(缩进 8):只有状态时状态文字留 8;有操作时最后
 /// 一个操作自带左右 8 的点按区,文字同样停在 8 处。
@@ -226,14 +226,20 @@ class _PendingMeta extends StatelessWidget {
     final style = theme.textTheme.labelSmall?.copyWith(color: muted);
     return Padding(
       padding: EdgeInsets.only(top: actions.isEmpty ? 4 : 0, right: actions.isEmpty ? 8 : 0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
         children: [
-          Icon(icon, size: 12, color: muted),
-          const SizedBox(width: 4),
-          Text(label, style: style),
-          for (final (text, onTap) in actions) ...[
-            const SizedBox(width: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: muted),
+              const SizedBox(width: 4),
+              Flexible(child: Text(label, style: style)),
+            ],
+          ),
+          for (final (text, onTap) in actions)
             TextButton(
               onPressed: onTap,
               style: TextButton.styleFrom(
@@ -245,7 +251,6 @@ class _PendingMeta extends StatelessWidget {
               ),
               child: Text(text),
             ),
-          ],
         ],
       ),
     );

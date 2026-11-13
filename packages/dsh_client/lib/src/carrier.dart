@@ -20,6 +20,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'binary_response.dart';
 import 'connection.dart';
@@ -253,20 +254,15 @@ class _WebSocketMuxLink implements DshMuxLink {
   @override
   void start({required DshMuxFrameHandler onFrame, required DshMuxLossHandler onLost}) {
     _onLost = onLost;
-    _socket.listen(
-      (data) {
+    final frames = _socket.asyncMap((data) => _lost ? null : _decodeMuxFrame(data));
+    frames.listen(
+      (decoded) {
         if (_lost) return;
-        if (data is! String) {
-          // A binary frame is not part of this protocol, but one unknown frame
-          // must not fail every stream multiplexed over the link: ignore and
-          // keep the link. A real protocol break shows up as a missing
-          // streamId below.
-          _tracer?.call(DshTraceEntry('in', 'mux-binary-ignored', {
-            'bytes': data is List<int> ? data.length : null,
-          }));
+        if (identical(decoded, _binaryMuxFrame)) {
+          _tracer?.call(DshTraceEntry('in', 'mux-binary-ignored', {}));
           return;
         }
-        final frame = asMap(tryDecodeJson(data));
+        final frame = asMap(decoded);
         final streamId = asString(frame?['streamId']);
         final type = asString(frame?['type']);
         if (frame == null || streamId == null || streamId.isEmpty) {
@@ -283,7 +279,13 @@ class _WebSocketMuxLink implements DshMuxLink {
         _tracer?.call(DshTraceEntry('in', 'mux', frame));
         onFrame(frame);
       },
-      onError: (Object error) => _lose(DshCarrierLostException('WebSocket error: $error'), error),
+      onError: (Object error) {
+        if (error is DshProtocolException) {
+          _protocolFailure(error.message);
+        } else {
+          _lose(DshCarrierLostException('WebSocket error: $error'), error);
+        }
+      },
       onDone: () {
         final failure = DshCarrierLostException(
           'WebSocket closed (${_socket.closeCode ?? 'no code'} ${_socket.closeReason ?? ''})'.trim(),
@@ -335,4 +337,16 @@ class _WebSocketMuxLink implements DshMuxLink {
     _lost = true;
     await _socket.close(code, reason);
   }
+}
+
+/// One binary frame is skipped, not treated as a protocol break: a single
+/// unknown frame must not fail every stream multiplexed over the link.
+const Object _binaryMuxFrame = Object();
+
+FutureOr<Object?> _decodeMuxFrame(Object? data) {
+  if (data is! String) return _binaryMuxFrame;
+  // Large follow snapshots must not block input while decoding. Small control
+  // frames stay synchronous; asyncMap preserves their order around the worker.
+  if (data.length < 1024 * 1024) return tryDecodeJson(data);
+  return Isolate.run(() => tryDecodeJson(data), debugName: 'dsh-mux-json');
 }

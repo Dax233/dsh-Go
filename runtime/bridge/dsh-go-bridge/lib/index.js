@@ -4,6 +4,7 @@
 //                               slot occupancy report and `routeGuard`, measured on every
 //                               read (see probeGuard)
 //   POST /dsh-go/v1/occupancy   the browser half reports the live slot composition of its page
+//   GET  /dsh-go/v1/capabilities protocol major and implemented route families (not permissions)
 //
 //   /dsh-go/v1/{contributions,views,invoke,assets} + WS /dsh-go/v1/stream
 //                               native plugin protocol v1 (docs/design/native-plugins-protocol.md),
@@ -40,6 +41,10 @@ const PREFIX = "/dsh-go";
 const CANARY = "/dsh-go-guard-canary";
 const GUARD_PROBE_TTL_MS = 10000;
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const CAPABILITIES = [
+  "inventory", "occupancy", "native-ui", "native-stream", "native-media", "native-files",
+  "plugin-config", "session-deletion", "companion", "companion-prompt-context", "companion-recall", "companion-signals",
+];
 const ORIGINAL = Symbol.for("cordis.original");
 const GUARDED = Symbol.for("dsh-go.guarded");
 const DEFAULT_OPEN_ROUTES = ["exact /connect", "exact /oauth/callback"];
@@ -130,6 +135,7 @@ function parseReport(body) {
 
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
+    if (req.aborted || req.destroyed) return reject(new Error("request body was interrupted"));
     const chunks = [];
     let size = 0;
     let over = false;
@@ -409,23 +415,27 @@ export function apply(ctx, config) {
       if (await pluginConfig.handle(req, res, path)) return;
       if (await companionRoutes.handle(req, res, path)) return;
       if (path.startsWith(`${PREFIX}/v1/`) && await nativeRoutes.handle(req, res, path, url)) return;
+      if (path === `${PREFIX}/v1/capabilities`) {
+        if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });
+        return send(res, 200, { v: 1, bridge: VERSION, capabilities: CAPABILITIES });
+      }
       if (path === `${PREFIX}/v1/inventory`) {
-        if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method not allowed");
+        if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });
         return send(res, 200, await inventory());
       }
       if (path === `${PREFIX}/v1/occupancy`) {
-        if (req.method !== "POST") return send(res, 405, "method not allowed");
+        if (req.method !== "POST") return send(res, 405, { error: { code: "method-not-allowed", message: "method not allowed" } });
         if (String(req.headers["content-type"]).split(";", 1)[0].trim().toLowerCase() !== "application/json") {
           req.resume();
-          return send(res, 415, "content-type must be application/json");
+          return send(res, 415, { error: { code: "unsupported-media-type", message: "content-type must be application/json" } });
         }
         let report;
         try {
           report = parseReport(JSON.parse((await readBody(req, MAX_BODY)).toString("utf8")));
         } catch (error) {
-          return send(res, error?.status ?? 400, error?.status === 413 ? "body too large" : "body is not JSON");
+          return send(res, error?.status ?? 400, { error: { code: error?.status === 413 ? "too-large" : "bad-request", message: error?.status === 413 ? "body too large" : "body is not JSON" } });
         }
-        if (typeof report === "number") return send(res, report, STATUS_CODES[report]);
+        if (typeof report === "number") return send(res, report, { error: { code: report === 413 ? "too-large" : "bad-request", message: STATUS_CODES[report] } });
         // A page whose bridge started late (HMR) cannot attribute older entries; it does not
         // replace a better report of the same boot graph.
         const worse = occupancy !== undefined && occupancy.bootRev === report.bootRev
@@ -436,7 +446,7 @@ export function apply(ctx, config) {
         }
         return send(res, 204);
       }
-      return send(res, 404, "not found");
+      return send(res, 404, { error: { code: "route-not-found", message: "not found" } });
     };
 
     webCtx.effect(() => webCtx.webServer.register({ kind: "prefix", path: PREFIX, handler }), "dsh-go-bridge: /dsh-go routes");

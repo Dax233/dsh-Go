@@ -111,7 +111,7 @@ void main() {
 
     test('the five files, in order', () {
       // tunnel.json is this fork's addition: real bytes through the SSH tunnel.
-    expect(files.keys, ['summary.json', 'settings.json', 'crash.json', 'engine.log', 'failure.log', 'tunnel.json']);
+    expect(files.keys, ['summary.json', 'settings.json', 'crash.json', 'engine.log', 'failure.log', 'tunnel.json', 'instabox.json']);
     });
 
     test('no key or launch token anywhere', () {
@@ -163,6 +163,38 @@ void main() {
       expect(crash.containsKey('mainProfile'), isFalse);
     });
 
+    for (final (name, input, expected) in [
+      ('short key in parentheses', 'Error: boom (apiKey=x)', 'Error: boom (apiKey=•••)'),
+      (
+        'secret includes an inner closing parenthesis',
+        'Error: boom (password=synthetic)tail)',
+        'Error: boom (password=•••)',
+      ),
+      (
+        'unwrapped secret includes a closing parenthesis',
+        'Error: boom password=synthetic)tail',
+        'Error: boom password=•••',
+      ),
+    ]) {
+      test('crash and logs: $name', () {
+        final snapshot = DiagnosticsSnapshot(
+          at: _at,
+          status: RuntimeStatus(
+            phase: RuntimePhase.error,
+            failure: RuntimeFailure(kind: FailureKind.startupFailed, at: _at, summary: input),
+          ),
+          settings: const AppSettings(loaded: true),
+          engineLog: [input],
+          failureLog: [input],
+        );
+        final exported = _unzip(DiagnosticsBundle.build(snapshot));
+        final crash = jsonDecode(exported['crash.json']!) as Map<String, Object?>;
+        expect((crash['latest']! as Map)['summary'], expected);
+        expect(exported['engine.log'], '$expected\n');
+        expect(exported['failure.log'], '$expected\n');
+      });
+    }
+
     test('logs: masked, colour stripped, ordinary lines intact', () {
       expect(
         files['engine.log'],
@@ -178,7 +210,7 @@ void main() {
 
   test('without a crash there is no crash.json or failure.log', () {
     final files = _unzip(DiagnosticsBundle.build(_snapshot(crashed: false)));
-    expect(files.keys, ['summary.json', 'settings.json', 'engine.log', 'tunnel.json']);
+    expect(files.keys, ['summary.json', 'settings.json', 'engine.log', 'tunnel.json', 'instabox.json']);
   });
 
   test('the log keeps the newest lines only', () {
@@ -314,7 +346,7 @@ void main() {
     test('share sends the ZIP to the share sheet', () async {
       expect(await exporter.share(onStep: steps.add), isTrue);
       final params = shared.single;
-      expect(params.files!.single.name, 'dsh-go-diagnostics-20261024-153012.zip');
+      expect(params.files!.single.name, endsWith('dsh-go-diagnostics-20261024-153012.zip'));
       expect(params.files!.single.mimeType, 'application/zip');
       expect(params.fileNameOverrides, ['dsh-go-diagnostics-20261024-153012.zip']);
       expect(steps.last, DiagnosticsStep.sharing);

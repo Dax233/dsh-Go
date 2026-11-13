@@ -1096,6 +1096,15 @@ class L10nZh extends L10n {
   String get activitySlashEnterArgs => '输入参数后发送';
 
   @override
+  String get activitySlashRunIntent => '命令 · 执行';
+
+  @override
+  String get activitySlashInsertIntent => '命令 · 填入';
+
+  @override
+  String get activitySlashSkillIntent => '技能 · 填入';
+
+  @override
   String get activityStepTitle => '步骤详情';
 
   @override
@@ -2786,6 +2795,50 @@ class L10nZh extends L10n {
   String get botsPetAlways => '一直显示';
 
   @override
+  String get botsPetOverlayShows => '悬浮窗里显示';
+
+  @override
+  String get botsPetOverlayPixel => '像素宠物';
+
+  @override
+  String get botsPetOverlayCompanion => '小屋里的她';
+
+  @override
+  String botsPetOverlayCompanionNamed(String name) {
+    return '小屋里的$name';
+  }
+
+  @override
+  String get botsPetOverlayNoPack => '先去伙伴小屋里请一位角色';
+
+  @override
+  String get botsPetOverlayPackBroken => '角色包不完整，去伙伴小屋里重新导入';
+
+  @override
+  String get botsPetOverlayUnavailable => '这台手机暂时请不出她';
+
+  @override
+  String get botsPetOverlayCompanionHint => '点一下和她互动，连点两下打开对话。比像素宠物更耗电，熄屏和隐藏时会停下来';
+
+  @override
+  String get botsPetOverlayLoading => '正在请她出来…';
+
+  @override
+  String get botsPetOverlayFallback => '她没能出来，先由像素宠物顶班';
+
+  @override
+  String get botsPetOverlayFraming => '取景';
+
+  @override
+  String get botsPetOverlayFramingFull => '全身';
+
+  @override
+  String get botsPetOverlayFramingHalf => '半身';
+
+  @override
+  String get botsPetOverlayFramingHint => '换取景会重新加载她';
+
+  @override
   String get botsPetSwitchDisabled => '开关点不动';
 
   @override
@@ -3733,6 +3786,15 @@ class L10nZh extends L10n {
   String get chatAnswerHint => '输入回答…';
 
   @override
+  String get chatAnswerMode => '发送文字将回答待答问题';
+
+  @override
+  String get chatMessageMode => '发送新消息';
+
+  @override
+  String get chatQuestionAnswered => '已回答';
+
+  @override
   String get chatStarting => '正在启动';
 
   @override
@@ -4504,6 +4566,38 @@ class L10nZh extends L10n {
   String get chatNoDetails => '暂无详情';
 
   @override
+  String chatOutputHiddenLines(int count, String shown) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '中间省略 $shown 行');
+    return '$_temp0';
+  }
+
+  @override
+  String chatOutputHiddenChars(String count) {
+    return '中间省略 $count 字';
+  }
+
+  @override
+  String chatOutputSummary(int count, String lines, String chars) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '共 $lines 行');
+    return '$_temp0 · $chars 字';
+  }
+
+  @override
+  String get chatOutputViewAll => '查看全部';
+
+  @override
+  String get chatOutputCopyAll => '复制全文';
+
+  @override
+  String get chatOutputCopied => '已复制全文';
+
+  @override
+  String get chatOutputToEnd => '跳到末尾';
+
+  @override
+  String get chatOutputToStart => '回到开头';
+
+  @override
   String get chatErrApiKey => 'API Key 无效或已过期';
 
   @override
@@ -4516,7 +4610,7 @@ class L10nZh extends L10n {
   String get chatErrRateLimit => '请求太频繁，稍后再试';
 
   @override
-  String get chatErrContextLength => '对话太长，发送 /compact 压缩后再试';
+  String get chatErrContextLength => '对话太长。若 /compact 也失败，请新建对话或换模型';
 
   @override
   String get chatErrModelUnavailable => '模型服务暂时不可用';
@@ -4918,6 +5012,9 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionFailedBodyPlain => '她刚才没加载出来。先重试，还不行再重新导入素材包。';
+
+  @override
   String get companionPackBroken => '这个文件打不开，可能不是素材包或已经损坏。';
 
   @override
@@ -5023,6 +5120,15 @@ class L10nZh extends L10n {
 
   @override
   String get companionTease3 => '你是不是很闲？';
+
+  @override
+  String get companionShake1 => '哇啊，别摇啦！';
+
+  @override
+  String get companionShake2 => '头好晕……水都晃起来了。';
+
+  @override
+  String get companionShake3 => '再摇我要吐泡泡了！';
 
   @override
   String get companionStatusIdle => '在发呆';
@@ -6000,6 +6106,9 @@ class L10nZh extends L10n {
   String get engineGeneralWebSending => '网页版发送';
 
   @override
+  String get engineGeneralWebOnlyHint => '这组设置仅影响当前主机的网页版，不改变原生聊天。';
+
+  @override
   String get engineGeneralData => '数据';
 
   @override
@@ -6406,6 +6515,36 @@ class L10nZh extends L10n {
 
   @override
   String get engineProviderConnection => '连接';
+
+  @override
+  String get engineProviderHeaders => '请求头（可选）';
+
+  @override
+  String get engineProviderHeadersWarning => '请求头以明文保存，不参与日志脱敏。敏感凭据请使用 API Key 或凭据引用。';
+
+  @override
+  String get engineProviderHeaderName => '名称';
+
+  @override
+  String get engineProviderHeaderValue => '值';
+
+  @override
+  String get engineProviderHeaderAdd => '添加请求头';
+
+  @override
+  String get engineProviderHeaderInvalidName => '请求头名称只能包含英文字母、数字或 HTTP 标记符号，不能包含空格或冒号';
+
+  @override
+  String get engineProviderHeaderReserved => 'User-Agent 由引擎设置，请移除此请求头';
+
+  @override
+  String get engineProviderHeaderLocked => '由引擎管理，保留现有配置';
+
+  @override
+  String get engineProviderHeaderDuplicate => '请求头名称重复（不区分大小写）';
+
+  @override
+  String get engineProviderHeaderInvalidValue => '请求头值只能包含单行 Latin-1 文本，不支持换行或控制字符（制表符除外）';
 
   @override
   String get engineProviderDefaultUrl => '默认地址';
@@ -12361,6 +12500,24 @@ class L10nZh extends L10n {
   String get plugInputGestureRequired => '该效果需要用户点按';
 
   @override
+  String get seamsTitle => 'App 内界面';
+
+  @override
+  String get seamsOverlay => '聊天页浮层';
+
+  @override
+  String get seamsOverlayNote => '常驻聊天区域，内存紧张时自动让位';
+
+  @override
+  String get seamsSidebarPage => '侧栏入口';
+
+  @override
+  String get seamsSettingsPage => '插件设置页';
+
+  @override
+  String get seamsDetailPage => '插件详情扩展';
+
+  @override
   String get pluginsOperationHostChanged => '主机已切换，未执行';
 
   @override
@@ -14028,6 +14185,55 @@ class L10nZh extends L10n {
   String get readListFailed => '未更新 · 上次结果';
 
   @override
+  String get remoteDshMode => '实例管理';
+
+  @override
+  String get remoteManaged => '托管启动';
+
+  @override
+  String get remoteAttachOnly => '只连接';
+
+  @override
+  String get remoteManagedHelp => '自动启动或复用 App 托管的 DSH；不会自动替换存活但无法复用的实例。';
+
+  @override
+  String get remoteAttachOnlyHelp => '只转发到远端 127.0.0.1 的固定端口；不启动、停止或重启 DSH。';
+
+  @override
+  String get remoteDshPort => '远端 DSH 端口';
+
+  @override
+  String get remoteDshToken => 'DSH 登录令牌';
+
+  @override
+  String get remoteDshTokenHelp => '填写既有实例启动链接中的 token，仅保存在这台手机的安全存储中。';
+
+  @override
+  String get remoteAttachWorkingDirectoryHelp => '既有实例不执行目录探测；请填写远端绝对路径，留空使用 DSH 默认目录。';
+
+  @override
+  String get remoteSshCompression => 'SSH 压缩';
+
+  @override
+  String get remoteSshCompressionHelp => '默认开启；与服务器协商认证后压缩，不支持时使用未压缩传输。';
+
+  @override
+  String get remoteRestartManaged => '重启托管 DSH';
+
+  @override
+  String get remoteRestartManagedWarning => '这会停止 App 记录的远端 DSH 并重新启动，可能中断其他客户端和进行中的对话。确认没有其他人在使用后再继续。普通测试连接不会执行此操作。';
+
+  @override
+  String get remoteErrSharedInstance =>
+      '远端托管 DSH 仍在运行，但启动命令不同或缺少有效启动日志。为保护共享实例，未自动重启；请检查配置，改用“只连接”，或在编辑主机中明确选择“重启托管 DSH”。';
+
+  @override
+  String get remoteErrAttachSettings => '请填写有效的远端 DSH 端口和登录令牌';
+
+  @override
+  String get remoteDshAttached => '已连接既有 DSH';
+
+  @override
   String get remoteStartupSection => '启动';
 
   @override
@@ -14197,7 +14403,7 @@ class L10nZh extends L10n {
   String get remoteDshStarted => '已在远端启动 DSH';
 
   @override
-  String get remoteErrDshTokenRejected => '远端 DSH 拒绝了登录令牌';
+  String get remoteErrDshTokenRejected => '远端 DSH 拒绝了登录令牌，未自动重启；请检查令牌，或在编辑主机中明确重启托管实例';
 
   @override
   String get remoteErrDshSignIn => '没能登录远端 DSH';
@@ -14798,7 +15004,10 @@ class L10nZh extends L10n {
   String get remoteSelfHostedServer => '自建服务器';
 
   @override
-  String get remoteSelfHostedSignInHelp => '用邮箱和密码登录自己部署的 liguobao/ds-harness-remote';
+  String get remoteSelfHostedSignInHelp => '填写服务器地址，可用邮箱密码登录，也可先使用此服务器再选择其他登录方式。';
+
+  @override
+  String get remoteUseServer => '使用此服务器';
 
   @override
   String get remoteServerAddress => '服务器地址';
@@ -15973,6 +16182,12 @@ class L10nZh extends L10n {
   String get searchKwPetDisplayWhen => '宠物显示,显示时机';
 
   @override
+  String get searchKwPetOverlayShows => '悬浮伙伴,小屋里的她,像素宠物,Live2D';
+
+  @override
+  String get searchKwPetOverlayFraming => '取景,全身,半身';
+
+  @override
   String get searchKwBlur => '模糊,毛玻璃,玻璃';
 
   @override
@@ -16242,7 +16457,7 @@ class L10nZh extends L10n {
 
   @override
   String get shellDeleteWarning =>
-      '将从此主机永久删除所选对话记录，无法撤销，与归档不同。\n\n工作目录、生成的文件、分叉对话、共享附件和已发布的云端分享都会保留。云端分享需另行删除。主机会拒绝删除仍有任务或关联工作的对话。';
+      '将从此主机永久删除所选对话记录，无法撤销，与归档不同。\n\n工作目录、生成的文件、分叉对话、共享附件和已发布的云端分享都会保留。云端分享需另行删除。子代理对话会随所选对话一起删除。运行中或有定时任务的对话会被主机拒绝。';
 
   @override
   String get shellDeleteOwnerChanged => '主机或连接已变化。请取消后重新发起删除，原确认不再有效。';
@@ -16264,7 +16479,7 @@ class L10nZh extends L10n {
   String get shellDeleteRunning => '请先停止运行中的工作；主机还会检查活动任务和定时任务。';
 
   @override
-  String get shellDeleteRelated => '此对话有关联的子代理工作，主机为保护它们拒绝删除。';
+  String get shellDeleteRelated => '此对话仍有关联的定时任务，主机为保护它们拒绝删除。';
 
   @override
   String get shellDeleteWriterHeld => '其他进程正在使用此对话，请先在该进程中关闭后重试。';
@@ -17250,6 +17465,18 @@ class L10nZh extends L10n {
   String get starSettingsTitle => '给 DSH Go 点个 star';
 
   @override
+  String get hubStartPage => '起始页';
+
+  @override
+  String get hubChatSuggestions => '聊天建议';
+
+  @override
+  String get hubChatSuggestionsHint => '显示起始页的聊天建议';
+
+  @override
+  String get searchKwChatSuggestions => '起始页,空白页,新对话,聊天建议,建议卡片';
+
+  @override
   String get phoneStartupFailureStopping => '启动失败，正在停止';
 
   @override
@@ -17769,6 +17996,9 @@ class L10nZh extends L10n {
 
   @override
   String get stateChatMissing => '这个对话已经不在了';
+
+  @override
+  String get stateChatFormatUnsupported => '当前引擎无法读取此对话的日志格式，请导出诊断包排查';
 
   @override
   String get stateEngineUnsupported => '当前引擎版本不支持';
@@ -18632,7 +18862,7 @@ class L10nZh extends L10n {
   String get updateInstallBlocked => '安装被拦截了';
 
   @override
-  String get updateInstallBlockedMessage => '在系统的安装确认里允许，或去发布页手动下载。';
+  String get updateInstallBlockedMessage => '在系统的安装确认里允许；如果系统直接拦下（小米等机型），试试下面的「安装路线」：Shizuku 或本机 ADB，不用重新签名。';
 
   @override
   String get updateInstallIncomplete => '安装没有完成';
@@ -18719,6 +18949,24 @@ class L10nZh extends L10n {
 
   @override
   String get updateSystemInstallerFailed => '没能打开系统安装器';
+
+  @override
+  String get updateExportApk => '导出安装包';
+
+  @override
+  String get updateExportApkTitle => '导出安装包？';
+
+  @override
+  String get updateExportApkMessage =>
+      '会把这次下载并校验过的安装包复制到「下载/DSH-Go」，可以用 MT 管理器之类的工具重新签名后再装。\n\n重新签名后，手机上的签名和官方包不同，App 内更新会一直提示「签名不一致」，以后每次更新都要这样手动重签安装。\n\n如果只是系统拦着装不上（小米等机型），先试「安装路线」里的 Shizuku 或本机 ADB，那条路不用重新签名。';
+
+  @override
+  String updateExportApkDone(String path) {
+    return '已存到 下载/$path';
+  }
+
+  @override
+  String get updateExportApkFailed => '没能导出安装包';
 
   @override
   String get updateStarProject => '去 Star';
@@ -20667,6 +20915,844 @@ class L10nZh extends L10n {
   String webConnectHostFirst(String name) {
     return '还没连上「$name」，连上后再打开网页版';
   }
+
+  @override
+  String get workshopTitle => '创意工坊';
+
+  @override
+  String get workshopSubtitle => '大家做的宠物和伙伴，挑喜欢的装上';
+
+  @override
+  String get workshopEntrySubtitle => '找别人做的宠物和伙伴';
+
+  @override
+  String get workshopTabBrowse => '发现';
+
+  @override
+  String get workshopTabMine => '我的投稿';
+
+  @override
+  String get workshopKindAll => '全部';
+
+  @override
+  String get workshopKindPet => '像素宠物';
+
+  @override
+  String get workshopKindCompanion => '伙伴';
+
+  @override
+  String get workshopSearchHint => '搜索名称或作者';
+
+  @override
+  String get workshopGet => '获取';
+
+  @override
+  String get workshopRefresh => '刷新';
+
+  @override
+  String workshopByAuthor(String author) {
+    return '$author 制作';
+  }
+
+  @override
+  String get workshopEmptyTitle => '这里还空着';
+
+  @override
+  String get workshopEmptyMessage => '还没有人投稿。做了宠物或伙伴的话，可以第一个发上来。';
+
+  @override
+  String get workshopNoMatchTitle => '没有找到';
+
+  @override
+  String get workshopNoMatchMessage => '换个名字或作者再试试。';
+
+  @override
+  String get workshopUnavailableTitle => '暂时打不开工坊';
+
+  @override
+  String get workshopNotOpenTitle => '工坊还没有开放';
+
+  @override
+  String get workshopNotOpenMessage => '这个版本还没有接入工坊服务。';
+
+  @override
+  String workshopShowingOlder(String when) {
+    return '没能刷新，显示的是 $when 取到的内容。';
+  }
+
+  @override
+  String get workshopLocalUnknown => '读不出本机已装了哪些，「已安装」的标记可能不准。';
+
+  @override
+  String get workshopStatVersion => '版本';
+
+  @override
+  String get workshopStatSize => '大小';
+
+  @override
+  String get workshopStatLicense => '许可';
+
+  @override
+  String get workshopAbout => '简介';
+
+  @override
+  String get workshopNoDescription => '作者没有写简介。';
+
+  @override
+  String get workshopSource => '来源';
+
+  @override
+  String workshopMinApp(String version) {
+    return '需要 DSH Go $version 或更新的版本。';
+  }
+
+  @override
+  String workshopInstalledVersion(String version) {
+    return '已安装 $version';
+  }
+
+  @override
+  String workshopUpdateTo(String version) {
+    return '更新到 $version';
+  }
+
+  @override
+  String get workshopInstalledWithdrawn => '你装的这个版本已经被撤回。它还能用；有新版本就更新，没有的话建议卸载。';
+
+  @override
+  String get workshopPhasePreparing => '正在准备…';
+
+  @override
+  String get workshopPhaseDownloading => '正在下载';
+
+  @override
+  String get workshopPhaseVerifying => '正在校验…';
+
+  @override
+  String get workshopPhaseCancelling => '正在取消…';
+
+  @override
+  String workshopProgressBytes(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get workshopInstallDone => '装好了';
+
+  @override
+  String get workshopInstallDonePet => '装好了，到宠物页就能换上它。';
+
+  @override
+  String get workshopInstallDoneCompanion => '装好了，到伙伴小屋就能见到她。';
+
+  @override
+  String get workshopInstallDoneRefreshIssue => '装好了，但列表没能刷新，重新进来就能看到。';
+
+  @override
+  String get workshopInstallCancelled => '已取消，没有改动本机的内容。';
+
+  @override
+  String get workshopInstallBusy => '上一个安装或卸载还没结束，等它完成再试。';
+
+  @override
+  String get workshopReplaceTitle => '覆盖本机已有的？';
+
+  @override
+  String workshopReplaceMessage(String title) {
+    return '本机已经有一个同名的资源，不是从工坊这一条装的。继续会用「$title」替换它，替换后找不回来。';
+  }
+
+  @override
+  String get workshopReplaceConfirm => '覆盖';
+
+  @override
+  String get workshopReport => '举报';
+
+  @override
+  String get workshopErrorNetwork => '网络不通，稍后再试。';
+
+  @override
+  String get workshopErrorTimeout => '等得太久没有回应，稍后再试。';
+
+  @override
+  String get workshopErrorServer => '工坊服务暂时出了问题，稍后再试。';
+
+  @override
+  String get workshopErrorRateLimited => '操作太频繁了，过一会儿再试。';
+
+  @override
+  String get workshopErrorBadData => '工坊返回的内容不对，没有采用。稍后再试。';
+
+  @override
+  String get workshopErrorCatalogChanged => '这个作品刚刚有变化，请刷新后再看。';
+
+  @override
+  String get workshopErrorNotFound => '找不到这个作品了，可能已经下架。';
+
+  @override
+  String get workshopErrorWithdrawn => '这个版本已经被撤回，不能安装。';
+
+  @override
+  String get workshopErrorMinApp => 'App 版本太旧，更新后才能安装。';
+
+  @override
+  String get workshopErrorUnsupported => '这个版本的 App 还不认识这类作品。';
+
+  @override
+  String get workshopErrorCompanionOff => '伙伴类作品暂时关闭了。';
+
+  @override
+  String get workshopErrorUploadOff => '工坊暂时不接收投稿。';
+
+  @override
+  String get workshopErrorNoSpace => '手机空间不够，腾出一些再试。';
+
+  @override
+  String get workshopErrorStorage => '没能读写手机上的文件。';
+
+  @override
+  String get workshopErrorIntegrity => '下载的内容和登记的不一致，已丢弃。请重试。';
+
+  @override
+  String get workshopErrorDowngrade => '本机装的版本更新，不会换成旧的。';
+
+  @override
+  String get workshopErrorRuntimeMissing => '要先在伙伴小屋里请过一位角色，才能装别的伙伴。';
+
+  @override
+  String get workshopErrorReadersBusy => '她正在用着，先离开伙伴小屋或关掉悬浮窗再试。';
+
+  @override
+  String get workshopErrorInstallRecord => '本机的安装记录对不上，没有动它。';
+
+  @override
+  String get workshopErrorOtherOrigin => '这是从别的工坊装的。';
+
+  @override
+  String get workshopErrorSignIn => '需要先登录论坛账号。';
+
+  @override
+  String get workshopErrorConsent => '需要先同意把登录凭据交给工坊核对身份。';
+
+  @override
+  String get workshopErrorForumMismatch => '登录的论坛和工坊认的不是同一个，请重新登录。';
+
+  @override
+  String get workshopErrorForumDown => '论坛暂时联系不上，稍后再试。';
+
+  @override
+  String get workshopErrorPreferences => '没能保存本机的记录，这一步没有继续。';
+
+  @override
+  String get workshopErrorBusy => '上一步还没结束，稍等。';
+
+  @override
+  String get workshopErrorCancelled => '已取消。';
+
+  @override
+  String get workshopErrorUnknownResult => '不确定有没有成功。先刷新看看，别急着重试。';
+
+  @override
+  String get workshopErrorGeneric => '没有成功，稍后再试。';
+
+  @override
+  String get workshopDisclosureTitle => '让工坊核对你的论坛身份';
+
+  @override
+  String get workshopDisclosureLead => '投稿、管理自己的投稿和举报，工坊都要先知道你是谁。办法是把你的论坛登录凭据（User API Key）发给下面这个工坊服务，由它去问论坛你是哪个账号。';
+
+  @override
+  String get workshopDisclosureWorker => '收到凭据的工坊';
+
+  @override
+  String get workshopDisclosureForum => '核对身份的论坛';
+
+  @override
+  String get workshopDisclosureUse => '投稿、查看或撤回自己的投稿、举报时都会带上它。工坊只拿它向论坛确认身份，不保存。';
+
+  @override
+  String get workshopDisclosureKept => '本机只记下你同意过这两个地址，不另存凭据；换了其中一个会再问。';
+
+  @override
+  String get workshopDisclosureStale => '地址刚刚有变化，请按现在显示的重新确认。';
+
+  @override
+  String get workshopDisclosureAccept => '同意并继续';
+
+  @override
+  String get workshopDisclosureDecline => '暂不';
+
+  @override
+  String get workshopDisclosureUnsaved => '这次同意已经生效，但没能记在本机，下次可能再问一遍。';
+
+  @override
+  String get workshopInstalledEmptyTitle => '还没有从工坊装过东西';
+
+  @override
+  String get workshopInstalledEmptyMessage => '在「发现」里装上的宠物和伙伴会列在这里。';
+
+  @override
+  String get workshopInstalledEmptyAction => '去发现';
+
+  @override
+  String get workshopInstalledLoadFailedTitle => '读不出已安装的内容';
+
+  @override
+  String get workshopInstalledLoadStale => '没能重新读取，显示的是上一次的。';
+
+  @override
+  String get workshopInstalledCatalogStale => '更新和撤回的信息可能不是最新的。';
+
+  @override
+  String get workshopInstalledCatalogUnknown => '暂时查不到更新和撤回的信息。';
+
+  @override
+  String get workshopInstalledStatusUpdate => '有更新';
+
+  @override
+  String get workshopInstalledStatusWithdrawn => '这个版本已被撤回';
+
+  @override
+  String get workshopInstalledStatusOtherOrigin => '来自别的工坊';
+
+  @override
+  String get workshopInstalledStatusNotListed => '工坊里现在找不到它';
+
+  @override
+  String get workshopInstalledStatusCompanionOff => '伙伴类作品暂时关闭';
+
+  @override
+  String get workshopInstalledStatusRewritten => '和工坊里的同一版本不一致';
+
+  @override
+  String get workshopInstalledStatusRemoving => '正在卸载…';
+
+  @override
+  String get workshopInstalledStatusRemoveFailed => '没能卸载';
+
+  @override
+  String get workshopInstalledStatusRemoved => '已卸载';
+
+  @override
+  String get workshopInstalledIssueBroken => '这个包损坏了';
+
+  @override
+  String get workshopInstalledIssueUnreadable => '读不出这个包';
+
+  @override
+  String get workshopInstalledIssueRecord => '安装记录对不上';
+
+  @override
+  String get workshopInstalledIssueOther => '这一项有问题';
+
+  @override
+  String get workshopInstalledNoteBroken => '这个包损坏了，可能用不了。';
+
+  @override
+  String get workshopInstalledNoteUnreadable => '没能读出这个包的文件。';
+
+  @override
+  String get workshopInstalledNoteRecord => '它的安装记录对不上。';
+
+  @override
+  String get workshopInstalledNoteOther => '这一项有问题，读不出更多信息。';
+
+  @override
+  String get workshopInstalledNoteUntrusted => '安装记录不可信，没法从这里卸载它。';
+
+  @override
+  String get workshopInstalledNoteOtherOrigin => '这是从别的工坊装的，这里查不到它的更新。';
+
+  @override
+  String get workshopInstalledNoteNotListed => '工坊里现在找不到它，本机的这一份不受影响。';
+
+  @override
+  String get workshopInstalledNoteRewritten => '工坊里同一版本的内容和本机的不一样，本机的这一份没有改动。';
+
+  @override
+  String get workshopInstalledNoteMinApp => '工坊里现在的版本需要更新 App 才能安装。';
+
+  @override
+  String get workshopInstalledNoteUnavailable => '工坊里现在的版本暂时不能安装。';
+
+  @override
+  String get workshopInstalledNoteGone => '这一项已经不在本机了。';
+
+  @override
+  String get workshopInstalledNoteUnread => '暂时读不到本机的安装记录，下面是刚才看到的状态。';
+
+  @override
+  String workshopInstalledRemoveFailed(String reason) {
+    return '没能卸载。$reason';
+  }
+
+  @override
+  String get workshopInstalledFactKind => '类型';
+
+  @override
+  String get workshopInstalledFactId => '作品 ID';
+
+  @override
+  String get workshopInstalledFactOrigin => '来自';
+
+  @override
+  String get workshopInstalledFactLocalId => '本机标识';
+
+  @override
+  String workshopInstalledRemoveTitle(String title) {
+    return '卸载「$title」？';
+  }
+
+  @override
+  String get workshopInstalledRemoveMessage => '会删掉这台手机上的这一份。想再用，要回工坊重新获取。';
+
+  @override
+  String get workshopInstalledRemoveNoReinstall => '工坊里现在找不到它，卸载后可能装不回来。';
+
+  @override
+  String get workshopInstalledRemovedRefreshIssue => '已卸载，但列表没能刷新，下拉刷新一下。';
+
+  @override
+  String get workshopInstalledRemovedLocalIssue => '已卸载，但有些地方没能跟着更新，重新打开 App 就好。';
+
+  @override
+  String get workshopMinePublish => '投稿';
+
+  @override
+  String get workshopMinePublishHint => '审核通过后出现在「发现」里';
+
+  @override
+  String get workshopMineSignInTitle => '投稿记在论坛账号上';
+
+  @override
+  String get workshopMineSignInMessage => '登录后就能看到自己发过的作品。';
+
+  @override
+  String get workshopMineConsentTitle => '还差一步确认';
+
+  @override
+  String get workshopMineConsentMessage => '工坊要用你的论坛登录凭据核对身份，同意后才能看到自己的投稿。';
+
+  @override
+  String get workshopMineConsentAction => '查看说明';
+
+  @override
+  String get workshopMineEmptyTitle => '还没有投稿';
+
+  @override
+  String get workshopMineEmptyMessage => '做了宠物或伙伴的话，可以发上来给大家用。';
+
+  @override
+  String get workshopMineEmptyFiltered => '没有这类投稿';
+
+  @override
+  String get workshopMineLoadFailed => '没能读到投稿';
+
+  @override
+  String get workshopMineStale => '没读到最新内容，下面是之前读到的。';
+
+  @override
+  String get workshopMineLoadMore => '加载更多';
+
+  @override
+  String get workshopMineStatusPending => '待审核';
+
+  @override
+  String get workshopMineStatusApproved => '已通过';
+
+  @override
+  String get workshopMineStatusRejected => '已拒绝';
+
+  @override
+  String get workshopMineStatusWithdrawn => '已撤回';
+
+  @override
+  String get workshopMineStatusDraft => '草稿';
+
+  @override
+  String get workshopMineDetailTitle => '投稿详情';
+
+  @override
+  String get workshopMineRefreshOne => '刷新这一条';
+
+  @override
+  String get workshopMineAboutPending => '已经提交，正在等审核。通过后会出现在「发现」里。';
+
+  @override
+  String get workshopMineAboutApproved => '审核通过了。现在是否公开，以「发现」里看到的为准。';
+
+  @override
+  String get workshopMineAboutRejected => '没有通过审核。';
+
+  @override
+  String get workshopMineAboutWithdrawn => '已经撤回，不能恢复。';
+
+  @override
+  String get workshopMineAboutDraft => '文件还没有传完，不会进入审核。';
+
+  @override
+  String get workshopMineReviewReason => '审核意见';
+
+  @override
+  String get workshopMineWithdrawReason => '撤回原因';
+
+  @override
+  String get workshopMineWithdrawReasonHint => '比如传错了文件、想改了再发';
+
+  @override
+  String get workshopMineCreatedAt => '提交时间';
+
+  @override
+  String get workshopMineUpdatedAt => '最近更新';
+
+  @override
+  String get workshopMineDetailStale => '这一条没能刷新，显示的是之前读到的状态。';
+
+  @override
+  String get workshopMineAccountChanged => '账号已经换了';
+
+  @override
+  String get workshopMineAccountChangedMessage => '这条投稿属于之前的账号，不再显示。';
+
+  @override
+  String get workshopMineWithdraw => '撤回投稿';
+
+  @override
+  String get workshopMineWithdrawConfirmTitle => '撤回这条投稿？';
+
+  @override
+  String workshopMineWithdrawConfirmMessage(String title) {
+    return '撤回后不能恢复。如果「$title」已经公开，所有人都不能再下载这个版本，同一个版本号也不能重新发布。';
+  }
+
+  @override
+  String get workshopMineWithdrawConfirm => '撤回';
+
+  @override
+  String get workshopMineWithdrawing => '正在撤回…';
+
+  @override
+  String get workshopMineWithdrawDone => '这条投稿已撤回';
+
+  @override
+  String get workshopMineWithdrawUnknown => '不确定有没有撤回成功。先查询结果，不要重复撤回。';
+
+  @override
+  String get workshopMineWithdrawQuery => '查询结果';
+
+  @override
+  String get workshopMineWithdrawStill => '查到它还没有撤回。需要的话可以再撤回一次。';
+
+  @override
+  String get workshopMineWithdrawReconciled => '查到它现在已经是撤回状态。';
+
+  @override
+  String get workshopMineReasonEmpty => '先写下原因。';
+
+  @override
+  String workshopMineReasonTooLong(String max) {
+    return '最多 $max 字，现在超了。';
+  }
+
+  @override
+  String get workshopMineReasonBadChars => '里面有不能用的字符，删掉后再试。';
+
+  @override
+  String get workshopMineReasonRejected => '这段原因没有被接受，改一下再试。';
+
+  @override
+  String workshopReportTarget(String title, String version) {
+    return '$title · $version';
+  }
+
+  @override
+  String get workshopReportReason => '举报原因';
+
+  @override
+  String get workshopReportReasonHint => '它有什么问题，比如侵权、内容不合适';
+
+  @override
+  String get workshopReportNote => '审核员会查看这条举报。作品不会因为举报自动下架。';
+
+  @override
+  String get workshopReportSubmit => '提交举报';
+
+  @override
+  String get workshopReportSending => '正在提交…';
+
+  @override
+  String get workshopReportDone => '举报已送达，审核员会查看。';
+
+  @override
+  String get workshopReportSignInTitle => '举报需要论坛账号';
+
+  @override
+  String get workshopReportSignInMessage => '登录后才能提交举报。';
+
+  @override
+  String get workshopReportConsentMessage => '工坊要用你的论坛登录凭据核对身份，同意后才能举报。';
+
+  @override
+  String get workshopReportUnknownTitle => '不确定有没有送达';
+
+  @override
+  String get workshopReportUnknownMessage => '上一次举报可能已经收到，也可能没有，现在查不到结果。再发一次可能变成重复举报。';
+
+  @override
+  String workshopReportUnknownOther(String id, String version) {
+    return '那一次举报的是 $id $version。';
+  }
+
+  @override
+  String get workshopReportUnknownAgain => '知道可能重复，重新填写';
+
+  @override
+  String get workshopPublishTitle => '投稿';
+
+  @override
+  String get workshopPublishClosedTitle => '工坊暂时不接收投稿';
+
+  @override
+  String get workshopPublishClosedMessage => '已经交上去的仍然可以在「我的投稿」里看。';
+
+  @override
+  String get workshopPublishSignInTitle => '先登录论坛账号';
+
+  @override
+  String get workshopPublishSignInMessage => '工坊靠论坛账号确认投稿的人是谁。';
+
+  @override
+  String get workshopPublishProfileTitle => '还没读到论坛账号资料';
+
+  @override
+  String get workshopPublishProfileMessage => '要先知道你是哪个账号，才能投稿。';
+
+  @override
+  String get workshopPublishCheckFailedTitle => '没能读出上一次投稿的记录';
+
+  @override
+  String get workshopPublishCheckLocked => '为了不重复投稿，读出来之前不能开始新的。';
+
+  @override
+  String get workshopPublishWaitingPrevious => '上一个操作还没结束，稍等。';
+
+  @override
+  String get workshopPublishChooseTitle => '选一个要投稿的';
+
+  @override
+  String get workshopPublishCompanionCurrent => '现在的伙伴';
+
+  @override
+  String get workshopPublishSourcesEmptyTitle => '还没有可以投稿的';
+
+  @override
+  String get workshopPublishSourcesEmptyMessage => '自己导入的像素宠物和现在的伙伴可以投稿。';
+
+  @override
+  String get workshopPublishSourcesIssue => '没能读出本机可以投稿的内容。';
+
+  @override
+  String get workshopPublishPetsIssue => '没能读出本机的像素宠物。';
+
+  @override
+  String get workshopPublishCompanionIssue => '没能读出本机的伙伴。';
+
+  @override
+  String get workshopPublishNoCompanion => '本机还没有伙伴，先到伙伴小屋请一位。';
+
+  @override
+  String get workshopPublishSectionSource => '投稿内容';
+
+  @override
+  String get workshopPublishChange => '更换';
+
+  @override
+  String get workshopPublishSectionNames => '名称';
+
+  @override
+  String get workshopPublishTitleZh => '中文名称';
+
+  @override
+  String get workshopPublishTitleEn => '英文名称';
+
+  @override
+  String get workshopPublishSectionInfo => '作品信息';
+
+  @override
+  String get workshopPublishId => '作品 ID';
+
+  @override
+  String get workshopPublishIdHelper => '小写字母、数字和短横线';
+
+  @override
+  String get workshopPublishAuthor => '作者';
+
+  @override
+  String get workshopPublishLicenseAuthor => '作者授权';
+
+  @override
+  String get workshopPublishSourceLink => '来源链接';
+
+  @override
+  String get workshopPublishSourceHelper => '作品主页或出处，以 https:// 开头';
+
+  @override
+  String get workshopPublishSectionAbout => '介绍（选填）';
+
+  @override
+  String get workshopPublishTags => '标签';
+
+  @override
+  String get workshopPublishTagsHelper => '用逗号分开，最多 8 个';
+
+  @override
+  String get workshopPublishNext => '下一步';
+
+  @override
+  String get workshopPublishPreparing => '正在打包…';
+
+  @override
+  String get workshopPublishBadTitle => '名称不能为空，最多 120 个字';
+
+  @override
+  String get workshopPublishBadId => '只能用小写字母、数字和短横线，最多 40 个字符';
+
+  @override
+  String get workshopPublishBadVersion => '写成 1.0.0 这样的版本号';
+
+  @override
+  String get workshopPublishBadAuthor => '作者不能为空，最多 256 个字';
+
+  @override
+  String get workshopPublishBadLicense => '选一个许可';
+
+  @override
+  String get workshopPublishBadSource => '填一个以 https:// 开头的链接';
+
+  @override
+  String get workshopPublishBadDescription => '简介最多 512 个字';
+
+  @override
+  String get workshopPublishBadTags => '最多 8 个标签，每个不超过 32 个字，不能重复';
+
+  @override
+  String get workshopPublishBadRights => '先确认你有权分享这份内容';
+
+  @override
+  String get workshopPublishFiles => '包里的文件';
+
+  @override
+  String get workshopPublishEdit => '修改资料';
+
+  @override
+  String get workshopPublishRights => '我确认自己有权分享这份内容';
+
+  @override
+  String get workshopPublishReviewNote => '交上去后先由工坊审核，通过了大家才能看到。';
+
+  @override
+  String get workshopPublishSubmit => '投稿';
+
+  @override
+  String get workshopPublishPhaseWorking => '正在处理…';
+
+  @override
+  String get workshopPublishPhaseUploading => '正在上传';
+
+  @override
+  String get workshopPublishPhaseWaiting => '已经传完，等工坊确认…';
+
+  @override
+  String get workshopPublishStay => '离开这一页不会中断。';
+
+  @override
+  String get workshopPublishDoneTitle => '已交给工坊，等待审核';
+
+  @override
+  String get workshopPublishDoneMessage => '进度可以在「我的投稿」里看。';
+
+  @override
+  String get workshopPublishBackToMine => '回到我的投稿';
+
+  @override
+  String get workshopPublishApprovedTitle => '这份投稿已经通过审核';
+
+  @override
+  String get workshopPublishApprovedMessage => '有没有上架，以「发现」里看到的为准。';
+
+  @override
+  String get workshopPublishRejectedTitle => '这份投稿没有通过审核';
+
+  @override
+  String get workshopPublishWithdrawnTitle => '这份投稿已经撤回';
+
+  @override
+  String workshopPublishReason(String reason) {
+    return '原因：$reason';
+  }
+
+  @override
+  String get workshopPublishAgain => '重新投稿';
+
+  @override
+  String get workshopPublishAgainMessage => '改好以后可以重新投一次。';
+
+  @override
+  String get workshopPublishRecordKept => '结果已经确认，但本机的投稿记录没能清掉。';
+
+  @override
+  String get workshopPublishLeftovers => '本机留下的临时文件没能清掉。';
+
+  @override
+  String get workshopPublishPendingTitle => '有一份投稿还没结束';
+
+  @override
+  String get workshopPublishPendingMessage => '上次没有交完。继续会用同一份内容接着交，不会多出一份。';
+
+  @override
+  String get workshopPublishPendingLocked => '这份投稿的内容已经定下，暂时不能修改，也不能换成别的。问题解决后可以接着交。';
+
+  @override
+  String get workshopPublishPendingUnsent => '这次还没有发出去。问题解决后可以接着交，也可以回去修改资料或换一个来投。';
+
+  @override
+  String get workshopPublishEditUnsent => '回去修改';
+
+  @override
+  String get workshopPublishUnknownTitle => '不确定有没有交上去';
+
+  @override
+  String get workshopPublishUnknownMessage => '工坊没有回话，结果还不知道。查看结果会拿同一份投稿再问一次：已经交上的不会重复，没交完的接着交。';
+
+  @override
+  String get workshopPublishContinue => '继续投稿';
+
+  @override
+  String get workshopPublishCheckResult => '查看结果';
+
+  @override
+  String get workshopPublishCheckAgain => '重新查询';
+
+  @override
+  String get workshopPublishErrorInvalid => '有几项资料要改一下。';
+
+  @override
+  String get workshopPublishErrorMismatch => '打好的包和填写的资料对不上，请再试一次。';
+
+  @override
+  String get workshopPublishErrorPending => '还有一份投稿没有结束，先把它处理完。';
+
+  @override
+  String get workshopPublishErrorTooLarge => '包太大了，超过了工坊的上限。';
+
+  @override
+  String get workshopPublishErrorMetadata => '资料没有通过工坊的检查，改一改再试。';
+
+  @override
+  String get workshopPublishErrorNotReady => '还没准备好，稍等再试。';
+
+  @override
+  String get workshopPublishErrorAgain => '现在还不能重新投稿。';
 
   @override
   String get workspaceRecoveryTitle => '工作区索引救援';

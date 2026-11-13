@@ -49,7 +49,8 @@ internal class BackgroundGateState {
         private set
 
     // Physical cleanup/retest is not a transport error or a fabricated probe observation.
-    // Connected/reset cannot clear it; only the original accepted new probe plus cleanup can.
+    // Connected/reset cannot clear it; either the original accepted new probe plus cleanup,
+    // or a capability handshake rejected before allocation, can.
     @Volatile var needsRetest: Boolean = false
         private set
 
@@ -59,6 +60,18 @@ internal class BackgroundGateState {
         needsRetest = false
         return true
     }
+
+    /**
+     * A channel that fails the capability handshake before any allocation has no physical
+     * work to clean up, so the readiness barrier must not hold every later task at zero
+     * capacity. A probe that got past [admit] still needs its cleanup receipt.
+     */
+    @Synchronized fun concludedWithoutAllocation(owner: Probe): Boolean {
+        if (!current(owner)) return false
+        needsRetest = false
+        return true
+    }
+
     @Synchronized fun reset() { probe = null; failedChannel = null; snapshot = Snapshot() }
 
     /** A deliberate retry can enter even after a failure; it does not erase capability facts. */

@@ -128,6 +128,7 @@ export class FilePickerRuntime {
       this.clearFiles(e); e.failed = true; req.resume(); fail(status, code, message);
     };
     if (e.failed) return reject(409, 'cancelled', 'this selection cannot accept more files');
+    if (req.aborted || res.destroyed) return reject(400, 'cancelled', 'file upload interrupted');
     if ([...url.searchParams.keys()].some(k => !['stream', 'name', 'mediaType'].includes(k))
       || url.searchParams.getAll('name').length !== 1 || url.searchParams.getAll('mediaType').length > 1) return reject(400, 'bad-request', 'invalid upload metadata');
     const rawName = url.searchParams.get('name');

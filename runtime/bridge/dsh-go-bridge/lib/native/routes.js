@@ -95,6 +95,7 @@ function scopeFromQuery(sp) {
 
 function readJsonBody(req, limit) {
   return new Promise((resolve, reject) => {
+    if (req.aborted || req.destroyed) return reject(new HttpError(400, "bad-request", "request body was interrupted"));
     const chunks = [];
     let size = 0;
     let over = false;
@@ -463,13 +464,14 @@ export function createNativeRoutes(core) {
     if (rec?.parsed.assetsDir === undefined) fail(404, "not-found", "no such asset");
     const type = IMAGE_TYPES[extname(tail[tail.length - 1]).toLowerCase()];
     if (type === undefined) fail(404, "not-found", "no such asset");
-    const file = insidePackage(rec.parsed.assetsDir, tail.join("/"));
+    let file = insidePackage(rec.parsed.assetsDir, tail.join("/"));
     let st;
     try {
       if (file === undefined) throw new Error();
       const [real, realDir] = await Promise.all([realpath(file), realpath(rec.parsed.assetsDir)]);
       if (!real.startsWith(realDir + sep)) throw new Error();
-      st = await stat(real);
+      file = real;
+      st = await stat(file);
       if (!st.isFile() || st.size > L.assetBytes) throw new Error();
     } catch {
       fail(404, "not-found", "no such asset");

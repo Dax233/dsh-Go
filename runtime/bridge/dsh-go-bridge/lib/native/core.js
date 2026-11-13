@@ -40,7 +40,9 @@ function nearestPackage(moduleUrl, expected) {
       try {
         const name = JSON.parse(readFileSync(candidate, "utf8")).name;
         if (typeof name === "string" && (expected === undefined || name === expected)) return { pkg: name, pkgJsonPath: candidate, dir };
-      } catch {}
+      } catch (error) {
+        if (error?.code === "EMFILE" || error?.code === "ENFILE") throw error;
+      }
     }
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -113,7 +115,8 @@ export class NativeCore {
         }
         found ??= nearestPackage(url, expected);
       }
-    } catch {
+    } catch (error) {
+      if (error?.code === "EMFILE" || error?.code === "ENFILE") return undefined;
       found = undefined;
     }
     if (found?.pkg === SELF || found?.pkg?.startsWith("@deepseek-ai/")) found = undefined;
@@ -131,9 +134,15 @@ export class NativeCore {
     const stamp = `${st.mtimeMs}:${st.size}`;
     const cached = this.manifests.get(loc.pkgJsonPath);
     if (cached?.stamp === stamp) return cached;
+    let text;
+    try {
+      text = readFileSync(loc.pkgJsonPath, "utf8");
+    } catch {
+      return undefined;
+    }
     let parsed = null;
     try {
-      const pkgJson = JSON.parse(readFileSync(loc.pkgJsonPath, "utf8"));
+      const pkgJson = JSON.parse(text);
       if (isPlainObject(pkgJson) && pkgJson.dshGo !== undefined) parsed = parseManifest(pkgJson, loc.dir);
     } catch {
       parsed = null;
@@ -181,6 +190,7 @@ export class NativeCore {
 
   markDirty() {
     this.dirty = true;
+    this.locations.clear();
     this.capabilityChanged?.();
     this.#scheduleChanged();
   }
@@ -451,7 +461,7 @@ export class NativeCore {
 
   /** Gets or creates the feed of a panel / strip for one scope and locale; undefined when over the cap. */
   feed(pkg, id, kind, scope, locale = "") {
-    const loc = typeof locale === "string" ? locale.toLowerCase().replace("_", "-") : "";
+    const loc = typeof locale === "string" ? locale.toLowerCase().replaceAll("_", "-") : "";
     const key = `${pkg}\0${id}\0${scope.key}\0${loc}`;
     let feed = this.feeds.get(key);
     if (feed !== undefined) return feed;

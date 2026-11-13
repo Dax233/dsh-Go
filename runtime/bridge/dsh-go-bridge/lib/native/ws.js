@@ -26,10 +26,14 @@ export function encodeFrame(opcode, payload, { mask = false, fin = true } = {}) 
 }
 
 /**
- * Completes the handshake on an upgrade request. Returns a WsConnection, or undefined after
- * answering 400 for a request that is not a valid version-13 WebSocket upgrade.
+ * Completes the handshake on a live upgrade request. Returns a WsConnection, or undefined if
+ * the socket has ended or after answering 400 for an invalid version-13 WebSocket upgrade.
  */
 export function acceptUpgrade(req, socket, head, { maxMessage }) {
+  if (socket.destroyed || socket.readableEnded) {
+    socket.destroy();
+    return undefined;
+  }
   const key = req.headers["sec-websocket-key"];
   const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
   const valid = req.method === "GET" && upgrade === "websocket" && req.headers["sec-websocket-version"] === "13"
@@ -62,7 +66,12 @@ export class WsConnection extends EventEmitter {
     socket.on("data", (chunk) => this.#onData(chunk));
     socket.on("close", () => { clearTimeout(this.#closeTimer); this.#finish(1006); });
     // An upgraded HTTP socket may remain half-open after peer FIN. Release owners now.
-    socket.on("end", () => { socket.end(); this.#finish(1006); });
+    socket.on("end", () => {
+      socket.end();
+      this.#closeTimer ??= setTimeout(() => this.#socket.destroy(), 1000);
+      this.#closeTimer.unref?.();
+      this.#finish(1006);
+    });
     socket.on("error", () => this.#finish(1006));
     if (head && head.length > 0) queueMicrotask(() => this.#onData(head));
   }
@@ -179,6 +188,8 @@ export class WsConnection extends EventEmitter {
         if (!this.closed) {
           try { this.#socket.write(encodeFrame(0x8, payload.subarray(0, 2))); } catch {}
           this.#socket.end();
+          this.#closeTimer = setTimeout(() => this.#socket.destroy(), 1000);
+          this.#closeTimer.unref?.();
         }
         this.#finish(code);
         return;

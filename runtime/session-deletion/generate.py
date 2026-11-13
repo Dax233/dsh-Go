@@ -72,11 +72,11 @@ def transforms():
     add('dsh-agent-loop', '\twakeDriver(wakeAfterAbort = false) {', '''\twakeDriver(wakeAfterAbort = false) {
 \t\tif (this.dshGoDeleting) throw new Error("session is being deleted");
 \t\tthis.loopCtx.get("sessionPersistence")?.dshGoDeletion?.assertAdmit(this.id);''')
-    add('dsh-agent-loop', '\tasync initializeAgent(ownerCtx, options) {', '''\tdshGoDeletionVersion = 1;
-\tasync dshGoDisposeForDeletion(id) {
+    add('dsh-agent-loop', '\tasync initializeAgent(ownerCtx, options) {', '''\tdshGoDeletionVersion = 2;
+\tasync dshGoDisposeForDeletion(id, options) {
 \t\tconst agent = this.runtime.ctx.agents.get(id);
 \t\tif (agent === void 0) return;
-\t\tif (agent.session.header.origin === "subagent" || (agent.session.header.delegationDepth ?? 0) > 0)
+\t\tif (!options?.cascade && (agent.session.header.origin === "subagent" || (agent.session.header.delegationDepth ?? 0) > 0))
 \t\t\tthrow Object.assign(new Error("related agent"), { code: "session-related" });
 \t\tif (agent.phase?.kind !== "idle")
 \t\t\tthrow Object.assign(new Error("active agent"), { code: "session-active" });
@@ -211,15 +211,16 @@ def transforms():
 
 def build(prefix):
     changes = {}
+    names = rt.patch_names(RUNTIME / 'patches')
+    preceding = names[:names.index(PATCH_NAME)]
     for rel, edits in transforms().items():
         raw = (prefix / rel).read_text()
-        # Input is the untouched rc1 npm prefix; preceding patches compose in filename order.
+        # Input is the untouched rc1 npm prefix; replay the same explicit order as the build.
         package = prefix / Path(rel).parent.parent / 'package.json'
         if json.loads(package.read_text())['version'] != '0.2.2-rc.1':
             raise ValueError('expected unpatched 0.2.2-rc.1 input: ' + rel)
-        for patch in sorted((RUNTIME / 'patches').glob('*.diff')):
-            if patch.name >= PATCH_NAME:
-                break
+        for name in preceding:
+            patch = RUNTIME / 'patches' / name
             hunks = dict(rt.parse_unified_diff(patch.read_text())).get(rel)
             if hunks:
                 raw = rt.apply_hunks(raw, hunks, rel)

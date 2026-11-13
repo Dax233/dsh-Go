@@ -82,6 +82,8 @@ export function createLookup({ resolvConf, hostsFile, Resolver = dns.Resolver, w
   }
 
   async function resolve(hostname, options) {
+    // A failed config read can recover without another event; a dead watcher cannot.
+    if (configurationError && configurationError.syscall !== 'watch') refresh();
     if (configurationError) throw lookupError(hostname, [{ code: 'ESERVFAIL' }]);
     const snapshot = current;
     const family = options.family === 'IPv4' ? 4 : options.family === 'IPv6' ? 6 : (options.family ?? 0);
@@ -101,7 +103,8 @@ export function createLookup({ resolvConf, hostsFile, Resolver = dns.Resolver, w
     const hostEntries = snapshot.hosts.get(normalizeHost(hostname));
     const failures = [];
     let answers;
-    if (hostEntries) answers = hostEntries.filter((entry) => families.includes(entry.family));
+    if (hostEntries) answers = hostEntries.filter((entry) => families.includes(entry.family))
+      .map(({ address, family }) => ({ address, family }));
     else {
       const responses = await Promise.all(families.map((value) => new Promise((done) => {
         snapshot.resolvers[value][value === 4 ? 'resolve4' : 'resolve6'](domainToASCII(hostname) || hostname, (error, addresses) => {

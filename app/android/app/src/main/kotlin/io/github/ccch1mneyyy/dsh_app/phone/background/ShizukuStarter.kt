@@ -45,6 +45,9 @@ class ShizukuStarter(
     private var binding: Binding? = null
     @Volatile private var listenersAdded = false
 
+    // Shizuku only replaces a running user service when this number changes; bump it
+    // together with any PrivilegedDisplayService protocol change, or an upgraded app
+    // keeps talking to the old service process.
     private val args0: Shizuku.UserServiceArgs
         get() = Shizuku.UserServiceArgs(ComponentName(context, PrivilegedDisplayService::class.java))
             // Bumped 2 → 3 → 4: 3 carried the strict probe / release-receipt protocol,

@@ -27,9 +27,12 @@ export class CapabilityRuntime {
     const rec = this.core.plugin(e.pkg);
     return rec && this.core.stateOf(rec) === 'ok' && rec.uid === e.uid && rec.stamp === e.stamp;
   }
+  currentLease(e) {
+    return this.alive(e)
+      && (!e.media || this.core.registration(e.pkg, 'media', e.media)?.token === e.mediaToken);
+  }
   sweep() {
-    for (const e of [...this.leases.values()]) if (!this.alive(e)
-      || (e.media && this.core.registration(e.pkg, 'media', e.media)?.token !== e.mediaToken)) this.revoke(e);
+    for (const e of [...this.leases.values()]) if (!this.currentLease(e)) this.revoke(e);
     for (const f of [...this.feeds.values()]) if (!this.alive(f)
       || this.core.registration(f.pkg, 'micro', f.id)?.token !== f.token) f.stop(this.core.health.get(f.pkg)?.degraded ? 'degraded' : 'not-found');
   }
@@ -63,6 +66,8 @@ export class CapabilityRuntime {
       const reject = () => { issues.push({ path: '/runtime/effects', code: 'bad-effect', severity: 'warn', message: 'capability requires a live negotiated instance and resource budget' }); return false; };
       if (!conn?.helloed || conn.ws.closed || !this.alive({ pkg: rec.pkg, uid: rec.uid, stamp: rec.stamp })) return reject();
       let e = [...this.leases.values()].find(x => x.conn === conn && x.pkg === rec.pkg && x.instance === effect.instance);
+      // A registration hook may have retired this lease before its queued sweep.
+      if (e && !this.currentLease(e)) { this.revoke(e); e = undefined; }
       const start = isStart(effect);
       // Plan rotation once from the pre-batch state, independent of role order.
       if (!prepared.has(effect.instance)) {
@@ -97,7 +102,9 @@ export class CapabilityRuntime {
   }
   event(conn, msg) {
     const e = typeof msg.lease === 'string' ? this.leases.get(msg.lease) : undefined;
-    if (!e || e.conn !== conn || !this.alive(e) || !Number.isSafeInteger(msg.seq) || msg.seq <= e.seq) return;
+    if (!e || e.conn !== conn) return;
+    if (!this.currentLease(e)) { this.revoke(e); return; }
+    if (!Number.isSafeInteger(msg.seq) || msg.seq <= e.seq) return;
     const role = Object.hasOwn(CAP_EVENTS, msg.event) ? CAP_EVENTS[msg.event] : undefined;
     if (!role || !e.roles.has(role)) return;
     if (msg.reason !== undefined && (typeof msg.reason !== 'string' || [...msg.reason].length > 120)) return;
@@ -132,6 +139,7 @@ export class CapabilityRuntime {
       || !e.roles.has('audio') || e.audioStopping || e.conn.ws.closed || !this.alive(e)) fail(404, 'not-found', 'no active media lease');
     const reg = this.core.registration(pkg, 'media', id);
     if (!reg || reg.token !== e.mediaToken) { this.revoke(e); fail(404, 'not-found', 'media was unloaded'); }
+    if (req.aborted || res.destroyed) fail(410, 'cancelled', 'media cancelled');
     if (this.mediaBusy.size >= L.mediaConcurrent || this.mediaBusy.has(pkg)) fail(429, 'rate-limited', 'media busy');
     this.mediaBusy.add(pkg);
     const controller = new AbortController();

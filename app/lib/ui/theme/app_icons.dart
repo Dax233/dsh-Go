@@ -35,6 +35,7 @@ abstract final class AppIcons {
   static const allFeatures = DshGlyphs.dotsNine;
   static const browser = DshGlyphs.browser;
   static const scrollToBottom = DshGlyphs.arrowDown;
+  static const scrollToTop = DshGlyphs.arrowUp;
   static const sidebar = DshGlyphs.sidebarSimpleRight;
   static const dragHandle = DshGlyphs.dotsSixVertical;
   static const swap = DshGlyphs.arrowsLeftRight;
@@ -338,6 +339,10 @@ abstract final class AppIcons {
   static const workflow = DshGlyphs.flowArrow;
   static const todo = DshGlyphs.listChecks;
   static const goal = DshGlyphs.flag;
+
+  /// 创意工坊: the place itself, and reporting an item there (ui/workshop).
+  static const workshop = DshGlyphs.package;
+  static const report = DshGlyphs.flag;
   static const plan = DshGlyphs.mapTrifold;
   static const planMode = DshGlyphs.mapTrifold;
   static const jobs = DshGlyphs.clipboardText;
