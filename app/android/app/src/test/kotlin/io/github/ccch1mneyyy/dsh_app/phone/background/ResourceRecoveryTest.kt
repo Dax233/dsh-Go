@@ -169,12 +169,28 @@ class ResourceRecoveryTest {
         assertEquals(listOf(99), calls)
     }
 
-    @Test fun sameBootMissingIdAndPrivateVisibilityGapStayUnknown() {
-        for (original in listOf(old(null), old(uid = 0))) {
-            failure("recoveryUnknown") {
-                ResourceRecovery.verify(current, original, { true },
-                    { error("no complete target visibility or no original ID") }, { error("no task query") })
-            }
+    @Test fun recordWithoutDisplayIdResolvesOnlyWhenPeerIsGoneAndNoTaggedDisplayRemains() {
+        val calls = mutableListOf<String>()
+        assertEquals("deadPeerEmpty", ResourceRecovery.verify(current, old(null),
+            { calls += "pid:$it"; true },
+            { calls += "displays"; listOf(ResourceRecovery.DisplayFact(0, "main", 1000, false)) },
+            { error("no task scope without an id") }))
+        assertEquals(listOf("pid:99", "displays"), calls)
+        failure("recoveryUnknown") {
+            ResourceRecovery.verify(current, old(null), { false },
+                { error("live PID: no display query") }, { error("live PID: no task query") })
+        }
+        failure("recoveryPresent") {
+            ResourceRecovery.verify(current, old(null), { true },
+                { listOf(ResourceRecovery.DisplayFact(27, ResourceRecovery.tag(owner), 2000, true)) },
+                { error("tagged display: no task query") })
+        }
+    }
+
+    @Test fun privateVisibilityGapStillStaysUnknown() {
+        failure("recoveryUnknown") {
+            ResourceRecovery.verify(current, old(uid = 0), { true },
+                { error("uid check precedes display visibility") }, { error("no task query") })
         }
     }
 

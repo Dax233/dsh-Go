@@ -84,11 +84,14 @@ class BackgroundRecoveryProtocolTest {
         receipt[Proto.DISPLAY_ID] = 12
         assertFalse(BackgroundRecoveryProtocol.recovered(record(11), receipt::get, receipt::containsKey))
         receipt.remove(Proto.DISPLAY_ID)
-        assertFalse(BackgroundRecoveryProtocol.recovered(record(null), receipt::get, receipt::containsKey))
-        receipt[Proto.RECOVERY_KIND] = "previousBoot"
         assertTrue(BackgroundRecoveryProtocol.recovered(record(null), receipt::get, receipt::containsKey))
+        receipt[Proto.DISPLAY_ID] = 11
+        assertFalse(BackgroundRecoveryProtocol.recovered(record(null), receipt::get, receipt::containsKey))
         receipt[Proto.DISPLAY_ID] = null
         assertFalse(BackgroundRecoveryProtocol.recovered(record(null), receipt::get, receipt::containsKey))
+        receipt.remove(Proto.DISPLAY_ID)
+        receipt[Proto.RECOVERY_KIND] = "previousBoot"
+        assertTrue(BackgroundRecoveryProtocol.recovered(record(null), receipt::get, receipt::containsKey))
     }
 
     @Test fun retireProofIsOnlyTheExactPeerRetiredReceipt() {
